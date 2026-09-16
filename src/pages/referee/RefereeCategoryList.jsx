@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Alert, Chip, IconButton, Select, MenuItem, FormControl, InputLabel } from '@mui/material'
+import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Alert, Chip, IconButton, Autocomplete, TextField } from '@mui/material'
 import { Visibility } from '@mui/icons-material'
 import { signOut, auth } from '../../firebase'
 import { isExpired } from '../../utils/dateUtils'
@@ -51,66 +51,60 @@ export default function RefereeCategoryList({ uid }) {
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <FormControl sx={{ minWidth: 350 }}>
-            <InputLabel>Select Tournament</InputLabel>
-            <Select
-              value={selectedTournamentId}
-              onChange={(e) => setSelectedTournamentId(e.target.value)}
-              label="Select Tournament"
-              sx={{ '& .MuiSelect-select': { color: 'text.primary' } }}
-              renderValue={(value) => {
-                if (!value) return 'Select Tournament'
-                const tournament = tournaments.find(t => t.id === value)
-                if (!tournament) return value
-                return `${tournament.name} (${tournament.location})`
-              }}
-            >
-              <MenuItem value="">-- Select Tournament --</MenuItem>
-              {tournaments.map((t) => {
-                const expired = isExpired(t.date)
-                return (
-                  <MenuItem
-                    key={t.id}
-                    value={t.id}
-                    disabled={expired}
-                    sx={{
-                      backgroundColor: expired ? 'error.light' : 'inherit',
-                      '&.Mui-disabled': {
-                        opacity: 1
-                      }
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', width: '100%', minWidth: 300 }}>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500, color: expired ? 'error.dark' : 'text.primary' }}>
-                          {t.name}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: expired ? 'error.dark' : 'text.secondary' }}>
-                          📍 {t.location} • 📅 {new Date(t.date).toLocaleDateString()}
-                        </Typography>
-                      </Box>
-                      {expired && (
-                        <Chip
-                          label="EXPIRED"
-                          size="small"
-                          variant="filled"
-                          sx={{
-                            height: 20,
-                            fontSize: '0.65rem',
-                            ml: 'auto',
-                            bgcolor: 'error.main',
-                            color: 'white',
-                            fontWeight: 600,
-                            flexShrink: 0
-                          }}
-                        />
-                      )}
+          <Autocomplete
+            sx={{ minWidth: 350 }}
+            options={tournaments}
+            value={selectedTournament || null}
+            onChange={(e, newValue) => setSelectedTournamentId(newValue ? newValue.id : '')}
+            getOptionLabel={(t) => `${t.name} (${t.location})`}
+            getOptionDisabled={(t) => isExpired(t.date)}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            renderInput={(params) => (
+              <TextField {...params} label="Select Tournament" placeholder="Type to search…" />
+            )}
+            renderOption={(props, t) => {
+              const expired = isExpired(t.date)
+              const { key, ...optionProps } = props
+              return (
+                <Box
+                  component="li"
+                  key={key}
+                  {...optionProps}
+                  sx={{
+                    backgroundColor: expired ? 'error.light' : 'inherit',
+                    '&.Mui-disabled': { opacity: 1 }
+                  }}
+                >
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', width: '100%' }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: expired ? 'error.dark' : 'text.primary' }}>
+                        {t.name}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: expired ? 'error.dark' : 'text.secondary' }}>
+                        📍 {t.location} • 📅 {new Date(t.date).toLocaleDateString()}
+                      </Typography>
                     </Box>
-                  </MenuItem>
-                )
-              })}
-            </Select>
-          </FormControl>
+                    {expired && (
+                      <Chip
+                        label="EXPIRED"
+                        size="small"
+                        variant="filled"
+                        sx={{
+                          height: 20,
+                          fontSize: '0.65rem',
+                          ml: 'auto',
+                          bgcolor: 'error.main',
+                          color: 'white',
+                          fontWeight: 600,
+                          flexShrink: 0
+                        }}
+                      />
+                    )}
+                  </Box>
+                </Box>
+              )
+            }}
+          />
 
           {selectedTournament && isSelectedExpired && (
             <Chip
