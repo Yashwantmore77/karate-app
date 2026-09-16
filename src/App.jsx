@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material'
 import { SpeedInsights } from '@vercel/speed-insights/react'
+import { Analytics } from '@vercel/analytics/react'
 import { auth, db, onAuthStateChanged, doc, getDoc } from './firebase'
 import Login from './pages/Login'
 import NoRoleAssigned from './pages/NoRoleAssigned'
@@ -247,6 +248,7 @@ export default function App() {
         </BrowserRouter>
       )}
       <SpeedInsights />
+      <Analytics />
     </ThemeProvider>
   )
 }
