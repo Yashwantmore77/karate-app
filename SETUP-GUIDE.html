@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kata Scoring — Setup Guide</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#1a1d20;
+  font:400 16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:0 22px 80px}
+header{padding:40px 0 26px;border-bottom:2px solid #1a1d20}
+h1{font-size:31px;line-height:1.2;margin:0 0 10px}
+.lede{color:#5a6169;font-size:17px;margin:0}
+h2{font-size:22px;margin:46px 0 4px;padding-top:16px;border-top:1px solid #e3e6e9}
+h3{font-size:17px;margin:26px 0 6px}
+p{max-width:68ch}
+.sub{color:#5a6169;font-size:15px;margin:0 0 16px}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;
+  background:#f1f3f5;padding:2px 6px;border-radius:4px;color:#c0392b}
+pre{background:#1a1d20;color:#e8e6e1;border-radius:8px;padding:15px 18px;
+  overflow-x:auto;font-size:14px;line-height:1.6}
+pre code{background:none;color:#e8e6e1;padding:0}
+ol,ul{max-width:68ch;padding-left:24px}
+li{margin:8px 0}
+.box{border:1px solid #e3e6e9;border-radius:10px;padding:16px 20px;margin:18px 0;background:#fafbfc}
+.box h4{margin:0 0 8px;font-size:15px}
+.warn{border-left:4px solid #e0a800;background:#fffaf0;padding:14px 18px;
+  border-radius:0 8px 8px 0;margin:18px 0}
+.warn strong{color:#a37700}
+.check{border-left:4px solid #28a745;background:#f4fbf6;padding:14px 18px;
+  border-radius:0 8px 8px 0;margin:18px 0}
+.check strong{color:#1c7430}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:15px}
+th{text-align:left;background:#f1f3f5;padding:9px 12px;border:1px solid #e3e6e9;font-size:14px}
+td{padding:9px 12px;border:1px solid #e3e6e9;vertical-align:top}
+.time{display:inline-block;background:#f1f3f5;padding:3px 10px;border-radius:20px;
+  font-size:13px;color:#5a6169;margin-left:8px;vertical-align:middle}
+.big-num{display:flex;gap:14px;align-items:flex-start;margin:22px 0}
+.big-num .n{flex:none;width:30px;height:30px;border-radius:50%;background:#1a1d20;
+  color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600}
+.big-num .c{flex:1;min-width:0}
+.big-num .c p{margin:0 0 8px}
+@media print{body{font-size:12pt}pre{background:#f1f3f5;color:#000;border:1px solid #ccc}
+  pre code{color:#000}h2{page-break-after:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Kata Scoring — Setup Guide</h1>
+  <p class="lede">How to get the judging system running on a laptop. No programming
+  knowledge needed — just follow each step in order.</p>
+</header>
+
+<h2>Before you start</h2>
+<p class="sub">Gather these first. The whole setup takes about 45 minutes.</p>
+<ul>
+  <li>A laptop — Windows or Mac</li>
+  <li>An internet connection</li>
+  <li>A Google account (a normal Gmail account is fine)</li>
+  <li>The project folder that came with this guide</li>
+</ul>
+
+<div class="warn">
+  <strong>Do the steps in order.</strong> Each part depends on the one before it.
+  If something doesn't look right, stop and check the Problems section at the end
+  rather than continuing.
+</div>
+
+<h2>Part 1 — Install Node.js <span class="time">10 minutes</span></h2>
+<p class="sub">This is the program that runs the app on your laptop.</p>
+
+<div class="big-num"><div class="n">1</div><div class="c">
+  <p>Go to <b>nodejs.org</b> in your browser.</p>
+</div></div>
+
+<div class="big-num"><div class="n">2</div><div class="c">
+  <p>Click the big green download button that says <b>LTS</b>. Ignore the other one.</p>
+</div></div>
+
+<div class="big-num"><div class="n">3</div><div class="c">
+  <p>Open the downloaded file and click Next through the installer. Accept every
+  default — don't change any options.</p>
+</div></div>
+
+<div class="big-num"><div class="n">4</div><div class="c">
+  <p>Now open the black text window where you type commands:</p>
+  <ul>
+    <li><b>Windows:</b> press the Windows key, type <code>cmd</code>, press Enter</li>
+    <li><b>Mac:</b> press Cmd+Space, type <code>terminal</code>, press Enter</li>
+  </ul>
+</div></div>
+
+<div class="big-num"><div class="n">5</div><div class="c">
+  <p>Type this exactly and press Enter:</p>
+  <pre><code>node --version</code></pre>
+</div></div>
+
+<div class="check">
+  <strong>Check:</strong> you should see something like <code>v22.11.0</code>.
+  If it says "not recognised" or "command not found", close that window completely,
+  open a new one, and try again. The installer only works in newly opened windows.
+</div>
+
+<h2>Part 2 — Create the Firebase project <span class="time">10 minutes</span></h2>
+<p class="sub">Firebase is Google's free service that stores the scores and sends them between phones.</p>
+
+<div class="big-num"><div class="n">1</div><div class="c">
+  <p>Go to <b>console.firebase.google.com</b> and sign in with your Google account.</p>
+</div></div>
+
+<div class="big-num"><div class="n">2</div><div class="c">
+  <p>Click <b>Create a project</b>. Name it <code>kata-scoring</code>.</p>
+  <p>Turn <b>off</b> Google Analytics when it offers it — you don't need it.
+  Click Create and wait for it to finish.</p>
+</div></div>
+
+<div class="big-num"><div class="n">3</div><div class="c">
+  <p>In the left menu, click <b>Build → Firestore Database</b>, then
+  <b>Create database</b>.</p>
+  <p>Choose the location closest to you. Choose <b>Start in production mode</b>.</p>
+</div></div>
+
+<div class="big-num"><div class="n">4</div><div class="c">
+  <p>In the left menu, click <b>Build → Authentication</b>, then <b>Get started</b>.</p>
+  <p>Choose <b>Email/Password</b> from the list, switch the first toggle on, and Save.</p>
+</div></div>
+
+<div class="warn">
+  <strong>Stay on the free plan.</strong> If Firebase ever asks you to upgrade or
+  add a credit card, say no. Everything this app needs is free.
+</div>
+
+<h2>Part 3 — Create the five accounts <span class="time">10 minutes</span></h2>
+<p class="sub">One login for each judge, plus one for the referee.</p>
+
+<div class="big-num"><div class="n">1</div><div class="c">
+  <p>Still in <b>Authentication</b>, click the <b>Users</b> tab, then <b>Add user</b>.</p>
+</div></div>
+
+<div class="big-num"><div class="n">2</div><div class="c">
+  <p>Create these five, one at a time. Use the same password for all five so it's
+  easy to remember — for example <code>kata2026</code>.</p>
+  <pre><code>referee@kata.local
+judge1@kata.local
+judge2@kata.local
+judge3@kata.local
+judge4@kata.local</code></pre>
+  <p>These are not real email addresses and don't need to be. Nothing is sent to them.</p>
+</div></div>
+
+<div class="big-num"><div class="n">3</div><div class="c">
+  <p>You'll now see five rows, each with a long code in the <b>User UID</b> column
+  — something like <code>k3Jd8sLm2NqP...</code></p>
+  <p><b>Copy each one into a notepad file</b> and write next to it which account it
+  belongs to. You need all five in the next part.</p>
+</div></div>
+
+<h2>Part 4 — Tell the app who is who <span class="time">10 minutes</span></h2>
+<p class="sub">This is the fiddliest part. Take it slowly.</p>
+
+<p>The app needs to know which login is the referee and which judge sits in which
+seat. You do this by adding five small records to the database.</p>
+
+<div class="big-num"><div class="n">1</div><div class="c">
+  <p>Go to <b>Build → Firestore Database</b>. Click <b>Start collection</b>.</p>
+  <p>Type <code>roles</code> as the Collection ID and click Next.</p>
+</div></div>
+
+<div class="big-num"><div class="n">2</div><div class="c">
+  <p>For <b>Document ID</b>, paste the <b>referee's</b> User UID from your notepad.</p>
+  <p>Then add one field:</p>
+  <table>
+    <tr><th>Field name</th><th>Type</th><th>Value</th></tr>
+    <tr><td>role</td><td>string</td><td>referee</td></tr>
+  </table>
+  <p>Click Save.</p>
+</div></div>
+
+<div class="big-num"><div class="n">3</div><div class="c">
+  <p>Now click <b>Add document</b> and repeat for judge 1. Paste judge 1's UID as
+  the Document ID, and add <b>two</b> fields:</p>
+  <table>
+    <tr><th>Field name</th><th>Type</th><th>Value</th></tr>
+    <tr><td>role</td><td>string</td><td>judge</td></tr>
+    <tr><td>seat</td><td><b>number</b></td><td>1</td></tr>
+  </table>
+</div></div>
+
+<div class="big-num"><div class="n">4</div><div class="c">
+  <p>Repeat for judges 2, 3 and 4 — same thing, with seat <b>2</b>, <b>3</b> and
+  <b>4</b>.</p>
+</div></div>
+
+<div class="warn">
+  <strong>Two mistakes people make here.</strong> First: the seat must be type
+  <b>number</b>, not string — there's a dropdown next to the field where you pick
+  the type. Second: the Document ID must be the long UID code, <b>not</b> the email
+  address. If judges can't score later, this is almost always why.
+</div>
+
+<div class="check">
+  <strong>Check:</strong> your <code>roles</code> collection should now show five
+  documents, each with a long code as its name.
+</div>
+
+<h2>Part 5 — Get your connection keys <span class="time">5 minutes</span></h2>
+
+<div class="big-num"><div class="n">1</div><div class="c">
+  <p>Click the <b>gear icon</b> at the top left, then <b>Project settings</b>.</p>
+</div></div>
+
+<div class="big-num"><div class="n">2</div><div class="c">
+  <p>Scroll down to <b>Your apps</b>. Click the <b>&lt;/&gt;</b> (web) icon.</p>
+  <p>Give it any nickname, leave the hosting checkbox unticked, and click
+  <b>Register app</b>.</p>
+</div></div>
+
+<div class="big-num"><div class="n">3</div><div class="c">
+  <p>You'll see a block of code containing lines like <code>apiKey:</code>,
+  <code>authDomain:</code> and so on. <b>Leave this page open</b> — you'll copy from
+  it in the next part.</p>
+</div></div>
+
+<h2>Part 6 — Set up the project folder <span class="time">5 minutes</span></h2>
+
+<div class="big-num"><div class="n">1</div><div class="c">
+  <p>Put the project folder on your <b>Desktop</b> and make sure it's named
+  <code>kata-app</code>.</p>
+</div></div>
+
+<div class="big-num"><div class="n">2</div><div class="c">
+  <p>Inside that folder, find the file called <code>.env.example</code>.
+  Make a copy of it and rename the copy to just <code>.env</code> — no
+  <code>.example</code> on the end.</p>
+  <p><b>On a Mac you won't see this file at first</b> — Finder hides anything
+  starting with a dot. Press <b>Cmd + Shift + .</b> (period) to show them, and
+  again afterwards to hide them.</p>
+  <p>Windows may also hide the ending. If you see only <code>env</code> after
+  renaming, turn on <b>File name extensions</b> in Explorer's View menu and check
+  the name is exactly <code>.env</code>.</p>
+</div></div>
+
+<div class="big-num"><div class="n">3</div><div class="c">
+  <p>Open <code>.env</code> in Notepad (Windows) or TextEdit (Mac). Fill in each
+  value from the Firebase page you left open. Match them up like this:</p>
+  <table>
+    <tr><th>In the .env file</th><th>From Firebase</th></tr>
+    <tr><td>VITE_FB_API_KEY</td><td>apiKey</td></tr>
+    <tr><td>VITE_FB_AUTH_DOMAIN</td><td>authDomain</td></tr>
+    <tr><td>VITE_FB_PROJECT_ID</td><td>projectId</td></tr>
+    <tr><td>VITE_FB_STORAGE_BUCKET</td><td>storageBucket</td></tr>
+    <tr><td>VITE_FB_SENDER_ID</td><td>messagingSenderId</td></tr>
+    <tr><td>VITE_FB_APP_ID</td><td>appId</td></tr>
+  </table>
+  <p>Copy only what's between the quote marks. No spaces around the
+  <code>=</code> sign. Save the file.</p>
+</div></div>
+
+<h2>Part 7 — Start the app <span class="time">5 minutes</span></h2>
+
+<div class="big-num"><div class="n">1</div><div class="c">
+  <p>Open the command window again (Part 1, step 4). Type this and press Enter:</p>
+  <pre><code>cd Desktop/kata-app</code></pre>
+</div></div>
+
+<div class="big-num"><div class="n">2</div><div class="c">
+  <p>Type this and press Enter. It downloads what the app needs and takes a couple
+  of minutes. Lots of text will scroll past — that's normal.</p>
+  <pre><code>npm install</code></pre>
+</div></div>
+
+<div class="big-num"><div class="n">3</div><div class="c">
+  <p>Then type this and press Enter:</p>
+  <pre><code>npm run dev</code></pre>
+</div></div>
+
+<div class="check">
+  <strong>Check:</strong> you should see a web address like
+  <code>http://localhost:5173</code>. Open it in your browser and you should see
+  a sign-in screen. Sign in as <code>referee@kata.local</code>.
+</div>
+
+<div class="warn">
+  <strong>Leave the command window open.</strong> Closing it stops the app. To stop
+  it deliberately, click in the window and press Ctrl+C.
+</div>
+
+<h2>Part 8 — Load the security settings <span class="time">5 minutes</span></h2>
+<p class="sub">This step stops judges from seeing each other's scores. Don't skip it.</p>
+
+<div class="big-num"><div class="n">1</div><div class="c">
+  <p>In the project folder, open the file <code>firestore.rules</code> in Notepad.
+  Select everything and copy it.</p>
+</div></div>
+
+<div class="big-num"><div class="n">2</div><div class="c">
+  <p>In Firebase, go to <b>Build → Firestore Database → Rules</b> tab.</p>
+  <p>Delete everything in the box, paste what you copied, and click <b>Publish</b>.</p>
+</div></div>
+
+<div class="check">
+  <strong>Check:</strong> sign in as judge 1 on the laptop and judge 2 on a phone.
+  Have both submit scores. Neither should be able to see the other's numbers until
+  the referee reveals.
+</div>
+
+<h2>Part 9 — Putting it online (optional)</h2>
+<p class="sub">Only needed if the judges' phones aren't on the same WiFi as the laptop.</p>
+
+<p>In the command window, in the project folder, run these one at a time:</p>
+<pre><code>npm install -g firebase-tools
+firebase login
+firebase init hosting
+npm run build
+firebase deploy</code></pre>
+<p>When <code>firebase init hosting</code> asks questions: choose your existing
+project, type <code>dist</code> for the public directory, answer <b>Yes</b> to
+single-page app, and <b>No</b> to GitHub deploys.</p>
+<p>At the end it prints a web address ending in <code>.web.app</code>. That's your
+live link — share it with the judges.</p>
+
+<h2>Part 10 — Using it on the day</h2>
+
+<h3>Setting up the phones</h3>
+<ol>
+  <li>Open the web address in <b>Chrome</b> on each judge's Android phone</li>
+  <li>Tap the three dots menu → <b>Add to Home screen</b></li>
+  <li>Open it from the new icon and sign in with that judge's email</li>
+  <li>On each phone: set screen timeout to 10 minutes and turn on Do Not Disturb</li>
+</ol>
+
+<h3>Running a match</h3>
+<ol>
+  <li>The referee types both competitors' names and taps <b>Create match</b></li>
+  <li>Referee taps <b>Open round</b> — the judges' buttons unlock</li>
+  <li>Each judge sets a score for the red competitor and the blue one, then taps
+  <b>Submit scores</b></li>
+  <li>The referee sees which seats have scored, but not the numbers</li>
+  <li>Once all four are in, the referee taps <b>Reveal result</b></li>
+  <li>Referee creates the next match and repeats</li>
+</ol>
+
+<h3>The scoreboard screen</h3>
+<p>Add <code>/?portal</code> to the end of your web address and open that on a TV
+or projector. It needs no login and updates by itself.</p>
+
+<h2>Problems</h2>
+
+<table>
+  <tr><th>What you see</th><th>What to do</th></tr>
+  <tr><td>"node is not recognised"</td>
+    <td>Close the command window completely and open a fresh one. If it still fails,
+    reinstall Node.js.</td></tr>
+  <tr><td>"No role assigned to this account"</td>
+    <td>The Document ID in the <code>roles</code> collection doesn't match that
+    user's UID. The screen shows you the correct UID — copy it and check Part 4.</td></tr>
+  <tr><td>Judge taps Submit and nothing happens</td>
+    <td>Either the rules weren't published (Part 8), or the <code>seat</code> field
+    was saved as text instead of a number (Part 4).</td></tr>
+  <tr><td>Sign-in page is blank or errors</td>
+    <td>The <code>.env</code> file is wrong. Check for stray quote marks or spaces,
+    then stop the app (Ctrl+C) and run <code>npm run dev</code> again — it only
+    reads that file on startup.</td></tr>
+  <tr><td>Phones can't open the address</td>
+    <td>They must be on the same WiFi as the laptop, or you need to do Part 9.</td></tr>
+  <tr><td>"Missing or insufficient permissions"</td>
+    <td>The rules in Part 8 weren't published. Redo that step.</td></tr>
+</table>
+
+<div class="box">
+  <h4>Changing the score range</h4>
+  <p>The app scores from 5.0 to 10.0 in steps of 0.2. To change that, a developer
+  needs to edit <b>two</b> files — <code>src/firebase.js</code> and
+  <code>firestore.rules</code> — and republish the rules. Changing only one will
+  make submissions fail.</p>
+</div>
+
+<div class="box">
+  <h4>Good to know</h4>
+  <ul>
+    <li>Nothing is deleted automatically — past matches stay in the database</li>
+    <li>Free limits are 50,000 reads and 20,000 writes per day. One match uses about
+    12 writes, so you won't come close.</li>
+    <li>If a judge's phone dies, sign in as that judge on a spare phone. Everything
+    carries on.</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

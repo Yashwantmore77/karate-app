@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isRef() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role == 'referee';
+    }
+    function status(m) {
+      return get(/databases/$(database)/documents/matches/$(m)).data.status;
+    }
+
+    match /roles/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;            // create these by hand in the console
+    }
+
+    // Public: the scoreboard reads this without signing in.
+    match /matches/{m} {
+      allow read: if true;
+      allow create, update: if isRef();
+      allow delete: if false;
+
+      // Seat numbers only. Never a score value.
+      // create/update/delete listed separately: a blanket `write` would break
+      // delete, because request.resource is null on a delete.
+      match /submitted/{uid} {
+        allow read: if true;
+        allow create, update: if request.auth.uid == uid && status(m) == 'open';
+        allow delete: if request.auth.uid == uid && status(m) == 'open';
+      }
+
+      // The secret. Readable only by its owner, or by anyone after the reveal.
+      match /scores/{uid} {
+        allow read: if request.auth.uid == uid || status(m) == 'revealed';
+        allow create, update: if request.auth.uid == uid && status(m) == 'open'
+          && request.resource.data.aka >= 5 && request.resource.data.aka <= 10
+          && request.resource.data.ao  >= 5 && request.resource.data.ao  <= 10;
+        allow delete: if request.auth.uid == uid && status(m) == 'open';
+      }
+    }
+  }
+}
