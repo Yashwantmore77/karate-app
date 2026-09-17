@@ -2,22 +2,20 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, TextField, Alert, IconButton, Stack } from '@mui/material'
+import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, ButtonGroup, Alert, IconButton, Stack } from '@mui/material'
 import { ArrowBack, CheckCircle } from '@mui/icons-material'
-import { signOut, auth, SCORE_MIN, SCORE_MAX, SCORE_STEP, clampScore } from '../../firebase'
+import { signOut, auth, SCORE_VALUES, clampScore } from '../../firebase'
 import { isExpired } from '../../utils/dateUtils'
 
 const validationSchema = Yup.object({
   score1: Yup.number()
-    .typeError('Enter a valid score')
-    .min(SCORE_MIN, `Minimum score is ${SCORE_MIN}`)
-    .max(SCORE_MAX, `Maximum score is ${SCORE_MAX}`)
-    .required('Score required'),
+    .typeError('Select a point value')
+    .oneOf(SCORE_VALUES, `Points must be one of ${SCORE_VALUES.join(', ')}`)
+    .required('Points required'),
   score2: Yup.number()
-    .typeError('Enter a valid score')
-    .min(SCORE_MIN, `Minimum score is ${SCORE_MIN}`)
-    .max(SCORE_MAX, `Maximum score is ${SCORE_MAX}`)
-    .required('Score required'),
+    .typeError('Select a point value')
+    .oneOf(SCORE_VALUES, `Points must be one of ${SCORE_VALUES.join(', ')}`)
+    .required('Points required'),
 })
 
 export default function JudgeScoring({ uid, profile }) {
@@ -31,7 +29,7 @@ export default function JudgeScoring({ uid, profile }) {
   const [submitted, setSubmitted] = useState(false)
 
   const formik = useFormik({
-    initialValues: { score1: SCORE_MIN, score2: SCORE_MIN },
+    initialValues: { score1: SCORE_VALUES[0], score2: SCORE_VALUES[0] },
     validationSchema,
     validateOnChange: false,
     validateOnBlur: false,
@@ -127,21 +125,21 @@ export default function JudgeScoring({ uid, profile }) {
                   <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: 'error.dark' }}>{redComp.name}</Typography>
                   <Typography variant="h5" sx={{ fontWeight: 700, mb: 2, color: 'error.dark' }}>#{redComp.bib}</Typography>
 
-                  <TextField
-                    type="number"
-                    name="score1"
-                    inputProps={{ min: SCORE_MIN, max: SCORE_MAX, step: SCORE_STEP }}
-                    value={formik.values.score1}
-                    onChange={formik.handleChange}
-                    onBlur={(e) => formik.setFieldValue('score1', clampScore(Number(e.target.value) || SCORE_MIN))}
-                    disabled={submitted || tournamentExpired}
-                    error={!!formik.errors.score1}
-                    helperText={formik.errors.score1 || ' '}
-                    variant="outlined"
-                    size="small"
-                    sx={{ mb: 0.5, bgcolor: 'background.paper', borderRadius: 1, '& input': { textAlign: 'center', fontSize: '24px', fontWeight: 700 } }}
-                  />
-                  <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>Score ({SCORE_MIN}–{SCORE_MAX})</Typography>
+                  <ButtonGroup variant="outlined" sx={{ mb: 0.5, bgcolor: 'background.paper', borderRadius: 1 }}>
+                    {SCORE_VALUES.map((points) => (
+                      <Button
+                        key={points}
+                        onClick={() => formik.setFieldValue('score1', clampScore(points))}
+                        disabled={submitted || tournamentExpired}
+                        variant={formik.values.score1 === points ? 'contained' : 'outlined'}
+                        sx={{ fontSize: '20px', fontWeight: 700, minWidth: 56 }}
+                      >
+                        {points}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
+                  <Typography variant="caption" display="block" color="error" sx={{ minHeight: 20 }}>{formik.errors.score1 || ' '}</Typography>
+                  <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>Points</Typography>
                 </Box>
               </Grid>
 
@@ -156,21 +154,21 @@ export default function JudgeScoring({ uid, profile }) {
                   <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: 'info.dark' }}>{blueComp.name}</Typography>
                   <Typography variant="h5" sx={{ fontWeight: 700, mb: 2, color: 'info.dark' }}>#{blueComp.bib}</Typography>
 
-                  <TextField
-                    type="number"
-                    name="score2"
-                    inputProps={{ min: SCORE_MIN, max: SCORE_MAX, step: SCORE_STEP }}
-                    value={formik.values.score2}
-                    onChange={formik.handleChange}
-                    onBlur={(e) => formik.setFieldValue('score2', clampScore(Number(e.target.value) || SCORE_MIN))}
-                    disabled={submitted || tournamentExpired}
-                    error={!!formik.errors.score2}
-                    helperText={formik.errors.score2 || ' '}
-                    variant="outlined"
-                    size="small"
-                    sx={{ mb: 0.5, bgcolor: 'background.paper', borderRadius: 1, '& input': { textAlign: 'center', fontSize: '24px', fontWeight: 700 } }}
-                  />
-                  <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>Score ({SCORE_MIN}–{SCORE_MAX})</Typography>
+                  <ButtonGroup variant="outlined" sx={{ mb: 0.5, bgcolor: 'background.paper', borderRadius: 1 }}>
+                    {SCORE_VALUES.map((points) => (
+                      <Button
+                        key={points}
+                        onClick={() => formik.setFieldValue('score2', clampScore(points))}
+                        disabled={submitted || tournamentExpired}
+                        variant={formik.values.score2 === points ? 'contained' : 'outlined'}
+                        sx={{ fontSize: '20px', fontWeight: 700, minWidth: 56 }}
+                      >
+                        {points}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
+                  <Typography variant="caption" display="block" color="error" sx={{ minHeight: 20 }}>{formik.errors.score2 || ' '}</Typography>
+                  <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>Points</Typography>
                 </Box>
               </Grid>
             </Grid>

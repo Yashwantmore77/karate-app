@@ -300,13 +300,14 @@ function notifySnapshot(path) {
 }
 
 // Scoring config
-export const SCORE_MIN = 1.0
-export const SCORE_MAX = 10.0
-export const SCORE_STEP = 0.1
+export const SCORE_MIN = 1
+export const SCORE_MAX = 3
+export const SCORE_STEP = 1
+export const SCORE_VALUES = [1, 2, 3]
 export const JUDGE_COUNT = 4
 
 export const clampScore = (v) =>
-  Math.round(Math.min(SCORE_MAX, Math.max(SCORE_MIN, v)) * 10) / 10
+  Math.min(SCORE_MAX, Math.max(SCORE_MIN, Math.round(v)))
 
 // Get scoring template
 export function getScoringTemplate(templateName = 'kata') {
