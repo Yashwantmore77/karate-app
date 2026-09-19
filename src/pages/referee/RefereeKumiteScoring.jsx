@@ -15,6 +15,36 @@ const POINT_BUTTONS = [
 const PENALTY_STEPS = ['C', 'K', 'HC', 'H']
 const PENALTY_CATEGORIES = ['Category 1', 'Category 2']
 
+// Sampled from the WKF scoring console this screen mirrors.
+const WKF = {
+  ao: '#0000C0',
+  aka: '#C00000',
+  aoControl: '#93FFFF',
+  akaControl: '#FF9192',
+  onPanel: '#FFFFFF',
+  timerInk: '#000040',
+  start: '#93FE94',
+  stop: '#E47E7A',
+  koTimer: '#7B76F4',
+  utility: '#F2F2F2',
+  utilityBorder: '#ACACAC',
+  scoreboardStart: '#D2FFD4',
+  scoreboardClose: '#E47E7A',
+  ink: '#000000',
+}
+
+const utilityButtonSx = {
+  bgcolor: WKF.utility,
+  color: WKF.ink,
+  borderColor: WKF.utilityBorder,
+  '&:hover': { bgcolor: '#E5E5E5', borderColor: WKF.utilityBorder },
+}
+
+const panelCheckboxSx = {
+  color: WKF.onPanel,
+  '&.Mui-checked': { color: WKF.onPanel },
+}
+
 const DEFAULT_MATCH_SECONDS = 90 // 1:30
 const EXTRA_TIME_SECONDS = 60 // 1:00 encho
 const KO_TIMER_SECONDS = 180 // 3:00 injury assessment
@@ -196,7 +226,7 @@ export default function RefereeKumiteScoring({
     const level = (side === 'ao' ? state.aoPenalties : state.akaPenalties)[category]
     return (
       <Stack direction="row" spacing={1} key={category} alignItems="center">
-        <Typography variant="caption" sx={{ width: 72, color: 'text.secondary' }}>{category}</Typography>
+        <Typography variant="caption" sx={{ width: 72, color: WKF.onPanel, fontWeight: 700 }}>{category}</Typography>
         {PENALTY_STEPS.map((step, idx) => (
           <FormControlLabel
             key={step}
@@ -207,29 +237,30 @@ export default function RefereeKumiteScoring({
                 checked={level >= idx + 1}
                 disabled={disabled}
                 onChange={() => togglePenalty(side, category, idx)}
+                sx={panelCheckboxSx}
               />
             }
-            label={<Typography variant="caption">{step}</Typography>}
+            label={<Typography variant="caption" sx={{ color: WKF.onPanel, fontWeight: 700 }}>{step}</Typography>}
           />
         ))}
       </Stack>
     )
   }
 
-  const renderSide = (side, comp, score, bg, dark) => (
+  const renderSide = (side, comp, score, bg, control) => (
     <Paper elevation={0} sx={{ p: 2, bgcolor: bg, borderRadius: 2, textAlign: 'center', height: '100%' }}>
-      <Typography variant="h4" sx={{ fontWeight: 700, color: dark }}>{side === 'ao' ? 'Ao' : 'Aka'}</Typography>
-      <Typography variant="subtitle1" sx={{ color: dark, mb: 1 }}>{comp?.name} • #{comp?.bib}</Typography>
+      <Typography variant="h4" sx={{ fontWeight: 700, color: WKF.onPanel }}>{side === 'ao' ? 'Ao' : 'Aka'}</Typography>
+      <Typography variant="subtitle1" sx={{ color: WKF.onPanel, mb: 1 }}>{comp?.name} • #{comp?.bib}</Typography>
 
       <FormControlLabel
-        sx={{ mb: 1 }}
+        sx={{ mb: 1, color: WKF.onPanel }}
         control={
-          <Checkbox checked={state.senshu === side} disabled={disabled} onChange={() => toggleSenshu(side)} />
+          <Checkbox checked={state.senshu === side} disabled={disabled} onChange={() => toggleSenshu(side)} sx={panelCheckboxSx} />
         }
         label="Senshu"
       />
 
-      <Typography variant="h1" sx={{ fontSize: 72, fontWeight: 800, color: dark, my: 1 }}>{score}</Typography>
+      <Typography variant="h1" sx={{ fontSize: 72, fontWeight: 800, color: WKF.onPanel, my: 1 }}>{score}</Typography>
 
       <Stack spacing={1} sx={{ mb: 2 }}>
         {POINT_BUTTONS.map((p) => (
@@ -238,17 +269,22 @@ export default function RefereeKumiteScoring({
             variant="contained"
             disabled={disabled}
             onClick={() => awardPoint(side, p.value)}
-            sx={{ bgcolor: 'background.paper', color: dark, fontWeight: 700, '&:hover': { bgcolor: bg } }}
+            sx={{ bgcolor: control, color: WKF.ink, fontWeight: 700, '&:hover': { bgcolor: control, filter: 'brightness(0.92)' } }}
           >
             {p.label}
           </Button>
         ))}
-        <Button variant="outlined" disabled={disabled} onClick={() => deductPoint(side)} sx={{ color: dark, borderColor: dark }}>
+        <Button
+          variant="contained"
+          disabled={disabled}
+          onClick={() => deductPoint(side)}
+          sx={{ bgcolor: control, color: WKF.ink, fontWeight: 700, '&:hover': { bgcolor: control, filter: 'brightness(0.92)' } }}
+        >
           -1
         </Button>
       </Stack>
 
-      <Divider sx={{ my: 1 }} />
+      <Divider sx={{ my: 1, borderColor: 'rgba(255,255,255,0.35)' }} />
       <Stack spacing={0.5} alignItems="flex-start">
         {PENALTY_CATEGORIES.map((c) => renderPenaltyRow(side, c))}
       </Stack>
@@ -265,13 +301,13 @@ export default function RefereeKumiteScoring({
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 4 }}>
-          {renderSide('ao', blueComp, state.aoScore, 'info.light', 'info.dark')}
+          {renderSide('ao', blueComp, state.aoScore, WKF.ao, WKF.aoControl)}
         </Grid>
 
         <Grid size={{ xs: 12, sm: 4 }}>
           <Stack spacing={2}>
             <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="h1" sx={{ fontSize: 56, fontWeight: 800 }}>
+              <Typography variant="h1" sx={{ fontSize: 56, fontWeight: 800, color: WKF.timerInk }}>
                 {state.koTimerActive ? formatTime(state.koTimeRemaining) : formatTime(state.timeRemaining)}
               </Typography>
 
@@ -287,30 +323,41 @@ export default function RefereeKumiteScoring({
               <Button
                 fullWidth
                 variant="contained"
-                color={state.timerRunning ? 'error' : 'success'}
                 disabled={disabled}
                 onClick={toggleTimer}
-                sx={{ mb: 1 }}
+                sx={{
+                  mb: 1,
+                  bgcolor: state.timerRunning ? WKF.stop : WKF.start,
+                  color: WKF.ink,
+                  fontWeight: 700,
+                  '&:hover': { bgcolor: state.timerRunning ? WKF.stop : WKF.start, filter: 'brightness(0.92)' },
+                }}
               >
                 {state.timerRunning ? 'Stop' : 'Start'}
               </Button>
 
               <Button
                 fullWidth
-                variant={state.koTimerActive ? 'contained' : 'outlined'}
-                color="secondary"
+                variant="contained"
                 disabled={disabled}
                 onClick={guarded('Start the KO timer', toggleKoTimer)}
-                sx={{ mb: 1 }}
+                sx={{
+                  mb: 1,
+                  bgcolor: WKF.koTimer,
+                  color: WKF.ink,
+                  fontWeight: 700,
+                  outline: state.koTimerActive ? `3px solid ${WKF.timerInk}` : 'none',
+                  '&:hover': { bgcolor: WKF.koTimer, filter: 'brightness(0.92)' },
+                }}
               >
                 KO Timer
               </Button>
 
               <Stack direction="row" spacing={1}>
-                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Reset the time', resetTime)}>Reset time</Button>
-                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', setExtraTime)}>Extra time</Button>
+                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Reset the time', resetTime)} sx={utilityButtonSx}>Reset time</Button>
+                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', setExtraTime)} sx={utilityButtonSx}>Extra time</Button>
               </Stack>
-              <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Set the clock to 60 seconds', setSixtySeconds)} sx={{ mt: 1 }}>
+              <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Set the clock to 60 seconds', setSixtySeconds)} sx={{ ...utilityButtonSx, mt: 1 }}>
                 60 seconds
               </Button>
 
@@ -348,7 +395,7 @@ export default function RefereeKumiteScoring({
                   onChange={(e) => setFieldNumberDraft(e.target.value)}
                   inputProps={{ style: { textAlign: 'center' } }}
                 />
-                <Button variant="outlined" disabled={disabled} onClick={guarded('Change the field number', commitFieldNumber)}>Set</Button>
+                <Button variant="outlined" disabled={disabled} onClick={guarded('Change the field number', commitFieldNumber)} sx={utilityButtonSx}>Set</Button>
               </Stack>
             </Paper>
 
@@ -357,20 +404,28 @@ export default function RefereeKumiteScoring({
               <Button
                 fullWidth
                 variant="contained"
-                color={state.scoreboardActive ? 'error' : 'success'}
                 disabled={disabled}
                 onClick={guarded(state.scoreboardActive ? 'Close the external scoreboard' : 'Start the external scoreboard', toggleScoreboard)}
+                sx={{
+                  bgcolor: state.scoreboardActive ? WKF.scoreboardClose : WKF.scoreboardStart,
+                  color: WKF.ink,
+                  fontWeight: 700,
+                  '&:hover': {
+                    bgcolor: state.scoreboardActive ? WKF.scoreboardClose : WKF.scoreboardStart,
+                    filter: 'brightness(0.92)',
+                  },
+                }}
               >
                 {state.scoreboardActive ? 'Close scoreboard' : 'Start scoreboard'}
               </Button>
             </Paper>
 
-            <Button variant="outlined" onClick={guarded('Close and finalize the match', handleClose)}>Close</Button>
+            <Button variant="outlined" onClick={guarded('Close and finalize the match', handleClose)} sx={utilityButtonSx}>Close</Button>
           </Stack>
         </Grid>
 
         <Grid size={{ xs: 12, sm: 4 }}>
-          {renderSide('aka', redComp, state.akaScore, 'error.light', 'error.dark')}
+          {renderSide('aka', redComp, state.akaScore, WKF.aka, WKF.akaControl)}
         </Grid>
       </Grid>
 
