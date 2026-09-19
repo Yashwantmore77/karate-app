@@ -5,6 +5,7 @@ export {
   SCORE_MIN,
   SCORE_MAX,
   SCORE_STEP,
+  SCORE_VALUES,
   JUDGE_COUNT,
   clampScore,
   signInWithEmailAndPassword,
@@ -59,11 +60,12 @@ export {
 // export const auth = getAuth(app)
 // export const db = getFirestore(app)
 //
-// export const SCORE_MIN = 5.0
-// export const SCORE_MAX = 10.0
-// export const SCORE_STEP = 0.2
+// export const SCORE_MIN = 1
+// export const SCORE_MAX = 3
+// export const SCORE_STEP = 1
+// export const SCORE_VALUES = [1, 2, 3]
 // export const JUDGE_COUNT = 4
 //
 // export const clampScore = (v) =>
-//   Math.round(Math.min(SCORE_MAX, Math.max(SCORE_MIN, v)) * 10) / 10
+//   Math.min(SCORE_MAX, Math.max(SCORE_MIN, Math.round(v)))
 */
