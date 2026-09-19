@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
   Box, Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
-  FormControlLabel, TextField, Divider, Stack, Alert
+  FormControlLabel, TextField, Divider, Stack, Alert,
+  Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material'
 import { KeyboardArrowUp, KeyboardArrowDown } from '@mui/icons-material'
 
@@ -51,6 +52,7 @@ export default function RefereeKumiteScoring({
     return saved ? { ...defaultState(), ...JSON.parse(saved) } : defaultState()
   })
   const [fieldNumberDraft, setFieldNumberDraft] = useState(state.fieldNumber)
+  const [pendingAction, setPendingAction] = useState(null)
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(state))
@@ -175,6 +177,18 @@ export default function RefereeKumiteScoring({
     onBack()
   }
 
+  // Anything that disrupts a match in progress needs confirming while the
+  // clock runs; scoring stays immediate so the referee is never slowed down.
+  const guarded = (label, run) => () => {
+    if (state.timerRunning) setPendingAction({ label, run })
+    else run()
+  }
+
+  const confirmPendingAction = () => {
+    pendingAction.run()
+    setPendingAction(null)
+  }
+
   const matchMinutes = Math.floor(state.matchSeconds / 60)
   const matchSecondsPart = state.matchSeconds % 60
 
@@ -286,17 +300,17 @@ export default function RefereeKumiteScoring({
                 variant={state.koTimerActive ? 'contained' : 'outlined'}
                 color="secondary"
                 disabled={disabled}
-                onClick={toggleKoTimer}
+                onClick={guarded('Start the KO timer', toggleKoTimer)}
                 sx={{ mb: 1 }}
               >
                 KO Timer
               </Button>
 
               <Stack direction="row" spacing={1}>
-                <Button fullWidth variant="outlined" disabled={disabled} onClick={resetTime}>Reset time</Button>
-                <Button fullWidth variant="outlined" disabled={disabled} onClick={setExtraTime}>Extra time</Button>
+                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Reset the time', resetTime)}>Reset time</Button>
+                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', setExtraTime)}>Extra time</Button>
               </Stack>
-              <Button fullWidth variant="outlined" disabled={disabled} onClick={setSixtySeconds} sx={{ mt: 1 }}>
+              <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Set the clock to 60 seconds', setSixtySeconds)} sx={{ mt: 1 }}>
                 60 seconds
               </Button>
 
@@ -334,7 +348,7 @@ export default function RefereeKumiteScoring({
                   onChange={(e) => setFieldNumberDraft(e.target.value)}
                   inputProps={{ style: { textAlign: 'center' } }}
                 />
-                <Button variant="outlined" disabled={disabled} onClick={commitFieldNumber}>Set</Button>
+                <Button variant="outlined" disabled={disabled} onClick={guarded('Change the field number', commitFieldNumber)}>Set</Button>
               </Stack>
             </Paper>
 
@@ -345,13 +359,13 @@ export default function RefereeKumiteScoring({
                 variant="contained"
                 color={state.scoreboardActive ? 'error' : 'success'}
                 disabled={disabled}
-                onClick={toggleScoreboard}
+                onClick={guarded(state.scoreboardActive ? 'Close the external scoreboard' : 'Start the external scoreboard', toggleScoreboard)}
               >
                 {state.scoreboardActive ? 'Close scoreboard' : 'Start scoreboard'}
               </Button>
             </Paper>
 
-            <Button variant="outlined" onClick={handleClose}>Close</Button>
+            <Button variant="outlined" onClick={guarded('Close and finalize the match', handleClose)}>Close</Button>
           </Stack>
         </Grid>
 
@@ -359,6 +373,19 @@ export default function RefereeKumiteScoring({
           {renderSide('aka', redComp, state.akaScore, 'error.light', 'error.dark')}
         </Grid>
       </Grid>
+
+      <Dialog open={!!pendingAction} onClose={() => setPendingAction(null)}>
+        <DialogTitle>Match clock is running</DialogTitle>
+        <DialogContent>
+          <Typography>
+            {pendingAction?.label} while the clock is still running at {formatTime(state.timeRemaining)}?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingAction(null)}>Cancel</Button>
+          <Button variant="contained" color="warning" onClick={confirmPendingAction}>Confirm</Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   )
 }

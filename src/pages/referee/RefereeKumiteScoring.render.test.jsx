@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import RefereeMatchControl from './RefereeMatchControl'
@@ -81,5 +81,59 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
     expect(updated.winner).toBe('blue')
     expect(updated.avgBlue).toBe(3)
     expect(updated.avgRed).toBe(0)
+  })
+
+  describe('while the match clock is running', () => {
+    const startClock = async (user) => {
+      await user.click(screen.getByRole('button', { name: 'Start' }))
+    }
+
+    it('asks for confirmation before resetting the time and leaves the clock alone on cancel', async () => {
+      const user = userEvent.setup()
+      renderPage()
+      await startClock(user)
+
+      await user.click(screen.getByRole('button', { name: 'Reset time' }))
+      expect(screen.getByRole('heading', { name: /match clock is running/i })).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+      await waitForElementToBeRemoved(() => screen.queryByRole('dialog'))
+      expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    })
+
+    it('runs the guarded action only after Confirm', async () => {
+      const user = userEvent.setup()
+      renderPage()
+      await startClock(user)
+
+      await user.click(screen.getByRole('button', { name: '60 seconds' }))
+      await user.click(screen.getByRole('button', { name: 'Confirm' }))
+      await waitForElementToBeRemoved(() => screen.queryByRole('dialog'))
+
+      expect(screen.getByText('1:00')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
+    })
+
+    it('does not guard scoring or penalties', async () => {
+      const user = userEvent.setup()
+      renderPage()
+      await startClock(user)
+
+      const aoPanel = screen.getByText('Ao').closest('div')
+      await user.click(within(aoPanel).getByRole('button', { name: 'Ippon' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(within(aoPanel).getByText('3')).toBeInTheDocument()
+    })
+
+    it('does not guard actions once the clock is stopped', async () => {
+      const user = userEvent.setup()
+      renderPage()
+      await startClock(user)
+      await user.click(screen.getByRole('button', { name: 'Stop' }))
+
+      await user.click(screen.getByRole('button', { name: 'Reset time' }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
   })
 })
