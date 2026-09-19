@@ -56,6 +56,8 @@ export default function RefereeMatchControl({ uid, profile }) {
   }, [matchId])
 
   const tournamentExpired = tournament && isExpired(tournament.date)
+  // Kata tournaments still need the judge round controls under the console.
+  const showJudgePanel = tournament?.template !== 'kumite'
 
   // Collect all judge scores
   const allJudgeScores = { red: [], blue: [] }
@@ -105,34 +107,6 @@ export default function RefereeMatchControl({ uid, profile }) {
     return <div>Match not found</div>
   }
 
-  if (tournament?.template === 'kumite') {
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-        <AppBar position="static">
-          <Toolbar>
-            <IconButton color="inherit" onClick={() => navigate(-1)} sx={{ mr: 2 }}>
-              <ArrowBack />
-            </IconButton>
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h6">Kumite WKF</Typography>
-              <Typography variant="caption" sx={{ opacity: 0.9 }}>{category?.name}</Typography>
-            </Box>
-            <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
-          </Toolbar>
-        </AppBar>
-        <RefereeKumiteScoring
-          matchId={matchId}
-          tournament={tournament}
-          redComp={redComp}
-          blueComp={blueComp}
-          tournamentExpired={tournamentExpired}
-          onBack={() => navigate(-1)}
-          onFinalize={updateMatchRecord}
-        />
-      </Box>
-    )
-  }
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="static">
@@ -141,19 +115,26 @@ export default function RefereeMatchControl({ uid, profile }) {
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">Match Control</Typography>
+            <Typography variant="h6">Kumite WKF</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>{category?.name}</Typography>
           </Box>
           <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="md" sx={{ py: 4, flex: 1 }}>
-        {tournamentExpired && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            Tournament expired on {new Date(tournament.date).toLocaleDateString()}. Match control is read-only.
-          </Alert>
-        )}
+      <RefereeKumiteScoring
+        matchId={matchId}
+        tournament={tournament}
+        redComp={redComp}
+        blueComp={blueComp}
+        tournamentExpired={tournamentExpired}
+        onBack={() => navigate(-1)}
+        onFinalize={updateMatchRecord}
+      />
+
+      {showJudgePanel && (
+      <Container maxWidth="md" sx={{ pb: 4 }}>
+        <Typography variant="h6" sx={{ mb: 2 }}>Judge panel</Typography>
 
         <Card sx={{ mb: 3 }}>
           <CardContent>
@@ -229,6 +210,7 @@ export default function RefereeMatchControl({ uid, profile }) {
           )}
         </Paper>
       </Container>
+      )}
     </Box>
   )
 }

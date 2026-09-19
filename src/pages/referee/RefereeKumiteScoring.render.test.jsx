@@ -52,6 +52,26 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
     expect(screen.getByText('1:30')).toBeInTheDocument()
   })
 
+  it('shows the console for a kata tournament too, with the judge panel kept below it', () => {
+    const tournaments = JSON.parse(localStorage.getItem('tournaments'))
+    tournaments[0].template = 'kata'
+    localStorage.setItem('tournaments', JSON.stringify(tournaments))
+
+    renderPage()
+
+    expect(screen.getByText('Ao')).toBeInTheDocument()
+    expect(screen.getByText('Aka')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Ippon' })).toHaveLength(2)
+    expect(screen.getByText('Judge panel')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Round' })).toBeInTheDocument()
+  })
+
+  it('omits the judge panel for a kumite tournament', () => {
+    renderPage()
+    expect(screen.queryByText('Judge panel')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open Round' })).not.toBeInTheDocument()
+  })
+
   it('awards points via Ippon/Waza-ari and updates each side\'s total independently', async () => {
     const user = userEvent.setup()
     renderPage()
