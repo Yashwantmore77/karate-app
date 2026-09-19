@@ -3,7 +3,7 @@
 // cannot tell which one they are talking to.
 
 import { matchStateRepo } from '../repo'
-import { applyCommand, applyExpiry, initialMatchState } from '../../shared/commands'
+import { applyCommand, applyExpiry, initialMatchState, withOutcome } from '../../shared/commands'
 import { remainingNow } from '../../shared/clock'
 
 const EXPIRY_SWEEP_MS = 250
@@ -36,7 +36,8 @@ export function openLocalMatch(matchId, { control = true } = {}) {
   const sweep = control
     ? setInterval(() => {
         if (!state) return
-        const next = applyExpiry(state, Date.now(), remainingNow)
+        const at = Date.now()
+        const next = withOutcome(applyExpiry(state, at, remainingNow), undefined, at)
         if (next !== state) {
           push(next)
           matchStateRepo.put(matchId, next)
@@ -53,7 +54,8 @@ export function openLocalMatch(matchId, { control = true } = {}) {
     },
     send(cmd, payload) {
       if (!control || !state) return
-      const next = applyCommand(state, cmd, payload, Date.now())
+      const at = Date.now()
+      const next = withOutcome(applyCommand(state, cmd, payload, at), undefined, at)
       if (next === state) return
       push(next)
       matchStateRepo.put(matchId, next)

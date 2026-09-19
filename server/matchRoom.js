@@ -1,5 +1,5 @@
 import { remainingNow } from '../src/shared/clock.js'
-import { applyCommand, applyExpiry, initialMatchState } from '../src/shared/commands.js'
+import { applyCommand, applyExpiry, initialMatchState, withOutcome } from '../src/shared/commands.js'
 
 export const serverNow = () => Date.now()
 
@@ -41,7 +41,7 @@ export class MatchRoom {
     }
     const at = serverNow()
     const before = this.state
-    this.state = applyCommand(before, cmd, payload, at)
+    this.state = withOutcome(applyCommand(before, cmd, payload, at), undefined, at)
     if (this.state === before) return null
     this.seq += 1
     return { seq: this.seq, cmd, at, state: this.state }
@@ -50,7 +50,7 @@ export class MatchRoom {
   sweepExpiry() {
     const at = serverNow()
     const before = this.state
-    const next = applyExpiry(before, at, remainingNow)
+    const next = withOutcome(applyExpiry(before, at, remainingNow), undefined, at)
     if (next === before) return null
     this.state = next
     this.seq += 1

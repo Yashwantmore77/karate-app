@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import DisplayScoreboard from './DisplayScoreboard'
@@ -87,6 +87,34 @@ describe('console observe mode', () => {
     expect(screen.getAllByRole('button', { name: 'Ippon' })[0]).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Reset time' })).toBeDisabled()
+  })
+
+  it('announces the verdict once the rules decide the bout', async () => {
+    const user = userEvent.setup()
+    const control = render(<RefereeKumiteScoring {...props} mode="control" />)
+    // three ippon = an eight point gap
+    for (let i = 0; i < 3; i += 1) {
+      await user.click(control.getAllByRole('button', { name: 'Ippon' })[1])
+    }
+    const panel = within(control.container)
+    await waitFor(() => {
+      expect(panel.getByText(/Ryan Thomas wins by point gap/i)).toBeInTheDocument()
+    })
+    expect(panel.getByRole('button', { name: /confirm result/i })).toBeInTheDocument()
+  })
+
+  it('shows judges the verdict but no way to confirm it', async () => {
+    const user = userEvent.setup()
+    const control = render(<RefereeKumiteScoring {...props} mode="control" />)
+    for (let i = 0; i < 3; i += 1) {
+      await user.click(control.getAllByRole('button', { name: 'Ippon' })[1])
+    }
+    const observer = render(<RefereeKumiteScoring {...props} mode="observe" />)
+    const panel = within(observer.container)
+    await waitFor(() => {
+      expect(panel.getByText(/Ryan Thomas wins by point gap/i)).toBeInTheDocument()
+    })
+    expect(panel.queryByRole('button', { name: /confirm result/i })).not.toBeInTheDocument()
   })
 
   it('follows a change made by the controlling view', async () => {

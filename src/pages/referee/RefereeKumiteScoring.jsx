@@ -133,6 +133,20 @@ export default function RefereeKumiteScoring({
 
   const { minutes: durationMinutes, seconds: durationSeconds } = toMinutesSeconds(view.durationMs)
 
+  const OUTCOME_LABEL = {
+    points: 'on points',
+    gapRule: 'by point gap',
+    senshu: 'by senshu',
+    hansoku: 'by hansoku',
+    shikkaku: 'by shikkaku',
+    kiken: 'by kiken',
+    tieBreak: 'level \u2014 needs extra time or a decision',
+  }
+  const outcome = view.outcome
+  const outcomeName = outcome?.winner === 'ao' ? blueComp?.name
+    : outcome?.winner === 'aka' ? redComp?.name
+    : null
+
   const renderPenaltyRow = (side, category) => {
     const level = view.match.penalties[side][category]
     return (
@@ -216,6 +230,20 @@ export default function RefereeKumiteScoring({
       {tournamentExpired && (
         <Alert severity="error" sx={{ mb: 2 }}>
           Tournament expired. Scoring is read-only.
+        </Alert>
+      )}
+
+      {outcome?.ended && (
+        <Alert
+          severity={outcomeName ? 'success' : 'info'}
+          sx={{ mb: 2, fontWeight: 700 }}
+          action={!observing && (
+            <Button color="inherit" size="small" onClick={handleClose}>Confirm result</Button>
+          )}
+        >
+          {outcomeName
+            ? `${outcomeName} wins ${OUTCOME_LABEL[outcome.method]}`
+            : `Scores ${OUTCOME_LABEL.tieBreak}`}
         </Alert>
       )}
 

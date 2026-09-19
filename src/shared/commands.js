@@ -3,9 +3,9 @@
 // applies it. Because it is the same function in both places, the projection
 // a judge renders cannot drift from the one the server holds.
 
-import { makeClock, startClock, stopClock, adjustClock } from './clock.js'
+import { makeClock, startClock, stopClock, adjustClock, remainingNow } from './clock.js'
 import {
-  makeMatchState, awardPoint, deductPoint, setSenshu, setPenalty, DEFAULT_RULES
+  makeMatchState, awardPoint, deductPoint, setSenshu, setPenalty, evaluateOutcome, DEFAULT_RULES
 } from './rules.js'
 
 export const DEFAULT_DURATION_MS = 90_000
@@ -18,7 +18,23 @@ export const initialMatchState = () => ({
   koClock: makeClock(DEFAULT_RULES.koTimerMs),
   fieldNumber: '1',
   scoreboardActive: false,
+  outcome: null,
 })
+
+/**
+ * Attaches the rules' verdict to a state. The referee still confirms it, but
+ * nobody has to notice an 8-point gap or a hansoku by eye, and every device is
+ * told the same thing at the same moment.
+ */
+export function withOutcome(state, rules = DEFAULT_RULES, at = Date.now()) {
+  const expired = remainingNow(state.clock, at) === 0 && !state.koActive
+  const outcome = evaluateOutcome(state.match, rules, { expired })
+  if (!outcome.ended) return state.outcome ? { ...state, outcome: null } : state
+  const same = state.outcome
+    && state.outcome.winner === outcome.winner
+    && state.outcome.method === outcome.method
+  return same ? state : { ...state, outcome }
+}
 
 export const COMMANDS = [
   'CLOCK_START', 'CLOCK_STOP', 'CLOCK_ADJUST', 'CLOCK_SET', 'CLOCK_RESET', 'KO_TIMER',
