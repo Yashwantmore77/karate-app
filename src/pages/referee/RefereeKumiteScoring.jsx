@@ -1,19 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  Box, Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
+  Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
   FormControlLabel, TextField, Divider, Stack, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material'
 import { KeyboardArrowUp, KeyboardArrowDown } from '@mui/icons-material'
+import {
+  makeMatchState, awardPoint, deductPoint, setSenshu, setPenalty, evaluateOutcome,
+  POINTS, PENALTY_LADDER, PENALTY_CATEGORIES, DEFAULT_RULES
+} from '../../shared/rules'
+import {
+  makeClock, remainingNow, startClock, stopClock, adjustClock, setClock
+} from '../../shared/clock'
+import { formatClock, toMinutesSeconds, parseDuration } from '../../shared/format'
+import { matchStateRepo, displayRepo, now } from '../../data/repo'
 
 const POINT_BUTTONS = [
-  { key: 'ippon', label: 'Ippon', value: 3 },
-  { key: 'wazaAri', label: 'Waza-ari', value: 2 },
-  { key: 'yuko', label: 'Yuko', value: 1 },
+  { key: 'ippon', label: 'Ippon' },
+  { key: 'wazaAri', label: 'Waza-ari' },
+  { key: 'yuko', label: 'Yuko' },
 ]
 
-const PENALTY_STEPS = ['C', 'K', 'HC', 'H']
-const PENALTY_CATEGORIES = ['Category 1', 'Category 2']
+const CATEGORY_LABELS = { c1: 'Category 1', c2: 'Category 2' }
 
 // Sampled from the WKF scoring console this screen mirrors.
 const WKF = {
@@ -45,172 +53,139 @@ const panelCheckboxSx = {
   '&.Mui-checked': { color: WKF.onPanel },
 }
 
-const DEFAULT_MATCH_SECONDS = 90 // 1:30
-const EXTRA_TIME_SECONDS = 60 // 1:00 encho
-const KO_TIMER_SECONDS = 180 // 3:00 injury assessment
-
-const emptyPenalties = () => ({ 'Category 1': 0, 'Category 2': 0 })
+const DEFAULT_DURATION_MS = 90_000 // 1:30
 
 const defaultState = () => ({
-  aoScore: 0,
-  akaScore: 0,
-  senshu: null, // 'ao' | 'aka' | null
-  aoPenalties: emptyPenalties(),
-  akaPenalties: emptyPenalties(),
-  matchSeconds: DEFAULT_MATCH_SECONDS,
-  timeRemaining: DEFAULT_MATCH_SECONDS,
-  timerRunning: false,
-  koTimerActive: false,
-  koTimeRemaining: KO_TIMER_SECONDS,
+  match: makeMatchState(),
+  clock: makeClock(DEFAULT_DURATION_MS),
+  durationMs: DEFAULT_DURATION_MS,
+  koActive: false,
+  koClock: makeClock(DEFAULT_RULES.koTimerMs),
   fieldNumber: '1',
   scoreboardActive: false,
 })
 
-const formatTime = (totalSeconds) => {
-  const s = Math.max(0, totalSeconds)
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}:${String(sec).padStart(2, '0')}`
-}
-
 export default function RefereeKumiteScoring({
-  matchId, tournament, redComp, blueComp, tournamentExpired, onBack, onFinalize
+  matchId, redComp, blueComp, tournamentExpired, onBack, onFinalize
 }) {
-  const storageKey = `kumite-${matchId}`
-  const [state, setState] = useState(() => {
-    const saved = localStorage.getItem(storageKey)
-    return saved ? { ...defaultState(), ...JSON.parse(saved) } : defaultState()
-  })
-  const [fieldNumberDraft, setFieldNumberDraft] = useState(state.fieldNumber)
+  const [state, setState] = useState(defaultState)
+  const [fieldNumberDraft, setFieldNumberDraft] = useState('1')
   const [pendingAction, setPendingAction] = useState(null)
+  const hydrated = useRef(false)
+
+  // Re-render while a clock runs. The value is always recomputed from the
+  // anchor, so a late tick shows the right number rather than drifting.
+  const [, setTick] = useState(0)
+  const ticking = state.clock.running || state.koActive
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(state))
+    let cancelled = false
+    matchStateRepo.get(matchId).then((saved) => {
+      if (!cancelled && saved) {
+        const { id, createdAt, ...rest } = saved
+        setState((prev) => ({ ...prev, ...rest }))
+        if (rest.fieldNumber) setFieldNumberDraft(rest.fieldNumber)
+      }
+      hydrated.current = true
+    })
+    return () => { cancelled = true }
+  }, [matchId])
+
+  useEffect(() => {
+    if (!hydrated.current) return
+    matchStateRepo.put(matchId, state)
     if (state.scoreboardActive) {
-      localStorage.setItem('live-scoreboard', JSON.stringify({
+      displayRepo.put({
         status: 'open',
         matchId,
         fieldNumber: state.fieldNumber,
         aoName: blueComp?.name,
         akaName: redComp?.name,
-        aoScore: state.aoScore,
-        akaScore: state.akaScore,
-        senshu: state.senshu,
-        timeDisplay: state.koTimerActive ? formatTime(state.koTimeRemaining) : formatTime(state.timeRemaining),
-      }))
+        aoScore: state.match.scores.ao,
+        akaScore: state.match.scores.aka,
+        senshu: state.match.senshu,
+        clock: state.koActive ? state.koClock : state.clock,
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 
-  // Main match clock
   useEffect(() => {
-    if (!state.timerRunning || state.koTimerActive) return
+    if (!ticking) return
     const id = setInterval(() => {
+      setTick((t) => t + 1)
       setState((prev) => {
-        if (prev.timeRemaining <= 1) return { ...prev, timeRemaining: 0, timerRunning: false }
-        return { ...prev, timeRemaining: prev.timeRemaining - 1 }
+        const at = now()
+        if (prev.koActive && remainingNow(prev.koClock, at) === 0) {
+          return { ...prev, koActive: false, koClock: stopClock(prev.koClock, at) }
+        }
+        if (prev.clock.running && remainingNow(prev.clock, at) === 0) {
+          return { ...prev, clock: stopClock(prev.clock, at) }
+        }
+        return prev
       })
-    }, 1000)
+    }, 100)
     return () => clearInterval(id)
-  }, [state.timerRunning, state.koTimerActive])
-
-  // KO / injury timer
-  useEffect(() => {
-    if (!state.koTimerActive) return
-    const id = setInterval(() => {
-      setState((prev) => {
-        if (prev.koTimeRemaining <= 1) return { ...prev, koTimeRemaining: 0, koTimerActive: false }
-        return { ...prev, koTimeRemaining: prev.koTimeRemaining - 1 }
-      })
-    }, 1000)
-    return () => clearInterval(id)
-  }, [state.koTimerActive])
+  }, [ticking])
 
   const disabled = tournamentExpired
+  const at = now()
+  const clockRunning = state.clock.running
+  const shownMs = state.koActive
+    ? remainingNow(state.koClock, at)
+    : remainingNow(state.clock, at)
 
-  const awardPoint = (side, value) => {
-    setState((prev) => {
-      const scoreKey = side === 'ao' ? 'aoScore' : 'akaScore'
-      return {
-        ...prev,
-        [scoreKey]: prev[scoreKey] + value,
-        senshu: prev.senshu ?? side,
-      }
-    })
-  }
+  const editMatch = (fn) => setState((prev) => ({ ...prev, match: fn(prev.match) }))
+  const editClock = (fn) => setState((prev) => ({ ...prev, clock: fn(prev.clock, now()) }))
 
-  const deductPoint = (side) => {
-    setState((prev) => {
-      const scoreKey = side === 'ao' ? 'aoScore' : 'akaScore'
-      return { ...prev, [scoreKey]: Math.max(0, prev[scoreKey] - 1) }
-    })
-  }
+  const toggleTimer = () => editClock(clockRunning ? stopClock : startClock)
 
-  const toggleSenshu = (side) => {
-    setState((prev) => ({ ...prev, senshu: prev.senshu === side ? null : side }))
-  }
-
-  const togglePenalty = (side, category, stepIndex) => {
-    setState((prev) => {
-      const key = side === 'ao' ? 'aoPenalties' : 'akaPenalties'
-      const clickedLevel = stepIndex + 1
-      const currentLevel = prev[key][category]
-      const newLevel = currentLevel === clickedLevel ? clickedLevel - 1 : clickedLevel
-      return { ...prev, [key]: { ...prev[key], [category]: newLevel } }
-    })
-  }
-
-  const toggleTimer = () => setState((prev) => ({ ...prev, timerRunning: !prev.timerRunning }))
-
-  const resetTime = () => setState((prev) => ({ ...prev, timeRemaining: prev.matchSeconds, timerRunning: false }))
-
-  const setExtraTime = () => setState((prev) => ({
-    ...prev, matchSeconds: EXTRA_TIME_SECONDS, timeRemaining: EXTRA_TIME_SECONDS, timerRunning: false
+  const resetTime = () => setState((prev) => ({
+    ...prev, clock: makeClock(prev.durationMs)
   }))
 
-  const setSixtySeconds = () => setState((prev) => ({
-    ...prev, matchSeconds: 60, timeRemaining: 60, timerRunning: false
+  const useDuration = (durationMs) => setState((prev) => ({
+    ...prev, durationMs, clock: makeClock(durationMs)
   }))
 
-  const adjustTime = (delta) => setState((prev) => ({
-    ...prev, timeRemaining: Math.max(0, prev.timeRemaining + delta)
-  }))
+  const setMatchDuration = (minutes, seconds) => useDuration(parseDuration(minutes, seconds))
 
-  const setMatchDuration = (minutes, seconds) => {
-    const total = Math.max(0, minutes) * 60 + Math.max(0, Math.min(59, seconds))
-    setState((prev) => ({ ...prev, matchSeconds: total, timeRemaining: total }))
-  }
-
-  const toggleKoTimer = () => setState((prev) => ({
-    ...prev,
-    koTimerActive: !prev.koTimerActive,
-    koTimeRemaining: prev.koTimerActive ? prev.koTimeRemaining : KO_TIMER_SECONDS,
-  }))
+  const toggleKoTimer = () => setState((prev) => {
+    const at2 = now()
+    if (prev.koActive) {
+      return { ...prev, koActive: false, koClock: stopClock(prev.koClock, at2) }
+    }
+    return {
+      ...prev,
+      koActive: true,
+      koClock: startClock(makeClock(DEFAULT_RULES.koTimerMs), at2),
+      clock: stopClock(prev.clock, at2),
+    }
+  })
 
   const commitFieldNumber = () => setState((prev) => ({ ...prev, fieldNumber: fieldNumberDraft }))
 
   const toggleScoreboard = () => setState((prev) => {
     const next = !prev.scoreboardActive
-    if (!next) {
-      localStorage.setItem('live-scoreboard', JSON.stringify({ status: 'closed' }))
-    }
+    if (!next) displayRepo.put({ status: 'closed' })
     return { ...prev, scoreboardActive: next }
   })
 
   const handleClose = () => {
-    const winner = state.akaScore > state.aoScore ? 'red'
-      : state.aoScore > state.akaScore ? 'blue'
-      : state.senshu === 'aka' ? 'red'
-      : state.senshu === 'ao' ? 'blue'
-      : 'tie'
-    onFinalize({ status: 'completed', winner, avgRed: state.akaScore, avgBlue: state.aoScore })
+    const { winner } = evaluateOutcome(state.match, DEFAULT_RULES, { expired: true })
+    onFinalize({
+      status: 'completed',
+      winner: winner === 'aka' ? 'red' : winner === 'ao' ? 'blue' : 'tie',
+      avgRed: state.match.scores.aka,
+      avgBlue: state.match.scores.ao,
+    })
     onBack()
   }
 
   // Anything that disrupts a match in progress needs confirming while the
   // clock runs; scoring stays immediate so the referee is never slowed down.
   const guarded = (label, run) => () => {
-    if (state.timerRunning) setPendingAction({ label, run })
+    if (clockRunning) setPendingAction({ label, run })
     else run()
   }
 
@@ -219,15 +194,16 @@ export default function RefereeKumiteScoring({
     setPendingAction(null)
   }
 
-  const matchMinutes = Math.floor(state.matchSeconds / 60)
-  const matchSecondsPart = state.matchSeconds % 60
+  const { minutes: durationMinutes, seconds: durationSeconds } = toMinutesSeconds(state.durationMs)
 
   const renderPenaltyRow = (side, category) => {
-    const level = (side === 'ao' ? state.aoPenalties : state.akaPenalties)[category]
+    const level = state.match.penalties[side][category]
     return (
       <Stack direction="row" spacing={1} key={category} alignItems="center">
-        <Typography variant="caption" sx={{ width: 72, color: WKF.onPanel, fontWeight: 700 }}>{category}</Typography>
-        {PENALTY_STEPS.map((step, idx) => (
+        <Typography variant="caption" sx={{ width: 72, color: WKF.onPanel, fontWeight: 700 }}>
+          {CATEGORY_LABELS[category]}
+        </Typography>
+        {PENALTY_LADDER.map((step, idx) => (
           <FormControlLabel
             key={step}
             sx={{ mr: 0.5 }}
@@ -236,7 +212,7 @@ export default function RefereeKumiteScoring({
                 size="small"
                 checked={level >= idx + 1}
                 disabled={disabled}
-                onChange={() => togglePenalty(side, category, idx)}
+                onChange={() => editMatch((m) => setPenalty(m, side, category, idx + 1))}
                 sx={panelCheckboxSx}
               />
             }
@@ -247,7 +223,7 @@ export default function RefereeKumiteScoring({
     )
   }
 
-  const renderSide = (side, comp, score, bg, control) => (
+  const renderSide = (side, comp, bg, control) => (
     <Paper elevation={0} sx={{ p: 2, bgcolor: bg, borderRadius: 2, textAlign: 'center', height: '100%' }}>
       <Typography variant="h4" sx={{ fontWeight: 700, color: WKF.onPanel }}>{side === 'ao' ? 'Ao' : 'Aka'}</Typography>
       <Typography variant="subtitle1" sx={{ color: WKF.onPanel, mb: 1 }}>{comp?.name} • #{comp?.bib}</Typography>
@@ -255,12 +231,19 @@ export default function RefereeKumiteScoring({
       <FormControlLabel
         sx={{ mb: 1, color: WKF.onPanel }}
         control={
-          <Checkbox checked={state.senshu === side} disabled={disabled} onChange={() => toggleSenshu(side)} sx={panelCheckboxSx} />
+          <Checkbox
+            checked={state.match.senshu === side}
+            disabled={disabled}
+            onChange={() => editMatch((m) => setSenshu(m, side))}
+            sx={panelCheckboxSx}
+          />
         }
         label="Senshu"
       />
 
-      <Typography variant="h1" sx={{ fontSize: 72, fontWeight: 800, color: WKF.onPanel, my: 1 }}>{score}</Typography>
+      <Typography variant="h1" sx={{ fontSize: 72, fontWeight: 800, color: WKF.onPanel, my: 1 }}>
+        {state.match.scores[side]}
+      </Typography>
 
       <Stack spacing={1} sx={{ mb: 2 }}>
         {POINT_BUTTONS.map((p) => (
@@ -268,7 +251,7 @@ export default function RefereeKumiteScoring({
             key={p.key}
             variant="contained"
             disabled={disabled}
-            onClick={() => awardPoint(side, p.value)}
+            onClick={() => editMatch((m) => awardPoint(m, side, p.key))}
             sx={{ bgcolor: control, color: WKF.ink, fontWeight: 700, '&:hover': { bgcolor: control, filter: 'brightness(0.92)' } }}
           >
             {p.label}
@@ -277,7 +260,7 @@ export default function RefereeKumiteScoring({
         <Button
           variant="contained"
           disabled={disabled}
-          onClick={() => deductPoint(side)}
+          onClick={() => editMatch((m) => deductPoint(m, side))}
           sx={{ bgcolor: control, color: WKF.ink, fontWeight: 700, '&:hover': { bgcolor: control, filter: 'brightness(0.92)' } }}
         >
           -1
@@ -301,21 +284,21 @@ export default function RefereeKumiteScoring({
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 4 }}>
-          {renderSide('ao', blueComp, state.aoScore, WKF.ao, WKF.aoControl)}
+          {renderSide('ao', blueComp, WKF.ao, WKF.aoControl)}
         </Grid>
 
         <Grid size={{ xs: 12, sm: 4 }}>
           <Stack spacing={2}>
             <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
               <Typography variant="h1" sx={{ fontSize: 56, fontWeight: 800, color: WKF.timerInk }}>
-                {state.koTimerActive ? formatTime(state.koTimeRemaining) : formatTime(state.timeRemaining)}
+                {formatClock(shownMs)}
               </Typography>
 
               <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
-                <IconButton disabled={disabled || state.timerRunning} onClick={() => adjustTime(5)}>
+                <IconButton disabled={disabled || clockRunning} onClick={() => editClock((c, t) => adjustClock(c, 5_000, t))}>
                   <KeyboardArrowUp />
                 </IconButton>
-                <IconButton disabled={disabled || state.timerRunning} onClick={() => adjustTime(-5)}>
+                <IconButton disabled={disabled || clockRunning} onClick={() => editClock((c, t) => adjustClock(c, -5_000, t))}>
                   <KeyboardArrowDown />
                 </IconButton>
               </Stack>
@@ -327,13 +310,13 @@ export default function RefereeKumiteScoring({
                 onClick={toggleTimer}
                 sx={{
                   mb: 1,
-                  bgcolor: state.timerRunning ? WKF.stop : WKF.start,
+                  bgcolor: clockRunning ? WKF.stop : WKF.start,
                   color: WKF.ink,
                   fontWeight: 700,
-                  '&:hover': { bgcolor: state.timerRunning ? WKF.stop : WKF.start, filter: 'brightness(0.92)' },
+                  '&:hover': { bgcolor: clockRunning ? WKF.stop : WKF.start, filter: 'brightness(0.92)' },
                 }}
               >
-                {state.timerRunning ? 'Stop' : 'Start'}
+                {clockRunning ? 'Stop' : 'Start'}
               </Button>
 
               <Button
@@ -346,7 +329,7 @@ export default function RefereeKumiteScoring({
                   bgcolor: WKF.koTimer,
                   color: WKF.ink,
                   fontWeight: 700,
-                  outline: state.koTimerActive ? `3px solid ${WKF.timerInk}` : 'none',
+                  outline: state.koActive ? `3px solid ${WKF.timerInk}` : 'none',
                   '&:hover': { bgcolor: WKF.koTimer, filter: 'brightness(0.92)' },
                 }}
               >
@@ -355,9 +338,9 @@ export default function RefereeKumiteScoring({
 
               <Stack direction="row" spacing={1}>
                 <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Reset the time', resetTime)} sx={utilityButtonSx}>Reset time</Button>
-                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', setExtraTime)} sx={utilityButtonSx}>Extra time</Button>
+                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', () => useDuration(DEFAULT_RULES.extraTimeMs))} sx={utilityButtonSx}>Extra time</Button>
               </Stack>
-              <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Set the clock to 60 seconds', setSixtySeconds)} sx={{ ...utilityButtonSx, mt: 1 }}>
+              <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Set the clock to 60 seconds', () => useDuration(60_000))} sx={{ ...utilityButtonSx, mt: 1 }}>
                 60 seconds
               </Button>
 
@@ -368,18 +351,18 @@ export default function RefereeKumiteScoring({
                 <TextField
                   size="small"
                   type="number"
-                  disabled={disabled || state.timerRunning}
-                  value={matchMinutes}
-                  onChange={(e) => setMatchDuration(Number(e.target.value) || 0, matchSecondsPart)}
+                  disabled={disabled || clockRunning}
+                  value={durationMinutes}
+                  onChange={(e) => setMatchDuration(Number(e.target.value) || 0, durationSeconds)}
                   inputProps={{ min: 0, style: { textAlign: 'center', width: 40 } }}
                 />
                 <Typography>:</Typography>
                 <TextField
                   size="small"
                   type="number"
-                  disabled={disabled || state.timerRunning}
-                  value={matchSecondsPart}
-                  onChange={(e) => setMatchDuration(matchMinutes, Number(e.target.value) || 0)}
+                  disabled={disabled || clockRunning}
+                  value={durationSeconds}
+                  onChange={(e) => setMatchDuration(durationMinutes, Number(e.target.value) || 0)}
                   inputProps={{ min: 0, max: 59, style: { textAlign: 'center', width: 40 } }}
                 />
               </Stack>
@@ -425,7 +408,7 @@ export default function RefereeKumiteScoring({
         </Grid>
 
         <Grid size={{ xs: 12, sm: 4 }}>
-          {renderSide('aka', redComp, state.akaScore, WKF.aka, WKF.akaControl)}
+          {renderSide('aka', redComp, WKF.aka, WKF.akaControl)}
         </Grid>
       </Grid>
 
@@ -433,7 +416,7 @@ export default function RefereeKumiteScoring({
         <DialogTitle>Match clock is running</DialogTitle>
         <DialogContent>
           <Typography>
-            {pendingAction?.label} while the clock is still running at {formatTime(state.timeRemaining)}?
+            {pendingAction?.label} while the clock is still running at {formatClock(remainingNow(state.clock, at))}?
           </Typography>
         </DialogContent>
         <DialogActions>

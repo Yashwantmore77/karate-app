@@ -10,7 +10,10 @@ export const COLLECTIONS = {
   matches: 'matches',
   matchState: 'matchState',
   matchEvents: 'matchEvents',
+  display: 'display',
 }
+
+const LIVE = 'live'
 
 const makeRepo = (collection) => ({
   list: (query) => adapter.list(collection, query),
@@ -39,6 +42,19 @@ export const matchStateRepo = {
   },
   subscribe: (matchId, cb) =>
     stateRepo.subscribe({ id: matchId }, (rows) => cb(rows[0] || null)),
+}
+
+const displayCollection = makeRepo(COLLECTIONS.display)
+
+// What a public scoreboard reads. One row, so a display needs no match id.
+export const displayRepo = {
+  get: () => displayCollection.get(LIVE),
+  put: async (payload) => {
+    const existing = await displayCollection.get(LIVE)
+    if (existing) return displayCollection.update(LIVE, payload)
+    return displayCollection.create({ ...payload, id: LIVE })
+  },
+  subscribe: (cb) => displayCollection.subscribe({ id: LIVE }, (rows) => cb(rows[0] || null)),
 }
 
 export const newId = adapter.newId
