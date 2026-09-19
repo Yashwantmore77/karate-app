@@ -6,15 +6,12 @@ import {
 } from '@mui/material'
 import { KeyboardArrowUp, KeyboardArrowDown } from '@mui/icons-material'
 import {
-  makeMatchState, awardPoint, deductPoint, setSenshu, setPenalty, evaluateOutcome,
-  POINTS, PENALTY_LADDER, PENALTY_CATEGORIES, DEFAULT_RULES
+  evaluateOutcome, PENALTY_LADDER, PENALTY_CATEGORIES, DEFAULT_RULES
 } from '../../shared/rules'
-import {
-  makeClock, remainingNow, startClock, stopClock, adjustClock, setClock
-} from '../../shared/clock'
-import { formatClock, toMinutesSeconds, parseDuration } from '../../shared/format'
+import { initialMatchState } from '../../shared/commands'
+import { toMinutesSeconds, parseDuration } from '../../shared/format'
 import { displayRepo } from '../../data/repo'
-import { useMatchState } from '../../hooks/useMatchState'
+import { useMatchChannel } from '../../hooks/useMatchChannel'
 import { useMatchClock } from '../../hooks/useMatchClock'
 import { useServerNow } from '../../hooks/useServerNow'
 
@@ -56,46 +53,22 @@ const panelCheckboxSx = {
   '&.Mui-checked': { color: WKF.onPanel },
 }
 
-const DEFAULT_DURATION_MS = 90_000 // 1:30
-
-const defaultState = () => ({
-  match: makeMatchState(),
-  clock: makeClock(DEFAULT_DURATION_MS),
-  durationMs: DEFAULT_DURATION_MS,
-  koActive: false,
-  koClock: makeClock(DEFAULT_RULES.koTimerMs),
-  fieldNumber: '1',
-  scoreboardActive: false,
-})
-
 export default function RefereeKumiteScoring({
   matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize
 }) {
-  const [state, setState] = useMatchState(matchId, defaultState)
+  const observing = mode === 'observe'
+  const [state, send] = useMatchChannel(matchId, { control: !observing })
   const [fieldNumberDraft, setFieldNumberDraft] = useState('1')
   const [pendingAction, setPendingAction] = useState(null)
   const serverNow = useServerNow()
 
-  const observing = mode === 'observe'
-  const view = state || defaultState()
+  const view = state || initialMatchState()
   const mainClock = useMatchClock(view.clock)
   const koClock = useMatchClock(view.koActive ? view.koClock : null)
 
   useEffect(() => {
     if (state?.fieldNumber) setFieldNumberDraft(state.fieldNumber)
   }, [state?.fieldNumber])
-
-  // Only the controlling device writes. Everyone else reaches zero on their
-  // own and simply displays it.
-  useEffect(() => {
-    if (observing || !state) return
-    if (state.clock.running && mainClock.expired) {
-      setState((prev) => ({ ...prev, clock: stopClock(prev.clock, serverNow()) }))
-    }
-    if (state.koActive && koClock.expired) {
-      setState((prev) => ({ ...prev, koActive: false, koClock: stopClock(prev.koClock, serverNow()) }))
-    }
-  }, [observing, state, mainClock.expired, koClock.expired, setState, serverNow])
 
   // Publish to the public scoreboard, with a heartbeat so a display can tell
   // a quiet match from a dead connection.
@@ -120,43 +93,20 @@ export default function RefereeKumiteScoring({
 
   const disabled = tournamentExpired || observing
   const clockRunning = view.clock.running
-  const shownMs = view.koActive ? koClock.remainingMs : mainClock.remainingMs
+  const shownClock = view.koActive ? koClock : mainClock
 
-  const editMatch = (fn) => setState((prev) => ({ ...prev, match: fn(prev.match) }))
-  const editClock = (fn) => setState((prev) => ({ ...prev, clock: fn(prev.clock, serverNow()) }))
-
-  const toggleTimer = () => editClock(clockRunning ? stopClock : startClock)
-
-  const resetTime = () => setState((prev) => ({
-    ...prev, clock: makeClock(prev.durationMs)
-  }))
-
-  const useDuration = (durationMs) => setState((prev) => ({
-    ...prev, durationMs, clock: makeClock(durationMs)
-  }))
-
+  const toggleTimer = () => send(clockRunning ? 'CLOCK_STOP' : 'CLOCK_START')
+  const resetTime = () => send('CLOCK_RESET')
+  const useDuration = (durationMs) => send('CLOCK_SET', { durationMs })
   const setMatchDuration = (minutes, seconds) => useDuration(parseDuration(minutes, seconds))
+  const toggleKoTimer = () => send('KO_TIMER')
+  const commitFieldNumber = () => send('FIELD_NUMBER', { value: fieldNumberDraft })
 
-  const toggleKoTimer = () => setState((prev) => {
-    const at2 = serverNow()
-    if (prev.koActive) {
-      return { ...prev, koActive: false, koClock: stopClock(prev.koClock, at2) }
-    }
-    return {
-      ...prev,
-      koActive: true,
-      koClock: startClock(makeClock(DEFAULT_RULES.koTimerMs), at2),
-      clock: stopClock(prev.clock, at2),
-    }
-  })
-
-  const commitFieldNumber = () => setState((prev) => ({ ...prev, fieldNumber: fieldNumberDraft }))
-
-  const toggleScoreboard = () => setState((prev) => {
-    const next = !prev.scoreboardActive
+  const toggleScoreboard = () => {
+    const next = !view.scoreboardActive
     if (!next) displayRepo.put({ status: 'closed' })
-    return { ...prev, scoreboardActive: next }
-  })
+    send('SCOREBOARD', { active: next })
+  }
 
   const handleClose = () => {
     const { winner } = evaluateOutcome(view.match, DEFAULT_RULES, { expired: true })
@@ -199,7 +149,7 @@ export default function RefereeKumiteScoring({
                 size="small"
                 checked={level >= idx + 1}
                 disabled={disabled}
-                onChange={() => editMatch((m) => setPenalty(m, side, category, idx + 1))}
+                onChange={() => send('PENALTY', { side, category, level: idx + 1 })}
                 sx={panelCheckboxSx}
               />
             }
@@ -221,7 +171,7 @@ export default function RefereeKumiteScoring({
           <Checkbox
             checked={view.match.senshu === side}
             disabled={disabled}
-            onChange={() => editMatch((m) => setSenshu(m, side))}
+            onChange={() => send('SENSHU', { side })}
             sx={panelCheckboxSx}
           />
         }
@@ -238,7 +188,7 @@ export default function RefereeKumiteScoring({
             key={p.key}
             variant="contained"
             disabled={disabled}
-            onClick={() => editMatch((m) => awardPoint(m, side, p.key))}
+            onClick={() => send('SCORE', { side, type: p.key })}
             sx={{ bgcolor: control, color: WKF.ink, fontWeight: 700, '&:hover': { bgcolor: control, filter: 'brightness(0.92)' } }}
           >
             {p.label}
@@ -247,7 +197,7 @@ export default function RefereeKumiteScoring({
         <Button
           variant="contained"
           disabled={disabled}
-          onClick={() => editMatch((m) => deductPoint(m, side))}
+          onClick={() => send('DEDUCT', { side })}
           sx={{ bgcolor: control, color: WKF.ink, fontWeight: 700, '&:hover': { bgcolor: control, filter: 'brightness(0.92)' } }}
         >
           -1
@@ -278,14 +228,14 @@ export default function RefereeKumiteScoring({
           <Stack spacing={2}>
             <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
               <Typography variant="h1" sx={{ fontSize: 56, fontWeight: 800, color: WKF.timerInk }}>
-                {formatClock(shownMs)}
+                {shownClock.display}
               </Typography>
 
               <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
-                <IconButton disabled={disabled || clockRunning} onClick={() => editClock((c, t) => adjustClock(c, 5_000, t))}>
+                <IconButton disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: 5_000 })}>
                   <KeyboardArrowUp />
                 </IconButton>
-                <IconButton disabled={disabled || clockRunning} onClick={() => editClock((c, t) => adjustClock(c, -5_000, t))}>
+                <IconButton disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: -5_000 })}>
                   <KeyboardArrowDown />
                 </IconButton>
               </Stack>
