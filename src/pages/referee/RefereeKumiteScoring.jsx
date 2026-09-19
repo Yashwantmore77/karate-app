@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
   FormControlLabel, TextField, Divider, Stack, Alert,
@@ -13,7 +13,10 @@ import {
   makeClock, remainingNow, startClock, stopClock, adjustClock, setClock
 } from '../../shared/clock'
 import { formatClock, toMinutesSeconds, parseDuration } from '../../shared/format'
-import { matchStateRepo, displayRepo, now } from '../../data/repo'
+import { displayRepo } from '../../data/repo'
+import { useMatchState } from '../../hooks/useMatchState'
+import { useMatchClock } from '../../hooks/useMatchClock'
+import { useServerNow } from '../../hooks/useServerNow'
 
 const POINT_BUTTONS = [
   { key: 'ippon', label: 'Ippon' },
@@ -66,77 +69,61 @@ const defaultState = () => ({
 })
 
 export default function RefereeKumiteScoring({
-  matchId, redComp, blueComp, tournamentExpired, onBack, onFinalize
+  matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize
 }) {
-  const [state, setState] = useState(defaultState)
+  const [state, setState] = useMatchState(matchId, defaultState)
   const [fieldNumberDraft, setFieldNumberDraft] = useState('1')
   const [pendingAction, setPendingAction] = useState(null)
-  const hydrated = useRef(false)
+  const serverNow = useServerNow()
 
-  // Re-render while a clock runs. The value is always recomputed from the
-  // anchor, so a late tick shows the right number rather than drifting.
-  const [, setTick] = useState(0)
-  const ticking = state.clock.running || state.koActive
-
-  useEffect(() => {
-    let cancelled = false
-    matchStateRepo.get(matchId).then((saved) => {
-      if (!cancelled && saved) {
-        const { id, createdAt, ...rest } = saved
-        setState((prev) => ({ ...prev, ...rest }))
-        if (rest.fieldNumber) setFieldNumberDraft(rest.fieldNumber)
-      }
-      hydrated.current = true
-    })
-    return () => { cancelled = true }
-  }, [matchId])
+  const observing = mode === 'observe'
+  const view = state || defaultState()
+  const mainClock = useMatchClock(view.clock)
+  const koClock = useMatchClock(view.koActive ? view.koClock : null)
 
   useEffect(() => {
-    if (!hydrated.current) return
-    matchStateRepo.put(matchId, state)
-    if (state.scoreboardActive) {
-      displayRepo.put({
-        status: 'open',
-        matchId,
-        fieldNumber: state.fieldNumber,
-        aoName: blueComp?.name,
-        akaName: redComp?.name,
-        aoScore: state.match.scores.ao,
-        akaScore: state.match.scores.aka,
-        senshu: state.match.senshu,
-        clock: state.koActive ? state.koClock : state.clock,
-      })
+    if (state?.fieldNumber) setFieldNumberDraft(state.fieldNumber)
+  }, [state?.fieldNumber])
+
+  // Only the controlling device writes. Everyone else reaches zero on their
+  // own and simply displays it.
+  useEffect(() => {
+    if (observing || !state) return
+    if (state.clock.running && mainClock.expired) {
+      setState((prev) => ({ ...prev, clock: stopClock(prev.clock, serverNow()) }))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state])
+    if (state.koActive && koClock.expired) {
+      setState((prev) => ({ ...prev, koActive: false, koClock: stopClock(prev.koClock, serverNow()) }))
+    }
+  }, [observing, state, mainClock.expired, koClock.expired, setState, serverNow])
 
+  // Publish to the public scoreboard, with a heartbeat so a display can tell
+  // a quiet match from a dead connection.
   useEffect(() => {
-    if (!ticking) return
-    const id = setInterval(() => {
-      setTick((t) => t + 1)
-      setState((prev) => {
-        const at = now()
-        if (prev.koActive && remainingNow(prev.koClock, at) === 0) {
-          return { ...prev, koActive: false, koClock: stopClock(prev.koClock, at) }
-        }
-        if (prev.clock.running && remainingNow(prev.clock, at) === 0) {
-          return { ...prev, clock: stopClock(prev.clock, at) }
-        }
-        return prev
-      })
-    }, 100)
+    if (observing || !state?.scoreboardActive) return
+    const publish = () => displayRepo.put({
+      status: 'open',
+      matchId,
+      fieldNumber: state.fieldNumber,
+      aoName: blueComp?.name,
+      akaName: redComp?.name,
+      aoScore: state.match.scores.ao,
+      akaScore: state.match.scores.aka,
+      senshu: state.match.senshu,
+      clock: state.koActive ? state.koClock : state.clock,
+      heartbeatAt: serverNow(),
+    })
+    publish()
+    const id = setInterval(publish, 2000)
     return () => clearInterval(id)
-  }, [ticking])
+  }, [observing, state, matchId, blueComp?.name, redComp?.name, serverNow])
 
-  const disabled = tournamentExpired
-  const at = now()
-  const clockRunning = state.clock.running
-  const shownMs = state.koActive
-    ? remainingNow(state.koClock, at)
-    : remainingNow(state.clock, at)
+  const disabled = tournamentExpired || observing
+  const clockRunning = view.clock.running
+  const shownMs = view.koActive ? koClock.remainingMs : mainClock.remainingMs
 
   const editMatch = (fn) => setState((prev) => ({ ...prev, match: fn(prev.match) }))
-  const editClock = (fn) => setState((prev) => ({ ...prev, clock: fn(prev.clock, now()) }))
+  const editClock = (fn) => setState((prev) => ({ ...prev, clock: fn(prev.clock, serverNow()) }))
 
   const toggleTimer = () => editClock(clockRunning ? stopClock : startClock)
 
@@ -151,7 +138,7 @@ export default function RefereeKumiteScoring({
   const setMatchDuration = (minutes, seconds) => useDuration(parseDuration(minutes, seconds))
 
   const toggleKoTimer = () => setState((prev) => {
-    const at2 = now()
+    const at2 = serverNow()
     if (prev.koActive) {
       return { ...prev, koActive: false, koClock: stopClock(prev.koClock, at2) }
     }
@@ -172,12 +159,12 @@ export default function RefereeKumiteScoring({
   })
 
   const handleClose = () => {
-    const { winner } = evaluateOutcome(state.match, DEFAULT_RULES, { expired: true })
+    const { winner } = evaluateOutcome(view.match, DEFAULT_RULES, { expired: true })
     onFinalize({
       status: 'completed',
       winner: winner === 'aka' ? 'red' : winner === 'ao' ? 'blue' : 'tie',
-      avgRed: state.match.scores.aka,
-      avgBlue: state.match.scores.ao,
+      avgRed: view.match.scores.aka,
+      avgBlue: view.match.scores.ao,
     })
     onBack()
   }
@@ -194,10 +181,10 @@ export default function RefereeKumiteScoring({
     setPendingAction(null)
   }
 
-  const { minutes: durationMinutes, seconds: durationSeconds } = toMinutesSeconds(state.durationMs)
+  const { minutes: durationMinutes, seconds: durationSeconds } = toMinutesSeconds(view.durationMs)
 
   const renderPenaltyRow = (side, category) => {
-    const level = state.match.penalties[side][category]
+    const level = view.match.penalties[side][category]
     return (
       <Stack direction="row" spacing={1} key={category} alignItems="center">
         <Typography variant="caption" sx={{ width: 72, color: WKF.onPanel, fontWeight: 700 }}>
@@ -232,7 +219,7 @@ export default function RefereeKumiteScoring({
         sx={{ mb: 1, color: WKF.onPanel }}
         control={
           <Checkbox
-            checked={state.match.senshu === side}
+            checked={view.match.senshu === side}
             disabled={disabled}
             onChange={() => editMatch((m) => setSenshu(m, side))}
             sx={panelCheckboxSx}
@@ -242,7 +229,7 @@ export default function RefereeKumiteScoring({
       />
 
       <Typography variant="h1" sx={{ fontSize: 72, fontWeight: 800, color: WKF.onPanel, my: 1 }}>
-        {state.match.scores[side]}
+        {view.match.scores[side]}
       </Typography>
 
       <Stack spacing={1} sx={{ mb: 2 }}>
@@ -329,7 +316,7 @@ export default function RefereeKumiteScoring({
                   bgcolor: WKF.koTimer,
                   color: WKF.ink,
                   fontWeight: 700,
-                  outline: state.koActive ? `3px solid ${WKF.timerInk}` : 'none',
+                  outline: view.koActive ? `3px solid ${WKF.timerInk}` : 'none',
                   '&:hover': { bgcolor: WKF.koTimer, filter: 'brightness(0.92)' },
                 }}
               >
@@ -388,18 +375,18 @@ export default function RefereeKumiteScoring({
                 fullWidth
                 variant="contained"
                 disabled={disabled}
-                onClick={guarded(state.scoreboardActive ? 'Close the external scoreboard' : 'Start the external scoreboard', toggleScoreboard)}
+                onClick={guarded(view.scoreboardActive ? 'Close the external scoreboard' : 'Start the external scoreboard', toggleScoreboard)}
                 sx={{
-                  bgcolor: state.scoreboardActive ? WKF.scoreboardClose : WKF.scoreboardStart,
+                  bgcolor: view.scoreboardActive ? WKF.scoreboardClose : WKF.scoreboardStart,
                   color: WKF.ink,
                   fontWeight: 700,
                   '&:hover': {
-                    bgcolor: state.scoreboardActive ? WKF.scoreboardClose : WKF.scoreboardStart,
+                    bgcolor: view.scoreboardActive ? WKF.scoreboardClose : WKF.scoreboardStart,
                     filter: 'brightness(0.92)',
                   },
                 }}
               >
-                {state.scoreboardActive ? 'Close scoreboard' : 'Start scoreboard'}
+                {view.scoreboardActive ? 'Close scoreboard' : 'Start scoreboard'}
               </Button>
             </Paper>
 
@@ -416,7 +403,7 @@ export default function RefereeKumiteScoring({
         <DialogTitle>Match clock is running</DialogTitle>
         <DialogContent>
           <Typography>
-            {pendingAction?.label} while the clock is still running at {formatClock(remainingNow(state.clock, at))}?
+            {pendingAction?.label} while the clock is still running at {mainClock.display}?
           </Typography>
         </DialogContent>
         <DialogActions>

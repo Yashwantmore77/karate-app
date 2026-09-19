@@ -10,9 +10,11 @@ import JudgeRouter from './routes/JudgeRouter'
 import RefereeRouter from './routes/RefereeRouter'
 import AdminRouter from './routes/AdminRouter'
 import Portal from './pages/Portal'
+import DisplayScoreboard from './pages/DisplayScoreboard'
 import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
 import { initializeMockData } from './utils/mockData'
+import { ConnectionProvider } from './state/ConnectionContext'
 
 // Initialize mock data on app start
 initializeMockData()
@@ -188,6 +190,7 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <ConnectionProvider>
       {loading ? (
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
           <CircularProgress />
@@ -196,6 +199,9 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login user={user} profile={profile} />} />
+
+            {/* Public: a hall screen, no sign-in */}
+            <Route path="/display" element={<DisplayScoreboard />} />
 
             <Route
               path="/no-role"
@@ -247,6 +253,7 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       )}
+      </ConnectionProvider>
       <SpeedInsights />
       <Analytics />
     </ThemeProvider>
