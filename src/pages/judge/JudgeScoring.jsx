@@ -47,6 +47,7 @@ export default function JudgeScoring({ uid, profile }) {
 
   useEffect(() => {
     let allMatches = []
+    let allCategories = []
     let allTournaments = []
     const stored = localStorage.getItem('tournaments')
     if (stored) {
@@ -54,7 +55,9 @@ export default function JudgeScoring({ uid, profile }) {
       allTournaments.forEach(t => {
         const catStored = localStorage.getItem(`categories-${t.id}`)
         if (catStored) {
-          JSON.parse(catStored).forEach(cat => {
+          const cats = JSON.parse(catStored)
+          allCategories = [...allCategories, ...cats]
+          cats.forEach(cat => {
             const matchStored = localStorage.getItem(`matches-${cat.id}`)
             if (matchStored) {
               const ms = JSON.parse(matchStored)
@@ -67,13 +70,9 @@ export default function JudgeScoring({ uid, profile }) {
     const m = allMatches.find(x => x.id === matchId)
     if (m) {
       setMatch(m)
-      const catStored = localStorage.getItem(`categories-${m.categoryId}`)
-      if (catStored) {
-        const cats = JSON.parse(catStored)
-        const cat = cats.find(c => c.id === m.categoryId)
-        setCategory(cat)
-        if (cat) setTournament(allTournaments.find(t => t.id === cat.tournamentId))
-      }
+      const cat = allCategories.find(c => c.id === m.categoryId)
+      setCategory(cat)
+      if (cat) setTournament(allTournaments.find(t => t.id === cat.tournamentId))
       const compStored = localStorage.getItem(`competitors-${m.categoryId}`)
       if (compStored) {
         const comps = JSON.parse(compStored)

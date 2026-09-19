@@ -5,6 +5,7 @@ import { ArrowBack } from '@mui/icons-material'
 import { signOut, auth, JUDGE_COUNT } from '../../firebase'
 import { isExpired } from '../../utils/dateUtils'
 import { getScoreSpread, hasDisagreement, DISAGREEMENT_THRESHOLD } from '../../utils/scoring'
+import RefereeKumiteScoring from './RefereeKumiteScoring'
 
 export default function RefereeMatchControl({ uid, profile }) {
   const navigate = useNavigate()
@@ -18,6 +19,7 @@ export default function RefereeMatchControl({ uid, profile }) {
 
   useEffect(() => {
     let allMatches = []
+    let allCategories = []
     let allTournaments = []
     const stored = localStorage.getItem('tournaments')
     if (stored) {
@@ -25,7 +27,9 @@ export default function RefereeMatchControl({ uid, profile }) {
       allTournaments.forEach(t => {
         const catStored = localStorage.getItem(`categories-${t.id}`)
         if (catStored) {
-          JSON.parse(catStored).forEach(cat => {
+          const cats = JSON.parse(catStored)
+          allCategories = [...allCategories, ...cats]
+          cats.forEach(cat => {
             const matchStored = localStorage.getItem(`matches-${cat.id}`)
             if (matchStored) {
               const matches = JSON.parse(matchStored)
@@ -39,13 +43,9 @@ export default function RefereeMatchControl({ uid, profile }) {
     if (m) {
       setMatch(m)
       setStatus(m.status === 'completed' ? 'revealed' : (localStorage.getItem(`match-control-${matchId}`) || 'hidden'))
-      const catStored = localStorage.getItem(`categories-${m.categoryId}`)
-      if (catStored) {
-        const cats = JSON.parse(catStored)
-        const cat = cats.find(c => c.id === m.categoryId)
-        setCategory(cat)
-        if (cat) setTournament(allTournaments.find(t => t.id === cat.tournamentId))
-      }
+      const cat = allCategories.find(c => c.id === m.categoryId)
+      setCategory(cat)
+      if (cat) setTournament(allTournaments.find(t => t.id === cat.tournamentId))
       const compStored = localStorage.getItem(`competitors-${m.categoryId}`)
       if (compStored) {
         const comps = JSON.parse(compStored)
@@ -103,6 +103,34 @@ export default function RefereeMatchControl({ uid, profile }) {
 
   if (!match || !redComp || !blueComp) {
     return <div>Match not found</div>
+  }
+
+  if (tournament?.template === 'kumite') {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
+        <AppBar position="static">
+          <Toolbar>
+            <IconButton color="inherit" onClick={() => navigate(-1)} sx={{ mr: 2 }}>
+              <ArrowBack />
+            </IconButton>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="h6">Kumite WKF</Typography>
+              <Typography variant="caption" sx={{ opacity: 0.9 }}>{category?.name}</Typography>
+            </Box>
+            <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
+          </Toolbar>
+        </AppBar>
+        <RefereeKumiteScoring
+          matchId={matchId}
+          tournament={tournament}
+          redComp={redComp}
+          blueComp={blueComp}
+          tournamentExpired={tournamentExpired}
+          onBack={() => navigate(-1)}
+          onFinalize={updateMatchRecord}
+        />
+      </Box>
+    )
   }
 
   return (
