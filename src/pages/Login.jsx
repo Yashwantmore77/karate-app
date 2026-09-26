@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -7,11 +7,8 @@ import {
 } from '@mui/material'
 import { signInWithEmailAndPassword, signOut, auth } from '../firebase'
 import { loginToServer } from '../data/session'
-
-const AO = '#0000C0'
-const AKA = '#C00000'
-const CYAN = '#93FFFF'
-const INK = '#05070F'
+import AppStage from '../components/AppStage'
+import { AO, AKA, CYAN } from '../theme/tokens'
 
 const testUsers = [
   { label: 'Admin', email: 'admin@kata.local', pass: 'test123', accent: CYAN },
@@ -53,7 +50,6 @@ const fieldSx = {
 
 export default function Login({ user, profile }) {
   const [busy, setBusy] = useState(false)
-  const stageRef = useRef(null)
   const stillness = useMediaQuery('(prefers-reduced-motion: reduce)')
 
   const formik = useFormik({
@@ -85,16 +81,6 @@ export default function Login({ user, profile }) {
     },
   })
 
-  // Written straight to CSS variables: pointer moves fire far too often to
-  // put through React state.
-  const trackPointer = (e) => {
-    const el = stageRef.current
-    if (!el || stillness) return
-    const rect = el.getBoundingClientRect()
-    el.style.setProperty('--px', `${((e.clientX - rect.left) / rect.width) * 100}%`)
-    el.style.setProperty('--py', `${((e.clientY - rect.top) / rect.height) * 100}%`)
-  }
-
   const selectUser = (testUser) => {
     formik.setValues({ email: testUser.email, password: testUser.pass })
     formik.setErrors({})
@@ -104,67 +90,10 @@ export default function Login({ user, profile }) {
     return <Navigate to={`/${profile.role}`} replace />
   }
 
-  const drift = stillness ? 'none' : 'drift 18s ease-in-out infinite alternate'
-
   return (
-    <Box
-      ref={stageRef}
-      onPointerMove={trackPointer}
-      sx={{
-        position: 'fixed',
-        inset: 0,
-        overflow: 'hidden',
-        bgcolor: INK,
-        display: 'grid',
-        placeItems: 'center',
-        px: 2,
-        '--px': '50%',
-        '--py': '40%',
-        '@keyframes drift': {
-          from: { transform: 'translate3d(0,0,0) scale(1)' },
-          to: { transform: 'translate3d(0,-6%,0) scale(1.15)' },
-        },
-        '@keyframes sweep': {
-          from: { backgroundPosition: '0% 50%' },
-          to: { backgroundPosition: '200% 50%' },
-        },
-        '@keyframes spin': {
-          to: { transform: 'rotate(360deg)' },
-        },
-      }}
-    >
-      {/* The two sides of a mat, bled into the dark. */}
-      <Box aria-hidden sx={{
-        position: 'absolute', width: '62vmax', height: '62vmax', left: '-18vmax', top: '-14vmax',
-        background: `radial-gradient(circle, ${AO}cc 0%, ${AO}00 62%)`,
-        filter: 'blur(40px)', animation: drift,
-      }} />
-      <Box aria-hidden sx={{
-        position: 'absolute', width: '58vmax', height: '58vmax', right: '-16vmax', bottom: '-16vmax',
-        background: `radial-gradient(circle, ${AKA}cc 0%, ${AKA}00 62%)`,
-        filter: 'blur(40px)', animation: drift, animationDelay: '-9s',
-      }} />
-
-      <Box aria-hidden sx={{
-        position: 'absolute', inset: 0,
-        backgroundImage:
-          'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),' +
-          'linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
-        backgroundSize: '48px 48px',
-        maskImage: 'radial-gradient(ellipse at 50% 40%, #000 20%, transparent 78%)',
-        WebkitMaskImage: 'radial-gradient(ellipse at 50% 40%, #000 20%, transparent 78%)',
-      }} />
-
-      <Box aria-hidden sx={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: `radial-gradient(520px circle at var(--px) var(--py), ${CYAN}1f, transparent 70%)`,
-        transition: 'background 120ms linear',
-      }} />
-
+    <AppStage fill>
       <Box sx={{
         position: 'relative',
-        width: '100%',
-        maxWidth: 440,
         borderRadius: 4,
         p: { xs: 3, sm: 4 },
         color: '#fff',
@@ -321,6 +250,6 @@ export default function Login({ user, profile }) {
           Pick a role above to fill the demo credentials
         </Typography>
       </Box>
-    </Box>
+    </AppStage>
   )
 }

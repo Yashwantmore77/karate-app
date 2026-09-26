@@ -14,150 +14,135 @@ import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
 import { initializeMockData } from './utils/mockData'
 import { ConnectionProvider } from './state/ConnectionContext'
+import AppStage from './components/AppStage'
+import { AO_LIGHT, AKA_LIGHT, CYAN, INK, GLASS, TEXT } from './theme/tokens'
 
 // Initialize mock data on app start
 initializeMockData()
 
 const theme = createTheme({
   palette: {
-    primary: {
-      main: '#5B7FA6',
-      light: '#8FA3BB',
-      dark: '#3D5266',
-      contrastText: '#fff',
-    },
-    secondary: {
-      main: '#6B7280',
-      light: '#9CA3AF',
-      dark: '#374151',
-      contrastText: '#fff',
-    },
-    success: { main: '#4B7F5F', contrastText: '#fff' },
-    warning: { main: '#8B7355', contrastText: '#fff' },
-    error: { main: '#9B4A54', contrastText: '#fff' },
-    info: { main: '#5B8FA3', contrastText: '#fff' },
-    background: {
-      default: '#FAFBFC',
-      paper: '#FFFFFF',
-    },
-    text: {
-      primary: '#2D3748',
-      secondary: '#718096',
-    },
-    divider: '#E2E8F0',
+    mode: 'dark',
+    primary: { main: CYAN, contrastText: '#08131A' },
+    secondary: { main: AO_LIGHT, contrastText: '#fff' },
+    error: { main: AKA_LIGHT, light: AKA_LIGHT, dark: '#3D0000', contrastText: '#2A0000' },
+    info: { main: AO_LIGHT, light: AO_LIGHT, dark: '#0A1B6B', contrastText: '#fff' },
+    success: { main: '#7BE8A3', contrastText: '#04210F' },
+    warning: { main: '#FFC46B', contrastText: '#2A1A00' },
+    // Transparent so the stage shows through pages that fill themselves with
+    // background.default; the body and the stage supply the actual ink.
+    background: { default: 'transparent', paper: 'rgba(255,255,255,0.045)' },
+    text: { primary: TEXT.primary, secondary: TEXT.secondary },
+    divider: 'rgba(255,255,255,0.12)',
   },
   typography: {
     fontFamily: '"Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", sans-serif',
-    h1: { fontSize: '28px', fontWeight: 600, letterSpacing: '-0.5px' },
-    h2: { fontSize: '22px', fontWeight: 600, letterSpacing: '-0.3px' },
+    h1: { fontSize: '28px', fontWeight: 700, letterSpacing: '-0.5px' },
+    h2: { fontSize: '22px', fontWeight: 700, letterSpacing: '-0.3px' },
     h3: { fontSize: '18px', fontWeight: 600 },
     h4: { fontSize: '16px', fontWeight: 600 },
     body1: { fontSize: '14px', lineHeight: 1.6 },
-    body2: { fontSize: '13px', lineHeight: 1.6, color: '#718096' },
-    button: { textTransform: 'none', fontWeight: 500, letterSpacing: '0.25px' },
+    body2: { fontSize: '13px', lineHeight: 1.6 },
+    button: { textTransform: 'none', fontWeight: 600, letterSpacing: '0.25px' },
   },
-  shape: {
-    borderRadius: 8,
-  },
+  shape: { borderRadius: 12 },
   components: {
     MuiCssBaseline: {
-      styleOverrides: {
-        body: {
-          backgroundColor: '#FAFBFC',
-        },
-      },
+      styleOverrides: { body: { backgroundColor: INK } },
     },
+    // Glass everywhere, so pages inherit the look without being rewritten.
     MuiAppBar: {
+      defaultProps: { elevation: 0 },
       styleOverrides: {
         root: {
-          backgroundImage: 'linear-gradient(135deg, #5B7FA6 0%, #6B7280 100%)',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          fontWeight: 500,
-          letterSpacing: '0.25px',
-          borderRadius: 8,
-        },
-        contained: {
-          boxShadow: 'none',
-          '&:hover': {
-            boxShadow: '0 4px 12px rgba(91, 127, 166, 0.15)',
-          },
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06)',
-          border: '1px solid #E2E8F0',
-          '&:hover': {
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-          },
+          backgroundImage: 'none',
+          backgroundColor: 'rgba(8,11,22,0.72)',
+          backdropFilter: 'blur(18px)',
+          borderBottom: '1px solid rgba(255,255,255,0.10)',
         },
       },
     },
     MuiPaper: {
       styleOverrides: {
         root: {
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06)',
-          border: '1px solid #E2E8F0',
+          backgroundImage: GLASS.background,
+          backdropFilter: GLASS.backdropFilter,
+          border: GLASS.border,
         },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          backgroundImage: GLASS.background,
+          transition: 'border-color .2s ease, box-shadow .2s ease, transform .2s ease',
+          '&:hover': {
+            borderColor: 'rgba(255,255,255,0.22)',
+            boxShadow: `0 18px 50px rgba(0,0,0,0.5), 0 0 24px ${CYAN}14`,
+          },
+        },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: { borderRadius: 10, transition: 'box-shadow .2s ease, transform .15s ease' },
+        contained: {
+          boxShadow: 'none',
+          '&:hover': { boxShadow: `0 0 24px ${CYAN}44`, transform: 'translateY(-1px)' },
+        },
+        outlined: {
+          borderColor: 'rgba(255,255,255,0.22)',
+          '&:hover': { borderColor: CYAN, backgroundColor: `${CYAN}12` },
+        },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: { '&:hover': { backgroundColor: `${CYAN}14` } },
       },
     },
     MuiTextField: {
       styleOverrides: {
         root: {
           '& .MuiOutlinedInput-root': {
-            borderRadius: 8,
-            backgroundColor: '#FFFFFF',
-            transition: 'all 0.2s ease',
-            '&:hover fieldset': {
-              borderColor: '#CBD5E0',
-            },
+            backgroundColor: 'rgba(255,255,255,0.04)',
+            transition: 'box-shadow .25s ease, background-color .25s ease',
+            '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.32)' },
+            '&.Mui-focused': { boxShadow: `0 0 0 3px ${CYAN}22` },
+          },
+          '& input:-webkit-autofill': {
+            WebkitTextFillColor: '#fff',
+            WebkitBoxShadow: '0 0 0 100px rgba(20,24,40,0.95) inset',
           },
         },
       },
     },
     MuiChip: {
       styleOverrides: {
-        root: {
-          borderRadius: 6,
-          fontWeight: 500,
-        },
+        root: { fontWeight: 600 },
+        // Scoped to default chips: colouring every filled chip grey would
+        // flatten the status chips that carry meaning.
         filled: {
-          backgroundColor: '#EDF2F7',
-          color: '#2D3748',
-          '&:hover': {
-            backgroundColor: '#E2E8F0',
-          },
+          '&.MuiChip-colorDefault': { backgroundColor: 'rgba(255,255,255,0.10)' },
         },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          transition: 'background-color .15s ease',
+          '&:hover': { backgroundColor: 'rgba(255,255,255,0.06)' },
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: { borderColor: 'rgba(255,255,255,0.10)' },
+        head: { color: TEXT.secondary, fontWeight: 700, letterSpacing: '0.4px' },
       },
     },
     MuiAlert: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          border: 'none',
-        },
-      },
-    },
-    MuiTable: {
-      styleOverrides: {
-        root: {
-          '& thead': {
-            backgroundColor: '#F7FAFC',
-          },
-          '& tbody tr:hover': {
-            backgroundColor: '#F9FAFB',
-          },
-        },
-      },
+      styleOverrides: { root: { borderRadius: 10 } },
     },
   },
 })
@@ -196,6 +181,7 @@ export default function App() {
         </Box>
       ) : (
         <BrowserRouter>
+          <AppStage>
           <Routes>
             <Route path="/login" element={<Login user={user} profile={profile} />} />
 
@@ -250,6 +236,7 @@ export default function App() {
 
             <Route path="*" element={<Navigate to={homePath} replace />} />
           </Routes>
+          </AppStage>
         </BrowserRouter>
       )}
       </ConnectionProvider>
