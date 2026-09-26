@@ -5,7 +5,7 @@ import { ArrowBack } from '@mui/icons-material'
 import { signOut, auth, JUDGE_COUNT } from '../../firebase'
 import { isExpired } from '../../utils/dateUtils'
 import { getScoreSpread, hasDisagreement, DISAGREEMENT_THRESHOLD } from '../../utils/scoring'
-import RefereeKumiteScoring from './RefereeKumiteScoring'
+import KumiteConsole from '../../features/console/KumiteConsole'
 
 export default function RefereeMatchControl({ uid, profile }) {
   const navigate = useNavigate()
@@ -122,7 +122,7 @@ export default function RefereeMatchControl({ uid, profile }) {
         </Toolbar>
       </AppBar>
 
-      <RefereeKumiteScoring
+      <KumiteConsole
         matchId={matchId}
         tournament={tournament}
         redComp={redComp}

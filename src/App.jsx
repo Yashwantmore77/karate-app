@@ -9,7 +9,6 @@ import NoRoleAssigned from './pages/NoRoleAssigned'
 import JudgeRouter from './routes/JudgeRouter'
 import RefereeRouter from './routes/RefereeRouter'
 import AdminRouter from './routes/AdminRouter'
-import Portal from './pages/Portal'
 import DisplayScoreboard from './pages/DisplayScoreboard'
 import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
@@ -183,7 +182,7 @@ export default function App() {
     })
   }, [])
 
-  if (isPortal) return <Portal />
+  if (isPortal) return <DisplayScoreboard />
 
   const homePath = !user ? '/login' : !profile ? '/no-role' : `/${profile.role}`
 

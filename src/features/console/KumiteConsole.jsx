@@ -53,7 +53,7 @@ const panelCheckboxSx = {
   '&.Mui-checked': { color: WKF.onPanel },
 }
 
-export default function RefereeKumiteScoring({
+export default function KumiteConsole({
   matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize
 }) {
   const observing = mode === 'observe'
