@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import DisplayScoreboard from './DisplayScoreboard'
-import RefereeKumiteScoring from './referee/RefereeKumiteScoring'
+import KumiteConsole from '../features/console/KumiteConsole'
 import { displayRepo } from '../data/repo'
 import { makeClock, startClock } from '../shared/clock'
 
@@ -75,7 +75,7 @@ describe('console observe mode', () => {
   }
 
   it('renders the same panels as the control view', () => {
-    render(<RefereeKumiteScoring {...props} mode="observe" />)
+    render(<KumiteConsole {...props} mode="observe" />)
     expect(screen.getByText('Ao')).toBeInTheDocument()
     expect(screen.getByText('Aka')).toBeInTheDocument()
     expect(screen.getByText('1:30')).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('console observe mode', () => {
   })
 
   it('makes every control inert', () => {
-    render(<RefereeKumiteScoring {...props} mode="observe" />)
+    render(<KumiteConsole {...props} mode="observe" />)
     expect(screen.getAllByRole('button', { name: 'Ippon' })[0]).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Reset time' })).toBeDisabled()
@@ -91,7 +91,7 @@ describe('console observe mode', () => {
 
   it('announces the verdict once the rules decide the bout', async () => {
     const user = userEvent.setup()
-    const control = render(<RefereeKumiteScoring {...props} mode="control" />)
+    const control = render(<KumiteConsole {...props} mode="control" />)
     // three ippon = an eight point gap
     for (let i = 0; i < 3; i += 1) {
       await user.click(control.getAllByRole('button', { name: 'Ippon' })[1])
@@ -105,11 +105,11 @@ describe('console observe mode', () => {
 
   it('shows judges the verdict but no way to confirm it', async () => {
     const user = userEvent.setup()
-    const control = render(<RefereeKumiteScoring {...props} mode="control" />)
+    const control = render(<KumiteConsole {...props} mode="control" />)
     for (let i = 0; i < 3; i += 1) {
       await user.click(control.getAllByRole('button', { name: 'Ippon' })[1])
     }
-    const observer = render(<RefereeKumiteScoring {...props} mode="observe" />)
+    const observer = render(<KumiteConsole {...props} mode="observe" />)
     const panel = within(observer.container)
     await waitFor(() => {
       expect(panel.getByText(/Ryan Thomas wins by point gap/i)).toBeInTheDocument()
@@ -119,12 +119,60 @@ describe('console observe mode', () => {
 
   it('follows a change made by the controlling view', async () => {
     const user = userEvent.setup()
-    const control = render(<RefereeKumiteScoring {...props} mode="control" />)
+    const control = render(<KumiteConsole {...props} mode="control" />)
     await user.click(control.getAllByRole('button', { name: 'Ippon' })[0])
 
-    const observer = render(<RefereeKumiteScoring {...props} mode="observe" />)
+    const observer = render(<KumiteConsole {...props} mode="observe" />)
     await waitFor(() => {
       expect(observer.container.querySelector('h1')?.textContent).toBe('3')
     })
+  })
+})
+
+describe('console undo and referee decisions', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => localStorage.clear())
+
+  const props = {
+    matchId: 'm-undo',
+    redComp: { name: 'Ryan Thomas', bib: '501' },
+    blueComp: { name: 'Samuel Brown', bib: '502' },
+    tournamentExpired: false,
+    onBack: () => {},
+    onFinalize: () => {},
+  }
+
+  it('undoes a mis-tapped ippon back to zero, which -1 could not do', async () => {
+    const user = userEvent.setup()
+    const view = render(<KumiteConsole {...props} mode="control" />)
+    const panel = within(view.container)
+
+    await user.click(panel.getAllByRole('button', { name: 'Ippon' })[0])
+    await waitFor(() => expect(view.container.querySelector('h1')?.textContent).toBe('3'))
+
+    await user.click(panel.getByRole('button', { name: /undo/i }))
+    await waitFor(() => expect(view.container.querySelector('h1')?.textContent).toBe('0'))
+  })
+
+  it('declares kiken against the score and names the other side', async () => {
+    const user = userEvent.setup()
+    const view = render(<KumiteConsole {...props} mode="control" />)
+    const panel = within(view.container)
+
+    await user.click(panel.getAllByRole('button', { name: 'Ippon' })[0]) // Ao leads
+    await user.click(panel.getByRole('button', { name: /decision/i }))
+
+    const kikenRow = screen.getByText(/Kiken \(withdrawal\)/i).parentElement
+    await user.click(within(kikenRow).getByRole('button', { name: 'Ao' }))
+
+    await waitFor(() => {
+      expect(panel.getByText(/Ryan Thomas wins by kiken/i)).toBeInTheDocument()
+    })
+  })
+
+  it('hides undo and decisions from a judge', () => {
+    render(<KumiteConsole {...props} mode="observe" />)
+    expect(screen.getByRole('button', { name: /undo/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /decision/i })).toBeDisabled()
   })
 })

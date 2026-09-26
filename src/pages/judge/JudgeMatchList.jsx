@@ -38,15 +38,13 @@ export default function JudgeMatchList({ uid, profile }) {
     return null
   }
 
-  const hasSubmitted = (matchId) => !!localStorage.getItem(`judge-${profile?.seat}-${matchId}`)
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="static">
         <Toolbar>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">Judge Scoring</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9 }}>Judge #{profile?.seat || '?'} • {matches.length} matches ready</Typography>
+            <Typography variant="h6">Judge</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.9 }}>Judge #{profile?.seat || '?'} • {matches.length} matches live</Typography>
           </Box>
           <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
@@ -56,7 +54,7 @@ export default function JudgeMatchList({ uid, profile }) {
         <Grid container spacing={2} sx={{ mb: 4 }}>
           <Grid item xs={6} sm={3}>
             <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>Matches Ready</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>Matches Live</Typography>
               <Typography variant="h4" sx={{ color: 'primary.main', fontWeight: 700, mt: 1 }}>{matches.length}</Typography>
             </Paper>
           </Grid>
@@ -68,10 +66,10 @@ export default function JudgeMatchList({ uid, profile }) {
           </Grid>
         </Grid>
 
-        <Typography variant="h6" mb={2}>Available Matches ({matches.length})</Typography>
+        <Typography variant="h6" mb={2}>Live Matches ({matches.length})</Typography>
 
         {matches.length === 0 ? (
-          <Alert severity="info">No matches ready for scoring</Alert>
+          <Alert severity="info">No matches are open right now</Alert>
         ) : (
           <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
             <Table>
@@ -89,7 +87,6 @@ export default function JudgeMatchList({ uid, profile }) {
                 {matches.map((m) => {
                   const red = getCompetitor(m.categoryId, m.redId)
                   const blue = getCompetitor(m.categoryId, m.blueId)
-                  const submitted = hasSubmitted(m.id)
                   return (
                     <TableRow key={m.id} sx={{ '&:hover': { backgroundColor: 'action.hover' } }}>
                       <TableCell>
@@ -112,18 +109,14 @@ export default function JudgeMatchList({ uid, profile }) {
                         </Box>
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={submitted ? 'Scored' : 'Pending'}
-                          size="small"
-                          color={submitted ? 'success' : 'warning'}
-                        />
+                        <Chip label={m.status} size="small" color="success" />
                       </TableCell>
                       <TableCell align="right">
                         <IconButton
                           size="small"
                           color="primary"
                           onClick={() => navigate(`/judge/match/${m.id}`)}
-                          title={submitted ? 'View / Edit Score' : 'Score Match'}
+                          title="Watch Match"
                         >
                           <Visibility fontSize="small" />
                         </IconButton>

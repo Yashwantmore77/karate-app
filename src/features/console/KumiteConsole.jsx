@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
-  Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
+  Box, Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
   FormControlLabel, TextField, Divider, Stack, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material'
-import { KeyboardArrowUp, KeyboardArrowDown } from '@mui/icons-material'
+import { KeyboardArrowUp, KeyboardArrowDown, Undo as UndoIcon, Gavel } from '@mui/icons-material'
 import {
   evaluateOutcome, PENALTY_LADDER, PENALTY_CATEGORIES, DEFAULT_RULES
 } from '../../shared/rules'
-import { initialMatchState } from '../../shared/commands'
+import { initialMatchState, UNDO } from '../../shared/commands'
 import { toMinutesSeconds, parseDuration } from '../../shared/format'
 import { displayRepo } from '../../data/repo'
 import { useMatchChannel } from '../../hooks/useMatchChannel'
@@ -48,18 +48,42 @@ const utilityButtonSx = {
   '&:hover': { bgcolor: '#E5E5E5', borderColor: WKF.utilityBorder },
 }
 
+// Pinned light: these carry near-black digits and labels sampled from the
+// reference console, which would disappear on the dark theme's paper.
+const boardPaperSx = {
+  bgcolor: '#FFFFFF',
+  backgroundImage: 'none',
+  border: '1px solid rgba(0,0,0,0.12)',
+  color: WKF.ink,
+  '& .MuiTypography-root': { color: WKF.ink },
+}
+
+// Inputs that sit on the white board need their own light styling: the dark
+// theme gives them white borders, which vanish against it.
+const boardFieldSx = {
+  '& .MuiOutlinedInput-root': {
+    backgroundColor: '#FFFFFF',
+    color: WKF.ink,
+    '& fieldset': { borderColor: 'rgba(0,0,0,0.28)' },
+    '&:hover fieldset': { borderColor: 'rgba(0,0,0,0.5)' },
+    '&.Mui-focused fieldset': { borderColor: WKF.timerInk },
+  },
+  '& .MuiInputBase-input': { color: WKF.ink },
+}
+
 const panelCheckboxSx = {
   color: WKF.onPanel,
   '&.Mui-checked': { color: WKF.onPanel },
 }
 
-export default function RefereeKumiteScoring({
+export default function KumiteConsole({
   matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize
 }) {
   const observing = mode === 'observe'
   const [state, send] = useMatchChannel(matchId, { control: !observing })
   const [fieldNumberDraft, setFieldNumberDraft] = useState('1')
   const [pendingAction, setPendingAction] = useState(null)
+  const [decisionOpen, setDecisionOpen] = useState(false)
   const serverNow = useServerNow()
 
   const view = state || initialMatchState()
@@ -102,6 +126,11 @@ export default function RefereeKumiteScoring({
   const toggleKoTimer = () => send('KO_TIMER')
   const commitFieldNumber = () => send('FIELD_NUMBER', { value: fieldNumberDraft })
 
+  const declare = (cmd, side) => {
+    send(cmd, { side })
+    setDecisionOpen(false)
+  }
+
   const toggleScoreboard = () => {
     const next = !view.scoreboardActive
     if (!next) displayRepo.put({ status: 'closed' })
@@ -109,7 +138,10 @@ export default function RefereeKumiteScoring({
   }
 
   const handleClose = () => {
-    const { winner } = evaluateOutcome(view.match, DEFAULT_RULES, { expired: true })
+    // A referee decision (kiken, shikkaku, hantei) beats the score, so take the
+    // verdict the authority already published rather than recomputing it.
+    const { winner } = view.outcome
+      ?? evaluateOutcome(view.match, DEFAULT_RULES, { expired: true })
     onFinalize({
       status: 'completed',
       winner: winner === 'aka' ? 'red' : winner === 'ao' ? 'blue' : 'tie',
@@ -175,7 +207,10 @@ export default function RefereeKumiteScoring({
   }
 
   const renderSide = (side, comp, bg, control) => (
-    <Paper elevation={0} sx={{ p: 2, bgcolor: bg, borderRadius: 2, textAlign: 'center', height: '100%' }}>
+    <Paper elevation={0} sx={{
+      p: 2, bgcolor: bg, backgroundImage: 'none', border: 'none',
+      borderRadius: 2, textAlign: 'center', height: '100%',
+    }}>
       <Typography variant="h4" sx={{ fontWeight: 700, color: WKF.onPanel }}>{side === 'ao' ? 'Ao' : 'Aka'}</Typography>
       <Typography variant="subtitle1" sx={{ color: WKF.onPanel, mb: 1 }}>{comp?.name} • #{comp?.bib}</Typography>
 
@@ -254,7 +289,7 @@ export default function RefereeKumiteScoring({
 
         <Grid size={{ xs: 12, sm: 4 }}>
           <Stack spacing={2}>
-            <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
+            <Paper elevation={0} sx={{ ...boardPaperSx, p: 2, textAlign: 'center' }}>
               <Typography variant="h1" sx={{ fontSize: 56, fontWeight: 800, color: WKF.timerInk }}>
                 {shownClock.display}
               </Typography>
@@ -266,6 +301,16 @@ export default function RefereeKumiteScoring({
                 <IconButton disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: -5_000 })}>
                   <KeyboardArrowDown />
                 </IconButton>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<UndoIcon />}
+                  disabled={disabled}
+                  onClick={() => send(UNDO)}
+                  sx={utilityButtonSx}
+                >
+                  Undo
+                </Button>
               </Stack>
 
               <Button
@@ -319,6 +364,7 @@ export default function RefereeKumiteScoring({
                   disabled={disabled || clockRunning}
                   value={durationMinutes}
                   onChange={(e) => setMatchDuration(Number(e.target.value) || 0, durationSeconds)}
+                  sx={boardFieldSx}
                   inputProps={{ min: 0, style: { textAlign: 'center', width: 40 } }}
                 />
                 <Typography>:</Typography>
@@ -328,12 +374,13 @@ export default function RefereeKumiteScoring({
                   disabled={disabled || clockRunning}
                   value={durationSeconds}
                   onChange={(e) => setMatchDuration(durationMinutes, Number(e.target.value) || 0)}
+                  sx={boardFieldSx}
                   inputProps={{ min: 0, max: 59, style: { textAlign: 'center', width: 40 } }}
                 />
               </Stack>
             </Paper>
 
-            <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
+            <Paper elevation={0} sx={{ ...boardPaperSx, p: 2 }}>
               <Typography variant="caption" display="block" sx={{ mb: 1 }}>Field number</Typography>
               <Stack direction="row" spacing={1}>
                 <TextField
@@ -341,13 +388,14 @@ export default function RefereeKumiteScoring({
                   value={fieldNumberDraft}
                   disabled={disabled}
                   onChange={(e) => setFieldNumberDraft(e.target.value)}
+                  sx={boardFieldSx}
                   inputProps={{ style: { textAlign: 'center' } }}
                 />
                 <Button variant="outlined" disabled={disabled} onClick={guarded('Change the field number', commitFieldNumber)} sx={utilityButtonSx}>Set</Button>
               </Stack>
             </Paper>
 
-            <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
+            <Paper elevation={0} sx={{ ...boardPaperSx, p: 2 }}>
               <Typography variant="caption" display="block" sx={{ mb: 1 }}>External scoreboard</Typography>
               <Button
                 fullWidth
@@ -368,6 +416,16 @@ export default function RefereeKumiteScoring({
               </Button>
             </Paper>
 
+            <Button
+              variant="outlined"
+              startIcon={<Gavel />}
+              disabled={disabled}
+              onClick={() => setDecisionOpen(true)}
+              sx={utilityButtonSx}
+            >
+              Decision
+            </Button>
+
             <Button variant="outlined" onClick={guarded('Close and finalize the match', handleClose)} sx={utilityButtonSx}>Close</Button>
           </Stack>
         </Grid>
@@ -376,6 +434,50 @@ export default function RefereeKumiteScoring({
           {renderSide('aka', redComp, WKF.aka, WKF.akaControl)}
         </Grid>
       </Grid>
+
+      <Dialog open={decisionOpen} onClose={() => setDecisionOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Referee decision</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            These override the score. Kiken and shikkaku name the contestant who is out.
+          </Typography>
+          <Stack spacing={2}>
+            {[
+              { cmd: 'KIKEN', label: 'Kiken (withdrawal)' },
+              { cmd: 'SHIKKAKU', label: 'Shikkaku (disqualification)' },
+              { cmd: 'HANTEI', label: 'Hantei (decision \u2014 names the winner)' },
+            ].map(({ cmd, label }) => (
+              <Box key={cmd}>
+                <Typography variant="caption" sx={{ fontWeight: 700 }}>{label}</Typography>
+                <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                  <Button
+                    fullWidth variant="contained"
+                    onClick={() => declare(cmd, 'ao')}
+                    sx={{ bgcolor: WKF.ao, color: WKF.onPanel, '&:hover': { bgcolor: WKF.ao, filter: 'brightness(1.15)' } }}
+                  >
+                    Ao
+                  </Button>
+                  <Button
+                    fullWidth variant="contained"
+                    onClick={() => declare(cmd, 'aka')}
+                    sx={{ bgcolor: WKF.aka, color: WKF.onPanel, '&:hover': { bgcolor: WKF.aka, filter: 'brightness(1.15)' } }}
+                  >
+                    Aka
+                  </Button>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          {view.decision && (
+            <Button onClick={() => { send('CLEAR_DECISION'); setDecisionOpen(false) }}>
+              Clear decision
+            </Button>
+          )}
+          <Button onClick={() => setDecisionOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={!!pendingAction} onClose={() => setPendingAction(null)}>
         <DialogTitle>Match clock is running</DialogTitle>

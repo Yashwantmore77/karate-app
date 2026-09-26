@@ -1,5 +1,7 @@
 import { remainingNow } from '../src/shared/clock.js'
-import { applyCommand, applyExpiry, initialMatchState, withOutcome } from '../src/shared/commands.js'
+import {
+  applyCommand, applyExpiry, initialMatchState, withOutcome, pushHistory, UNDO
+} from '../src/shared/commands.js'
 
 export const serverNow = () => Date.now()
 
@@ -15,6 +17,7 @@ export class MatchRoom {
     this.seq = 0
     this.controllerId = null
     this.state = initialMatchState()
+    this.history = []
   }
 
   snapshot() {
@@ -41,8 +44,18 @@ export class MatchRoom {
     }
     const at = serverNow()
     const before = this.state
+
+    if (cmd === UNDO) {
+      if (!this.history.length) return null
+      this.state = this.history[this.history.length - 1]
+      this.history = this.history.slice(0, -1)
+      this.seq += 1
+      return { seq: this.seq, cmd, at, state: this.state }
+    }
+
     this.state = withOutcome(applyCommand(before, cmd, payload, at), undefined, at)
     if (this.state === before) return null
+    this.history = pushHistory(this.history, before)
     this.seq += 1
     return { seq: this.seq, cmd, at, state: this.state }
   }
