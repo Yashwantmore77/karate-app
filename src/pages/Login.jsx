@@ -4,6 +4,7 @@ import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import { Container, Box, Typography, Button, TextField, Alert, CircularProgress, Chip, Stack, Card, FormHelperText } from '@mui/material'
 import { signInWithEmailAndPassword, auth } from '../firebase'
+import { loginToServer } from '../data/session'
 
 const testUsers = [
   { label: 'Admin', email: 'admin@kata.local', pass: 'test123' },
@@ -29,10 +30,20 @@ export default function Login({ user, profile }) {
     validateOnBlur: false,
     onSubmit: async (values) => {
       setBusy(true)
+      const email = values.email.trim()
       try {
-        await signInWithEmailAndPassword(auth, values.email.trim(), values.password)
+        await signInWithEmailAndPassword(auth, email, values.password)
       } catch {
         formik.setFieldError('password', 'Wrong email or password')
+        setBusy(false)
+        return
+      }
+      try {
+        // No server configured means nothing to exchange, and the app runs
+        // on the local adapter exactly as before.
+        await loginToServer(email, values.password)
+      } catch {
+        formik.setFieldError('password', 'Signed in, but the match server rejected these details')
         setBusy(false)
       }
     },

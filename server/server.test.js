@@ -5,7 +5,7 @@ import { createApp } from './index.js'
 import { remainingNow } from '../src/shared/clock.js'
 import { formatClock } from '../src/shared/format.js'
 
-let http, port, clients
+let http, port, clients, refereeToken, judgeToken
 
 const listen = () =>
   new Promise((resolve) => {
@@ -14,8 +14,20 @@ const listen = () =>
     http.listen(0, () => resolve(http.address().port))
   })
 
-const client = () => {
-  const socket = connect(`http://localhost:${port}`, { transports: ['websocket'] })
+const login = (email, password = 'test123') =>
+  fetch(`http://localhost:${port}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+
+const tokenFor = async (email) => (await (await login(email)).json()).token
+
+const client = (token = refereeToken) => {
+  const socket = connect(`http://localhost:${port}`, {
+    transports: ['websocket'],
+    auth: { token },
+  })
   clients.push(socket)
   return socket
 }
@@ -30,6 +42,8 @@ describe('BE-1 match server', () => {
   beforeEach(async () => {
     clients = []
     port = await listen()
+    refereeToken = await tokenFor('referee@kata.local')
+    judgeToken = await tokenFor('judge1@kata.local')
   })
 
   afterEach(async () => {
@@ -52,14 +66,14 @@ describe('BE-1 match server', () => {
     expect(snap.state.clock).toEqual({ running: false, remainingMs: 90_000, startedAt: null })
   })
 
-  it('gives control to the first claimant and refuses commands from the rest', async () => {
+  it('gives control to the first referee and refuses commands from the rest', async () => {
     const referee = client()
-    const judge = client()
+    const second = client(refereeToken)
     await emit(referee, 'match:join', { matchId: 'm1', control: true })
-    const snap = await emit(judge, 'match:join', { matchId: 'm1', control: true })
+    const snap = await emit(second, 'match:join', { matchId: 'm1', control: true })
 
-    expect(snap.controllerId).not.toBe(judge.id)
-    const rejected = await emit(judge, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })
+    expect(snap.controllerId).not.toBe(second.id)
+    const rejected = await emit(second, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })
     expect(rejected.error).toBe('not_controller')
 
     const accepted = await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })
@@ -81,7 +95,7 @@ describe('BE-1 match server', () => {
 
   it('keeps a referee and three judges on one clock', async () => {
     const referee = client()
-    const judges = [client(), client(), client()]
+    const judges = [client(judgeToken), client(judgeToken), client(judgeToken)]
 
     await emit(referee, 'match:join', { matchId: 'm1', control: true })
     await Promise.all(judges.map((j) => emit(j, 'match:join', { matchId: 'm1' })))
@@ -149,16 +163,16 @@ describe('BE-1 match server', () => {
 
   it('frees the mat when the controlling device drops', async () => {
     const referee = client()
-    const judge = client()
+    const spare = client(refereeToken)
     await emit(referee, 'match:join', { matchId: 'm1', control: true })
-    await emit(judge, 'match:join', { matchId: 'm1' })
+    await emit(spare, 'match:join', { matchId: 'm1' })
 
-    const released = nextEvent(judge, 'match:control')
+    const released = nextEvent(spare, 'match:control')
     referee.disconnect()
     expect((await released).controllerId).toBeNull()
 
-    const claimed = await emit(judge, 'match:join', { matchId: 'm1', control: true })
-    expect(claimed.controllerId).toBe(judge.id)
+    const claimed = await emit(spare, 'match:join', { matchId: 'm1', control: true })
+    expect(claimed.controllerId).toBe(spare.id)
   })
 
   it('ends the bout itself on an eight point gap', async () => {
@@ -265,5 +279,124 @@ describe('BE-1 match server', () => {
     expect(expiry.cmd).toBe('CLOCK_EXPIRED')
     expect(expiry.state.clock.running).toBe(false)
     expect(expiry.state.clock.remainingMs).toBe(0)
+  })
+})
+
+describe('BE-4 auth', () => {
+  beforeEach(async () => {
+    clients = []
+    port = await listen()
+    refereeToken = await tokenFor('referee@kata.local')
+    judgeToken = await tokenFor('judge1@kata.local')
+  })
+
+  afterEach(async () => {
+    clients.forEach((c) => c.disconnect())
+    await new Promise((resolve) => http.close(resolve))
+  })
+
+  describe('login', () => {
+    it('issues a token carrying the role, and never the password hash', async () => {
+      const res = await login('judge2@kata.local')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.token).toBeTruthy()
+      expect(body.user).toMatchObject({ role: 'judge', seat: 2 })
+      expect(JSON.stringify(body)).not.toMatch(/passwordHash|test123/)
+    })
+
+    it('rejects a wrong password', async () => {
+      const res = await login('referee@kata.local', 'wrong')
+      expect(res.status).toBe(401)
+      expect((await res.json()).error).toBe('invalid_credentials')
+    })
+
+    it('gives the same answer for an unknown address, revealing nothing', async () => {
+      const unknown = await login('nobody@kata.local')
+      const wrong = await login('referee@kata.local', 'wrong')
+      expect(unknown.status).toBe(401)
+      expect(await unknown.json()).toEqual(await wrong.json())
+    })
+
+    it('throttles repeated attempts from one address', async () => {
+      let last
+      for (let i = 0; i < 12; i += 1) last = await login('referee@kata.local', 'wrong')
+      expect(last.status).toBe(429)
+    })
+  })
+
+  describe('http guards', () => {
+    const get = (path, token) =>
+      fetch(`http://localhost:${port}${path}`, {
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      })
+
+    it('refuses a protected route with no token', async () => {
+      expect((await get('/auth/me')).status).toBe(401)
+    })
+
+    it('refuses a forged or malformed token', async () => {
+      expect((await get('/auth/me', 'not.a.token')).status).toBe(401)
+      expect((await get('/auth/me', `${refereeToken}tampered`)).status).toBe(401)
+    })
+
+    it('accepts a valid token and reports the caller', async () => {
+      const res = await get('/auth/me', refereeToken)
+      expect(res.status).toBe(200)
+      expect((await res.json()).user).toMatchObject({ role: 'referee' })
+    })
+
+    it('keeps a judge out of an admin route but lets an admin through', async () => {
+      expect((await get('/admin/ping', judgeToken)).status).toBe(403)
+      const adminToken = await tokenFor('admin@kata.local')
+      expect((await get('/admin/ping', adminToken)).status).toBe(200)
+    })
+  })
+
+  describe('socket guards', () => {
+    const connectError = (socket) =>
+      new Promise((resolve) => socket.once('connect_error', resolve))
+
+    it('refuses a socket with no token', async () => {
+      const socket = connect(`http://localhost:${port}`, { transports: ['websocket'] })
+      clients.push(socket)
+      expect((await connectError(socket)).message).toBe('unauthorized')
+    })
+
+    it('refuses a socket with a forged token', async () => {
+      const socket = client('forged.token.value')
+      expect((await connectError(socket)).message).toBe('unauthorized')
+    })
+
+    it('does not let a judge take control of a mat', async () => {
+      const judge = client(judgeToken)
+      const snap = await emit(judge, 'match:join', { matchId: 'm1', control: true })
+      expect(snap.controllerId).toBeNull()
+    })
+
+    it('does not let a judge send commands, even on a free mat', async () => {
+      const judge = client(judgeToken)
+      await emit(judge, 'match:join', { matchId: 'm1', control: true })
+      const res = await emit(judge, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })
+      expect(res.error).toBe('forbidden')
+    })
+
+    it('still lets a judge watch', async () => {
+      const referee = client()
+      const judge = client(judgeToken)
+      await emit(referee, 'match:join', { matchId: 'm1', control: true })
+      await emit(judge, 'match:join', { matchId: 'm1' })
+
+      const heard = nextEvent(judge, 'match:event')
+      await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'ao', type: 'ippon' } })
+      expect((await heard).state.match.scores.ao).toBe(3)
+    })
+
+    it('lets an admin drive a mat', async () => {
+      const admin = client(await tokenFor('admin@kata.local'))
+      const snap = await emit(admin, 'match:join', { matchId: 'm1', control: true })
+      expect(snap.controllerId).toBe(admin.id)
+      expect((await emit(admin, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })).ok).toBe(true)
+    })
   })
 })

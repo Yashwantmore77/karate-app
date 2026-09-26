@@ -3,6 +3,7 @@
 // timestamp or applies a command locally.
 
 import { io } from 'socket.io-client'
+import { getToken } from '../session'
 
 const SAMPLES = 5
 const RESYNC_MS = 30_000
@@ -25,7 +26,9 @@ const setOffset = (value) => {
 
 export function connect(url = import.meta.env?.VITE_SERVER_URL || 'http://localhost:4000') {
   if (socket) return socket
-  socket = io(url, { transports: ['websocket'] })
+  // The connection carries its identity from the handshake, so no event
+  // handler has to wonder who is on the other end.
+  socket = io(url, { transports: ['websocket'], auth: { token: getToken() } })
   socket.on('connect', () => syncTime())
   setInterval(() => { if (socket?.connected) syncTime() }, RESYNC_MS)
   return socket
