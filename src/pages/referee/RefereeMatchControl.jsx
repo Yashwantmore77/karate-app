@@ -56,8 +56,6 @@ export default function RefereeMatchControl({ uid, profile }) {
   }, [matchId])
 
   const tournamentExpired = tournament && isExpired(tournament.date)
-  // Kata tournaments still need the judge round controls under the console.
-  const showJudgePanel = tournament?.template !== 'kumite'
 
   // Collect all judge scores
   const allJudgeScores = { red: [], blue: [] }
@@ -132,85 +130,6 @@ export default function RefereeMatchControl({ uid, profile }) {
         onFinalize={updateMatchRecord}
       />
 
-      {showJudgePanel && (
-      <Container maxWidth="md" sx={{ pb: 4 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>Judge panel</Typography>
-
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Grid container spacing={3} alignItems="center">
-              <Grid item xs={12} sm={5}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.light', borderRadius: 1 }}>
-                  <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: 'error.dark' }}>{redComp.name}</Typography>
-                  <Typography variant="h6" sx={{ mb: 2, color: 'error.dark' }}>#{redComp.bib}</Typography>
-                  {status === 'revealed' && (
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: 'error.dark' }}>
-                      {avgRed.toFixed(2)}
-                    </Typography>
-                  )}
-                </Box>
-              </Grid>
-
-              <Grid item xs={12} sm={2}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <Chip
-                    label={status}
-                    color="primary"
-                    sx={{ mb: 1, textTransform: 'uppercase', fontWeight: 700 }}
-                  />
-                  {status === 'open' && (
-                    <Typography variant="caption" display="block" sx={{ color: 'primary.main', fontWeight: 600, mt: 1 }}>
-                      {judgesSubmitted}/{JUDGE_COUNT} judges
-                    </Typography>
-                  )}
-                </Box>
-              </Grid>
-
-              <Grid item xs={12} sm={5}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
-                  <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: 'info.dark' }}>{blueComp.name}</Typography>
-                  <Typography variant="h6" sx={{ mb: 2, color: 'info.dark' }}>#{blueComp.bib}</Typography>
-                  {status === 'revealed' && (
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: 'info.dark' }}>
-                      {avgBlue.toFixed(2)}
-                    </Typography>
-                  )}
-                </Box>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
-
-        <Paper elevation={0} sx={{ p: 3, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
-          {status === 'hidden' && (
-            <Button variant="contained" size="large" onClick={openRound} disabled={tournamentExpired}>
-              Open Round
-            </Button>
-          )}
-          {status === 'open' && (
-            <Button variant="contained" size="large" onClick={revealResults} disabled={tournamentExpired || judgesSubmitted === 0}>
-              Reveal Results {judgesSubmitted === 0 ? '(waiting for judges)' : ''}
-            </Button>
-          )}
-          {status === 'revealed' && (
-            <>
-              {(redDisagreement || blueDisagreement) && (
-                <Alert severity="warning" sx={{ mb: 2, textAlign: 'left' }}>
-                  Judges disagree significantly on {redDisagreement && blueDisagreement ? 'both sides' : redDisagreement ? `${redComp.name}'s` : `${blueComp.name}'s`} score
-                  {' '}(spread {redDisagreement ? redSpread.toFixed(1) : blueSpread.toFixed(1)}, threshold {DISAGREEMENT_THRESHOLD}). Consider reviewing before finalizing.
-                </Alert>
-              )}
-              <Alert severity={winner === 'tie' ? 'info' : 'success'} sx={{ mb: 2 }}>
-                {winner === 'tie' ? 'Tie' : `Winner: ${winner === 'red' ? redComp.name : blueComp.name}`}
-              </Alert>
-              <Button variant="outlined" size="large" onClick={openRound} disabled={tournamentExpired}>
-                Re-Open Match
-              </Button>
-            </>
-          )}
-        </Paper>
-      </Container>
-      )}
     </Box>
   )
 }

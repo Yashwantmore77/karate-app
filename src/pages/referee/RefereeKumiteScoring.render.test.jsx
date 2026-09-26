@@ -52,7 +52,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
     expect(screen.getByText('1:30')).toBeInTheDocument()
   })
 
-  it('shows the console for a kata tournament too, with the judge panel kept below it', () => {
+  it('shows the same console whatever the tournament template says', () => {
     const tournaments = JSON.parse(localStorage.getItem('tournaments'))
     tournaments[0].template = 'kata'
     localStorage.setItem('tournaments', JSON.stringify(tournaments))
@@ -62,11 +62,9 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
     expect(screen.getByText('Ao')).toBeInTheDocument()
     expect(screen.getByText('Aka')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Ippon' })).toHaveLength(2)
-    expect(screen.getByText('Judge panel')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open Round' })).toBeInTheDocument()
   })
 
-  it('omits the judge panel for a kumite tournament', () => {
+  it('no longer offers the kata judge round, whose scoring screen is gone', () => {
     renderPage()
     expect(screen.queryByText('Judge panel')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Round' })).not.toBeInTheDocument()
