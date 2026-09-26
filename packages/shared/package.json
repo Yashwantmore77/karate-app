@@ -1,0 +1,15 @@
+{
+  "name": "@kumite/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Clock, rules and command reducer imported identically by the web client and the API server, so the two can never disagree about a match.",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.1"
+  }
+}

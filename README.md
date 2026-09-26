@@ -3,6 +3,39 @@
 Four judges score both competitors from their phones. The referee opens the round
 and reveals. A scoreboard updates live. No backend server.
 
+## Project layout
+
+This is an npm-workspaces monorepo. Frontend and backend are separate, independently
+deployable projects that share nothing except one small versioned package:
+
+```
+packages/
+  shared/   @kumite/shared — clock math, WKF scoring rules, the command reducer.
+            Pure logic with no UI/DB code. Installed as an ordinary dependency by
+            both packages below so a referee's device and the server can never
+            disagree on how a match clock or score is computed.
+  web/      @kumite/web    — the React/Vite/MUI frontend.
+  api/      @kumite/api    — the Node/Express/Socket.IO backend (MongoDB-backed
+            auth with an in-memory fallback for local dev).
+```
+
+The Node API is the single source of truth for a live match: it computes state
+and pushes it to every connected device over Socket.IO, so clients display —
+rather than independently recompute — the authoritative clock and score.
+
+From the repo root:
+
+```bash
+npm install          # installs all three packages and links @kumite/shared
+npm run dev           # starts the web frontend (Vite)
+npm run server:dev    # starts the API in watch mode
+npm test              # runs every package's test suite
+npm run build          # builds @kumite/web for production
+```
+
+Each package also has its own `.env.example` (`packages/web/.env.example`,
+`packages/api/.env.example`) — copy to `.env` in that package's directory.
+
 ## 1. Firebase console
 
 1. Create a project at console.firebase.google.com (Spark / free plan is fine)
