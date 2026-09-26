@@ -1,6 +1,8 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Box, useMediaQuery } from '@mui/material'
 import { AO, AKA, CYAN, INK } from '../theme/tokens'
+
+const SPOTLIGHT_SIZE = 900 // px, generous enough that the fade edge is offscreen
 
 /**
  * The backdrop every screen sits on: the two sides of a mat bled into the
@@ -10,33 +12,54 @@ import { AO, AKA, CYAN, INK } from '../theme/tokens'
  * scrolls with the page it wraps.
  */
 export default function AppStage({ children, fill = false }) {
-  const stageRef = useRef(null)
+  const spotlightRef = useRef(null)
+  const raf = useRef(0)
   const stillness = useMediaQuery('(prefers-reduced-motion: reduce)')
 
-  // Written straight to CSS variables: pointer moves fire far too often to put
-  // through React state.
-  const trackPointer = (e) => {
-    const el = stageRef.current
-    if (!el || stillness) return
-    const rect = el.getBoundingClientRect()
-    el.style.setProperty('--px', `${((e.clientX - rect.left) / rect.width) * 100}%`)
-    el.style.setProperty('--py', `${((e.clientY - rect.top) / rect.height) * 100}%`)
-  }
+  useEffect(() => {
+    if (stillness) return undefined
+
+    // The spotlight's gradient is static; only its position moves, and only
+    // via `transform`. That keeps every frame compositor-only (GPU), instead
+    // of the previous approach — a custom property driving a `background`
+    // repaint of a full-viewport layer on every raw pointermove event — which
+    // is what made the whole page feel laggy while the mouse moved.
+    let pending = null
+
+    const apply = () => {
+      raf.current = 0
+      const el = spotlightRef.current
+      if (!el || !pending) return
+      const x = pending.x - SPOTLIGHT_SIZE / 2
+      const y = pending.y - SPOTLIGHT_SIZE / 2
+      el.style.transform = `translate3d(${x}px, ${y}px, 0)`
+    }
+
+    const onMove = (e) => {
+      // clientX/Y are already viewport-relative, matching these `position:
+      // fixed` layers, so no getBoundingClientRect() — that forces a
+      // synchronous layout read on every single mousemove event.
+      pending = { x: e.clientX, y: e.clientY }
+      if (!raf.current) raf.current = requestAnimationFrame(apply)
+    }
+
+    window.addEventListener('pointermove', onMove, { passive: true })
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      if (raf.current) cancelAnimationFrame(raf.current)
+    }
+  }, [stillness])
 
   const drift = stillness ? 'none' : 'drift 18s ease-in-out infinite alternate'
 
   return (
     <Box
-      ref={stageRef}
-      onPointerMove={trackPointer}
       sx={{
         position: 'relative',
         minHeight: '100vh',
         bgcolor: INK,
         overflow: fill ? 'hidden' : 'visible',
         ...(fill && { display: 'grid', placeItems: 'center', px: 2 }),
-        '--px': '50%',
-        '--py': '30%',
         '@keyframes drift': {
           from: { transform: 'translate3d(0,0,0) scale(1)' },
           to: { transform: 'translate3d(0,-6%,0) scale(1.15)' },
@@ -51,12 +74,12 @@ export default function AppStage({ children, fill = false }) {
       <Box aria-hidden sx={{
         position: 'fixed', width: '62vmax', height: '62vmax', left: '-18vmax', top: '-14vmax',
         background: `radial-gradient(circle, ${AO}bb 0%, ${AO}00 62%)`,
-        filter: 'blur(40px)', animation: drift, pointerEvents: 'none',
+        filter: 'blur(40px)', animation: drift, willChange: 'transform', pointerEvents: 'none',
       }} />
       <Box aria-hidden sx={{
         position: 'fixed', width: '58vmax', height: '58vmax', right: '-16vmax', bottom: '-16vmax',
         background: `radial-gradient(circle, ${AKA}bb 0%, ${AKA}00 62%)`,
-        filter: 'blur(40px)', animation: drift, animationDelay: '-9s', pointerEvents: 'none',
+        filter: 'blur(40px)', animation: drift, animationDelay: '-9s', willChange: 'transform', pointerEvents: 'none',
       }} />
       <Box aria-hidden sx={{
         position: 'fixed', inset: 0, pointerEvents: 'none',
@@ -67,11 +90,20 @@ export default function AppStage({ children, fill = false }) {
         maskImage: 'radial-gradient(ellipse at 50% 30%, #000 15%, transparent 75%)',
         WebkitMaskImage: 'radial-gradient(ellipse at 50% 30%, #000 15%, transparent 75%)',
       }} />
-      <Box aria-hidden sx={{
-        position: 'fixed', inset: 0, pointerEvents: 'none',
-        background: `radial-gradient(520px circle at var(--px) var(--py), ${CYAN}16, transparent 70%)`,
-        transition: 'background 120ms linear',
-      }} />
+      {!stillness && (
+        <Box
+          ref={spotlightRef}
+          aria-hidden
+          sx={{
+            position: 'fixed', top: 0, left: 0,
+            width: SPOTLIGHT_SIZE, height: SPOTLIGHT_SIZE,
+            pointerEvents: 'none',
+            willChange: 'transform',
+            transform: 'translate3d(-450px, -450px, 0)',
+            background: `radial-gradient(circle, ${CYAN}16, transparent 70%)`,
+          }}
+        />
+      )}
 
       <Box sx={{ position: 'relative', ...(fill && { width: '100%', maxWidth: 440 }) }}>
         {children}
