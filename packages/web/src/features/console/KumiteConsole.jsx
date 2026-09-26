@@ -7,9 +7,9 @@ import {
 import { KeyboardArrowUp, KeyboardArrowDown, Undo as UndoIcon, Gavel } from '@mui/icons-material'
 import {
   evaluateOutcome, PENALTY_LADDER, PENALTY_CATEGORIES, DEFAULT_RULES
-} from '../../shared/rules'
-import { initialMatchState, UNDO } from '../../shared/commands'
-import { toMinutesSeconds, parseDuration } from '../../shared/format'
+} from '@kumite/shared/rules.js'
+import { initialMatchState, UNDO } from '@kumite/shared/commands.js'
+import { toMinutesSeconds, parseDuration } from '@kumite/shared/format.js'
 import { displayRepo } from '../../data/repo'
 import { useMatchChannel } from '../../hooks/useMatchChannel'
 import { useMatchClock } from '../../hooks/useMatchClock'

@@ -5,8 +5,8 @@
 import { matchStateRepo } from '../repo'
 import {
   applyCommand, applyExpiry, initialMatchState, withOutcome, pushHistory, UNDO
-} from '../../shared/commands'
-import { remainingNow } from '../../shared/clock'
+} from '@kumite/shared/commands.js'
+import { remainingNow } from '@kumite/shared/clock.js'
 
 const EXPIRY_SWEEP_MS = 250
 

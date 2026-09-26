@@ -3,7 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { useMatchClock } from './useMatchClock'
 import { useMatchState } from './useMatchState'
 import { useServerNow } from './useServerNow'
-import { makeClock, startClock } from '../shared/clock'
+import { makeClock, startClock } from '@kumite/shared/clock.js'
 import { matchStateRepo } from '../data/repo'
 
 describe('useServerNow', () => {

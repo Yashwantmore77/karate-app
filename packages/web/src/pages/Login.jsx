@@ -5,8 +5,7 @@ import * as Yup from 'yup'
 import {
   Box, Typography, Button, TextField, CircularProgress, Stack, useMediaQuery
 } from '@mui/material'
-import { signInWithEmailAndPassword, signOut, auth } from '../firebase'
-import { loginToServer } from '../data/session'
+import { useSession } from '../state/SessionContext'
 import AppStage from '../components/AppStage'
 import { AO, AKA, CYAN } from '../theme/tokens'
 
@@ -48,7 +47,8 @@ const fieldSx = {
   '& .MuiFormHelperText-root.Mui-error': { color: '#FF9192' },
 }
 
-export default function Login({ user, profile }) {
+export default function Login() {
+  const { user, profile, login } = useSession()
   const [busy, setBusy] = useState(false)
   const stillness = useMediaQuery('(prefers-reduced-motion: reduce)')
 
@@ -59,23 +59,13 @@ export default function Login({ user, profile }) {
     validateOnBlur: false,
     onSubmit: async (values) => {
       setBusy(true)
-      const email = values.email.trim()
       try {
-        await signInWithEmailAndPassword(auth, email, values.password)
+        // One login surface either way: against the real API when a server
+        // is configured, against the local mock otherwise. Either failure
+        // reads the same to someone typing the wrong password.
+        await login(values.email.trim(), values.password)
       } catch {
         formik.setFieldError('password', 'Wrong email or password')
-        setBusy(false)
-        return
-      }
-      try {
-        // With no server configured there is nothing to exchange, and the app
-        // runs on the local adapter exactly as before.
-        await loginToServer(email, values.password)
-      } catch {
-        // Undo the local sign-in, otherwise the app navigates away and this
-        // message is never seen.
-        await signOut(auth)
-        formik.setFieldError('password', 'The match server rejected these details')
         setBusy(false)
       }
     },

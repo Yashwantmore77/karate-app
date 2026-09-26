@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { remainingNow } from '../shared/clock'
-import { formatClock } from '../shared/format'
+import { remainingNow } from '@kumite/shared/clock.js'
+import { formatClock } from '@kumite/shared/format.js'
 import { useServerNow } from './useServerNow'
 
 const TICK_MS = 100

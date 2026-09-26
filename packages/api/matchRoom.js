@@ -1,7 +1,7 @@
-import { remainingNow } from '../src/shared/clock.js'
+import { remainingNow } from '@kumite/shared/clock.js'
 import {
   applyCommand, applyExpiry, initialMatchState, withOutcome, pushHistory, UNDO
-} from '../src/shared/commands.js'
+} from '@kumite/shared/commands.js'
 
 export const serverNow = () => Date.now()
 

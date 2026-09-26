@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { pathToFileURL } from 'node:url'
 import express from 'express'
 import { Server } from 'socket.io'
 import { MatchRoom, serverNow } from './matchRoom.js'
@@ -126,7 +127,7 @@ export function createApp() {
   return { app, http, io, rooms }
 }
 
-if (process.argv[1] && process.argv[1].endsWith('server/index.js')) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { http } = createApp()
   const port = process.env.PORT || 4000
   http.listen(port, () => console.log(`kumite server on :${port}`))

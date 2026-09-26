@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import DisplayScoreboard from './DisplayScoreboard'
 import KumiteConsole from '../features/console/KumiteConsole'
 import { displayRepo } from '../data/repo'
-import { makeClock, startClock } from '../shared/clock'
+import { makeClock, startClock } from '@kumite/shared/clock.js'
 
 const renderDisplay = () => render(<MemoryRouter><DisplayScoreboard /></MemoryRouter>)
 

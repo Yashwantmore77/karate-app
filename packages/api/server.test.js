@@ -1,9 +1,8 @@
-// @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { io as connect } from 'socket.io-client'
 import { createApp } from './index.js'
-import { remainingNow } from '../src/shared/clock.js'
-import { formatClock } from '../src/shared/format.js'
+import { remainingNow } from '@kumite/shared/clock.js'
+import { formatClock } from '@kumite/shared/format.js'
 
 let http, port, clients, refereeToken, judgeToken
 

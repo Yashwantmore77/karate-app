@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material'
 import { SpeedInsights } from '@vercel/speed-insights/react'
 import { Analytics } from '@vercel/analytics/react'
-import { auth, db, onAuthStateChanged, doc, getDoc } from './firebase'
+import { SessionProvider, useSession } from './state/SessionContext'
 import Login from './pages/Login'
 import NoRoleAssigned from './pages/NoRoleAssigned'
 import JudgeRouter from './routes/JudgeRouter'
@@ -148,24 +147,19 @@ const theme = createTheme({
 })
 
 export default function App() {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+  return (
+    <SessionProvider>
+      <AppShell />
+    </SessionProvider>
+  )
+}
 
+// Split out so it can sit inside SessionProvider and call useSession(): the
+// provider itself picks the API or the local mock, and everything below this
+// line is identical either way.
+function AppShell() {
+  const { user, profile, loading } = useSession()
   const isPortal = new URLSearchParams(location.search).has('portal')
-
-  useEffect(() => {
-    return onAuthStateChanged(auth, async (u) => {
-      setUser(u)
-      if (u) {
-        const snap = await getDoc(doc(db, 'roles', u.uid))
-        setProfile(snap.exists() ? snap.data() : null)
-      } else {
-        setProfile(null)
-      }
-      setLoading(false)
-    })
-  }, [])
 
   if (isPortal) return <DisplayScoreboard />
 
@@ -183,7 +177,7 @@ export default function App() {
         <BrowserRouter>
           <AppStage>
           <Routes>
-            <Route path="/login" element={<Login user={user} profile={profile} />} />
+            <Route path="/login" element={<Login />} />
 
             {/* Public: a hall screen, no sign-in */}
             <Route path="/display" element={<DisplayScoreboard />} />
