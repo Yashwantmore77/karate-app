@@ -3,7 +3,9 @@
 // cannot tell which one they are talking to.
 
 import { matchStateRepo } from '../repo'
-import { applyCommand, applyExpiry, initialMatchState, withOutcome } from '../../shared/commands'
+import {
+  applyCommand, applyExpiry, initialMatchState, withOutcome, pushHistory, UNDO
+} from '../../shared/commands'
 import { remainingNow } from '../../shared/clock'
 
 const EXPIRY_SWEEP_MS = 250
@@ -12,6 +14,7 @@ export function openLocalMatch(matchId, { control = true } = {}) {
   let state = null
   let listeners = new Set()
   let seeded = false
+  let history = []
 
   const push = (next) => {
     state = next
@@ -55,8 +58,20 @@ export function openLocalMatch(matchId, { control = true } = {}) {
     send(cmd, payload) {
       if (!control || !state) return
       const at = Date.now()
-      const next = withOutcome(applyCommand(state, cmd, payload, at), undefined, at)
-      if (next === state) return
+
+      if (cmd === UNDO) {
+        if (!history.length) return
+        const previous = history[history.length - 1]
+        history = history.slice(0, -1)
+        push(previous)
+        matchStateRepo.put(matchId, previous)
+        return
+      }
+
+      const before = state
+      const next = withOutcome(applyCommand(before, cmd, payload, at), undefined, at)
+      if (next === before) return
+      history = pushHistory(history, before)
       push(next)
       matchStateRepo.put(matchId, next)
     },

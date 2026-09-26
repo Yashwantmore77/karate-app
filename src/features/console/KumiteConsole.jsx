@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
-  Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
+  Box, Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
   FormControlLabel, TextField, Divider, Stack, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material'
-import { KeyboardArrowUp, KeyboardArrowDown } from '@mui/icons-material'
+import { KeyboardArrowUp, KeyboardArrowDown, Undo as UndoIcon, Gavel } from '@mui/icons-material'
 import {
   evaluateOutcome, PENALTY_LADDER, PENALTY_CATEGORIES, DEFAULT_RULES
 } from '../../shared/rules'
-import { initialMatchState } from '../../shared/commands'
+import { initialMatchState, UNDO } from '../../shared/commands'
 import { toMinutesSeconds, parseDuration } from '../../shared/format'
 import { displayRepo } from '../../data/repo'
 import { useMatchChannel } from '../../hooks/useMatchChannel'
@@ -60,6 +60,7 @@ export default function KumiteConsole({
   const [state, send] = useMatchChannel(matchId, { control: !observing })
   const [fieldNumberDraft, setFieldNumberDraft] = useState('1')
   const [pendingAction, setPendingAction] = useState(null)
+  const [decisionOpen, setDecisionOpen] = useState(false)
   const serverNow = useServerNow()
 
   const view = state || initialMatchState()
@@ -102,6 +103,11 @@ export default function KumiteConsole({
   const toggleKoTimer = () => send('KO_TIMER')
   const commitFieldNumber = () => send('FIELD_NUMBER', { value: fieldNumberDraft })
 
+  const declare = (cmd, side) => {
+    send(cmd, { side })
+    setDecisionOpen(false)
+  }
+
   const toggleScoreboard = () => {
     const next = !view.scoreboardActive
     if (!next) displayRepo.put({ status: 'closed' })
@@ -109,7 +115,10 @@ export default function KumiteConsole({
   }
 
   const handleClose = () => {
-    const { winner } = evaluateOutcome(view.match, DEFAULT_RULES, { expired: true })
+    // A referee decision (kiken, shikkaku, hantei) beats the score, so take the
+    // verdict the authority already published rather than recomputing it.
+    const { winner } = view.outcome
+      ?? evaluateOutcome(view.match, DEFAULT_RULES, { expired: true })
     onFinalize({
       status: 'completed',
       winner: winner === 'aka' ? 'red' : winner === 'ao' ? 'blue' : 'tie',
@@ -266,6 +275,16 @@ export default function KumiteConsole({
                 <IconButton disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: -5_000 })}>
                   <KeyboardArrowDown />
                 </IconButton>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<UndoIcon />}
+                  disabled={disabled}
+                  onClick={() => send(UNDO)}
+                  sx={utilityButtonSx}
+                >
+                  Undo
+                </Button>
               </Stack>
 
               <Button
@@ -368,6 +387,16 @@ export default function KumiteConsole({
               </Button>
             </Paper>
 
+            <Button
+              variant="outlined"
+              startIcon={<Gavel />}
+              disabled={disabled}
+              onClick={() => setDecisionOpen(true)}
+              sx={utilityButtonSx}
+            >
+              Decision
+            </Button>
+
             <Button variant="outlined" onClick={guarded('Close and finalize the match', handleClose)} sx={utilityButtonSx}>Close</Button>
           </Stack>
         </Grid>
@@ -376,6 +405,50 @@ export default function KumiteConsole({
           {renderSide('aka', redComp, WKF.aka, WKF.akaControl)}
         </Grid>
       </Grid>
+
+      <Dialog open={decisionOpen} onClose={() => setDecisionOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Referee decision</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            These override the score. Kiken and shikkaku name the contestant who is out.
+          </Typography>
+          <Stack spacing={2}>
+            {[
+              { cmd: 'KIKEN', label: 'Kiken (withdrawal)' },
+              { cmd: 'SHIKKAKU', label: 'Shikkaku (disqualification)' },
+              { cmd: 'HANTEI', label: 'Hantei (decision \u2014 names the winner)' },
+            ].map(({ cmd, label }) => (
+              <Box key={cmd}>
+                <Typography variant="caption" sx={{ fontWeight: 700 }}>{label}</Typography>
+                <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                  <Button
+                    fullWidth variant="contained"
+                    onClick={() => declare(cmd, 'ao')}
+                    sx={{ bgcolor: WKF.ao, color: WKF.onPanel, '&:hover': { bgcolor: WKF.ao, filter: 'brightness(1.15)' } }}
+                  >
+                    Ao
+                  </Button>
+                  <Button
+                    fullWidth variant="contained"
+                    onClick={() => declare(cmd, 'aka')}
+                    sx={{ bgcolor: WKF.aka, color: WKF.onPanel, '&:hover': { bgcolor: WKF.aka, filter: 'brightness(1.15)' } }}
+                  >
+                    Aka
+                  </Button>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          {view.decision && (
+            <Button onClick={() => { send('CLEAR_DECISION'); setDecisionOpen(false) }}>
+              Clear decision
+            </Button>
+          )}
+          <Button onClick={() => setDecisionOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={!!pendingAction} onClose={() => setPendingAction(null)}>
         <DialogTitle>Match clock is running</DialogTitle>

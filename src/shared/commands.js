@@ -18,6 +18,8 @@ export const initialMatchState = () => ({
   koClock: makeClock(DEFAULT_RULES.koTimerMs),
   fieldNumber: '1',
   scoreboardActive: false,
+  // A referee's declaration, which the rules cannot derive from the score.
+  decision: null,
   outcome: null,
 })
 
@@ -27,6 +29,13 @@ export const initialMatchState = () => ({
  * told the same thing at the same moment.
  */
 export function withOutcome(state, rules = DEFAULT_RULES, at = Date.now()) {
+  if (state.decision) {
+    const declared = { ended: true, winner: state.decision.winner, method: state.decision.method }
+    const unchanged = state.outcome
+      && state.outcome.winner === declared.winner
+      && state.outcome.method === declared.method
+    return unchanged ? state : { ...state, outcome: declared }
+  }
   const expired = remainingNow(state.clock, at) === 0 && !state.koActive
   const outcome = evaluateOutcome(state.match, rules, { expired })
   if (!outcome.ended) return state.outcome ? { ...state, outcome: null } : state
@@ -39,7 +48,17 @@ export function withOutcome(state, rules = DEFAULT_RULES, at = Date.now()) {
 export const COMMANDS = [
   'CLOCK_START', 'CLOCK_STOP', 'CLOCK_ADJUST', 'CLOCK_SET', 'CLOCK_RESET', 'KO_TIMER',
   'SCORE', 'DEDUCT', 'SENSHU', 'PENALTY', 'FIELD_NUMBER', 'SCOREBOARD',
+  'KIKEN', 'SHIKKAKU', 'HANTEI', 'CLEAR_DECISION',
 ]
+
+// Undo is handled by whoever is authoritative, not by the reducer: it steps
+// back to a previous state rather than computing a new one.
+export const UNDO = 'UNDO'
+export const HISTORY_LIMIT = 50
+export const pushHistory = (history, state) =>
+  [...history.slice(-(HISTORY_LIMIT - 1)), state]
+
+const other = (side) => (side === 'ao' ? 'aka' : 'ao')
 
 export class UnknownCommand extends Error {
   constructor(cmd) {
@@ -97,6 +116,20 @@ export function applyCommand(state, cmd, payload = {}, at) {
 
     case 'SCOREBOARD':
       return { ...state, scoreboardActive: !!payload.active }
+
+    // Withdrawal and disqualification are called by the referee, not derived
+    // from the score, so they beat whatever the scores say.
+    case 'KIKEN':
+      return { ...state, decision: { method: 'kiken', winner: other(payload.side) } }
+
+    case 'SHIKKAKU':
+      return { ...state, decision: { method: 'shikkaku', winner: other(payload.side) } }
+
+    case 'HANTEI':
+      return { ...state, decision: { method: 'hantei', winner: payload.side } }
+
+    case 'CLEAR_DECISION':
+      return state.decision ? { ...state, decision: null } : state
 
     default:
       throw new UnknownCommand(cmd)

@@ -128,3 +128,51 @@ describe('console observe mode', () => {
     })
   })
 })
+
+describe('console undo and referee decisions', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => localStorage.clear())
+
+  const props = {
+    matchId: 'm-undo',
+    redComp: { name: 'Ryan Thomas', bib: '501' },
+    blueComp: { name: 'Samuel Brown', bib: '502' },
+    tournamentExpired: false,
+    onBack: () => {},
+    onFinalize: () => {},
+  }
+
+  it('undoes a mis-tapped ippon back to zero, which -1 could not do', async () => {
+    const user = userEvent.setup()
+    const view = render(<KumiteConsole {...props} mode="control" />)
+    const panel = within(view.container)
+
+    await user.click(panel.getAllByRole('button', { name: 'Ippon' })[0])
+    await waitFor(() => expect(view.container.querySelector('h1')?.textContent).toBe('3'))
+
+    await user.click(panel.getByRole('button', { name: /undo/i }))
+    await waitFor(() => expect(view.container.querySelector('h1')?.textContent).toBe('0'))
+  })
+
+  it('declares kiken against the score and names the other side', async () => {
+    const user = userEvent.setup()
+    const view = render(<KumiteConsole {...props} mode="control" />)
+    const panel = within(view.container)
+
+    await user.click(panel.getAllByRole('button', { name: 'Ippon' })[0]) // Ao leads
+    await user.click(panel.getByRole('button', { name: /decision/i }))
+
+    const kikenRow = screen.getByText(/Kiken \(withdrawal\)/i).parentElement
+    await user.click(within(kikenRow).getByRole('button', { name: 'Ao' }))
+
+    await waitFor(() => {
+      expect(panel.getByText(/Ryan Thomas wins by kiken/i)).toBeInTheDocument()
+    })
+  })
+
+  it('hides undo and decisions from a judge', () => {
+    render(<KumiteConsole {...props} mode="observe" />)
+    expect(screen.getByRole('button', { name: /undo/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /decision/i })).toBeDisabled()
+  })
+})

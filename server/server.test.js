@@ -202,6 +202,52 @@ describe('BE-1 match server', () => {
     expect(snap.state.outcome).toBeNull()
   })
 
+  it('undoes the last change, not one point', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'ao', type: 'ippon' } })
+    await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'UNDO' })
+
+    const snap = await emit(client(), 'match:join', { matchId: 'm1' })
+    // a mis-tapped ippon goes back to zero, where -1 would have left 2
+    expect(snap.state.match.scores.ao).toBe(0)
+    expect(snap.state.match.senshu).toBeNull()
+  })
+
+  it('undoes repeatedly and then stops, without going negative', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'ao', type: 'yuko' } })
+    await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'aka', type: 'wazaAri' } })
+    for (let i = 0; i < 5; i += 1) {
+      await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'UNDO' })
+    }
+    const snap = await emit(client(), 'match:join', { matchId: 'm1' })
+    expect(snap.state.match.scores).toEqual({ ao: 0, aka: 0 })
+  })
+
+  it('lets the referee declare kiken, overriding the score', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'ao', type: 'ippon' } })
+    await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'KIKEN', payload: { side: 'ao' } })
+
+    const snap = await emit(client(), 'match:join', { matchId: 'm1' })
+    expect(snap.state.outcome).toEqual({ ended: true, winner: 'aka', method: 'kiken' })
+  })
+
+  it('lets the referee name a winner by hantei and then clear it', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'HANTEI', payload: { side: 'ao' } })
+    let snap = await emit(client(), 'match:join', { matchId: 'm1' })
+    expect(snap.state.outcome).toEqual({ ended: true, winner: 'ao', method: 'hantei' })
+
+    await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'CLEAR_DECISION' })
+    snap = await emit(client(), 'match:join', { matchId: 'm1' })
+    expect(snap.state.outcome).toBeNull()
+  })
+
   it('rejects an unknown command', async () => {
     const referee = client()
     await emit(referee, 'match:join', { matchId: 'm1', control: true })
