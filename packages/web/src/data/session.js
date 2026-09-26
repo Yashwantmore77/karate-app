@@ -13,6 +13,16 @@ try {
 
 export const serverUrl = () => import.meta.env?.VITE_SERVER_URL || null
 
+// The API is versioned. Defined once here so a future /v2 is one edit, not a
+// hunt through every fetch in the app.
+export const API_BASE = '/api/v1'
+
+/** Absolute URL for an API path, or null when no server is configured. */
+export const apiUrl = (path) => {
+  const base = serverUrl()
+  return base ? `${base}${API_BASE}${path}` : null
+}
+
 export const getToken = () => token
 
 const store = (value) => {
@@ -32,10 +42,10 @@ export const clearSession = () => store(null)
  * configured, so the local-only mode carries on untouched.
  */
 export async function loginToServer(email, password) {
-  const url = serverUrl()
+  const url = apiUrl('/auth/login')
   if (!url) return null
 
-  const res = await fetch(`${url}/auth/login`, {
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email, password }),

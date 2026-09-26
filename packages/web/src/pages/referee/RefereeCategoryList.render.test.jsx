@@ -41,9 +41,9 @@ describe('RefereeCategoryList - searchable tournament dropdown', () => {
     localStorage.clear()
   })
 
-  it('auto-selects the first non-expired tournament and shows its categories', () => {
+  it('auto-selects the first non-expired tournament and shows its categories', async () => {
     renderPage()
-    expect(screen.getByText('U12 Boys Kata')).toBeInTheDocument()
+    expect(await screen.findByText('U12 Boys Kata')).toBeInTheDocument()
   })
 
   it('filters options by typing into the dropdown', async () => {
@@ -63,7 +63,7 @@ describe('RefereeCategoryList - searchable tournament dropdown', () => {
     const user = userEvent.setup()
     renderPage()
 
-    expect(screen.getByText('U12 Boys Kata')).toBeInTheDocument()
+    expect(await screen.findByText('U12 Boys Kata')).toBeInTheDocument()
 
     const input = screen.getByLabelText(/select tournament/i)
     await user.click(input)

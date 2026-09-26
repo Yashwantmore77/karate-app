@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, Alert, IconButton, Chip } from '@mui/material'
 import { ArrowBack } from '@mui/icons-material'
 import { signOut, auth, JUDGE_COUNT } from '../../firebase'
+import { competitors as competitorStore, matches as matchStore } from '../../data/domain'
+import { findMatchContext } from '../../data/domain/tree'
 import { isExpired } from '../../utils/dateUtils'
 import { getScoreSpread, hasDisagreement, DISAGREEMENT_THRESHOLD } from '../../utils/scoring'
 import KumiteConsole from '../../features/console/KumiteConsole'
@@ -18,41 +20,23 @@ export default function RefereeMatchControl({ uid, profile }) {
   const [status, setStatus] = useState('hidden')
 
   useEffect(() => {
-    let allMatches = []
-    let allCategories = []
-    let allTournaments = []
-    const stored = localStorage.getItem('tournaments')
-    if (stored) {
-      allTournaments = JSON.parse(stored)
-      allTournaments.forEach(t => {
-        const catStored = localStorage.getItem(`categories-${t.id}`)
-        if (catStored) {
-          const cats = JSON.parse(catStored)
-          allCategories = [...allCategories, ...cats]
-          cats.forEach(cat => {
-            const matchStored = localStorage.getItem(`matches-${cat.id}`)
-            if (matchStored) {
-              const matches = JSON.parse(matchStored)
-              allMatches = [...allMatches, ...matches.map(m => ({ ...m, categoryId: cat.id }))]
-            }
-          })
-        }
-      })
-    }
-    const m = allMatches.find(x => x.id === matchId)
-    if (m) {
-      setMatch(m)
-      setStatus(m.status === 'completed' ? 'revealed' : (localStorage.getItem(`match-control-${matchId}`) || 'hidden'))
-      const cat = allCategories.find(c => c.id === m.categoryId)
-      setCategory(cat)
-      if (cat) setTournament(allTournaments.find(t => t.id === cat.tournamentId))
-      const compStored = localStorage.getItem(`competitors-${m.categoryId}`)
-      if (compStored) {
-        const comps = JSON.parse(compStored)
-        setRedComp(comps.find(c => c.id === m.redId))
-        setBlueComp(comps.find(c => c.id === m.blueId))
-      }
-    }
+    let alive = true
+    ;(async () => {
+      const { match, category, tournament } = await findMatchContext(matchId)
+      if (!match) return
+      const roster = await competitorStore.list(match.categoryId)
+      if (!alive) return
+
+      setMatch(match)
+      setStatus(match.status === 'completed'
+        ? 'revealed'
+        : (localStorage.getItem(`match-control-${matchId}`) || 'hidden'))
+      setCategory(category)
+      setTournament(tournament)
+      setRedComp(roster.find(c => c.id === match.redId))
+      setBlueComp(roster.find(c => c.id === match.blueId))
+    })()
+    return () => { alive = false }
   }, [matchId])
 
   const tournamentExpired = tournament && isExpired(tournament.date)
@@ -78,13 +62,10 @@ export default function RefereeMatchControl({ uid, profile }) {
   const redSpread = getScoreSpread(allJudgeScores.red)
   const blueSpread = getScoreSpread(allJudgeScores.blue)
 
-  const updateMatchRecord = (updates) => {
-    const stored = localStorage.getItem(`matches-${match.categoryId}`)
-    if (!stored) return
-    const matches = JSON.parse(stored)
-    const updated = matches.map(m => (m.id === matchId ? { ...m, ...updates } : m))
-    localStorage.setItem(`matches-${match.categoryId}`, JSON.stringify(updated))
-  }
+  // How a bout ended is the one record that has to outlive this device, so it
+  // goes through the store rather than straight to local storage.
+  const updateMatchRecord = (updates) =>
+    matchStore.update(match.categoryId, matchId, updates)
 
   function openRound() {
     for (let seat = 1; seat <= JUDGE_COUNT; seat++) {

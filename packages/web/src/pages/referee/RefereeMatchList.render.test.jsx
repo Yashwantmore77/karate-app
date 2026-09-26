@@ -40,9 +40,9 @@ describe('RefereeMatchList - rendered UI', () => {
     localStorage.clear()
   })
 
-  it('shows the category name and an empty matches state', () => {
+  it('shows the category name and an empty matches state', async () => {
     renderPage()
-    expect(screen.getByText('U12 Boys Kumite')).toBeInTheDocument()
+    expect(await screen.findByText('U12 Boys Kumite')).toBeInTheDocument()
     expect(screen.getByText(/no matches yet/i)).toBeInTheDocument()
   })
 
@@ -96,13 +96,13 @@ describe('RefereeMatchList - rendered UI', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /delete match/i }))
+    await user.click(await screen.findByRole('button', { name: /delete match/i }))
     expect(screen.getByRole('heading', { name: /delete match\?/i })).toBeInTheDocument()
 
     const dialog = screen.getByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: /^delete$/i }))
 
-    expect(screen.getByText(/no matches yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no matches yet/i)).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem(`matches-${categoryId}`))).toHaveLength(0)
   })
 })

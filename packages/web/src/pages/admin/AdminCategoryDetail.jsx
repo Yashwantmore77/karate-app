@@ -5,6 +5,11 @@ import * as Yup from 'yup'
 import { Container, Box, AppBar, Toolbar, Typography, Button, TextField, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Alert, IconButton, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
 import { ArrowBack, Add, Edit, Delete, FileDownload } from '@mui/icons-material'
 import { signOut, auth } from '../../firebase'
+import {
+  tournaments as tournamentStore,
+  categories as categoryStore,
+  competitors as competitorStore,
+} from '../../data/domain'
 import { downloadCSV } from '../../utils/csvExport'
 
 const validationSchema = Yup.object({
@@ -22,20 +27,24 @@ export default function AdminCategoryDetail({ uid }) {
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  const refresh = () => competitorStore.list(categoryId).then(setCompetitors)
 
   useEffect(() => {
-    const stored = localStorage.getItem('tournaments')
-    if (stored) {
-      const t = JSON.parse(stored).find(x => x.id === tournamentId)
+    let alive = true
+    Promise.all([
+      tournamentStore.get(tournamentId),
+      categoryStore.get(tournamentId, categoryId),
+      competitorStore.list(categoryId),
+    ]).then(([t, c, rows]) => {
+      if (!alive) return
       setTournament(t)
-    }
-    const catStored = localStorage.getItem(`categories-${tournamentId}`)
-    if (catStored) {
-      const c = JSON.parse(catStored).find(x => x.id === categoryId)
       setCategory(c)
-    }
-    const compStored = localStorage.getItem(`competitors-${categoryId}`)
-    if (compStored) setCompetitors(JSON.parse(compStored))
+      setCompetitors(rows)
+      setLoading(false)
+    })
+    return () => { alive = false }
   }, [tournamentId, categoryId])
 
   const editingCompetitor = editingId ? competitors.find(c => c.id === editingId) : null
@@ -50,26 +59,13 @@ export default function AdminCategoryDetail({ uid }) {
     validationSchema,
     validateOnChange: false,
     validateOnBlur: false,
-    onSubmit: (values) => {
-      if (editingId) {
-        const updated = competitors.map(c =>
-          c.id === editingId ? { ...c, name: values.name, bib: values.bib, age: Number(values.age) } : c
-        )
-        setCompetitors(updated)
-        localStorage.setItem(`competitors-${categoryId}`, JSON.stringify(updated))
-      } else {
-        const competitor = {
-          id: 'comp-' + Date.now(),
-          categoryId,
-          name: values.name,
-          bib: values.bib,
-          age: Number(values.age),
-          createdAt: new Date().toISOString()
-        }
-        const updated = [...competitors, competitor]
-        setCompetitors(updated)
-        localStorage.setItem(`competitors-${categoryId}`, JSON.stringify(updated))
-      }
+    onSubmit: async (values) => {
+      // Age arrives from a text field as a string; the store and the API both
+      // want the number it represents.
+      const fields = { name: values.name, bib: values.bib, age: Number(values.age) }
+      if (editingId) await competitorStore.update(categoryId, editingId, fields)
+      else await competitorStore.create(categoryId, fields)
+      await refresh()
       handleCloseModal()
     }
   })
@@ -90,10 +86,9 @@ export default function AdminCategoryDetail({ uid }) {
     setOpenModal(true)
   }
 
-  const handleDelete = (id) => {
-    const updated = competitors.filter(c => c.id !== id)
-    setCompetitors(updated)
-    localStorage.setItem(`competitors-${categoryId}`, JSON.stringify(updated))
+  const handleDelete = async (id) => {
+    await competitorStore.remove(categoryId, id)
+    await refresh()
     setDeleteConfirm(null)
   }
 
@@ -109,6 +104,7 @@ export default function AdminCategoryDetail({ uid }) {
     )
   }
 
+  if (loading) return null
   if (!tournament || !category) return <div>Category not found</div>
 
   return (

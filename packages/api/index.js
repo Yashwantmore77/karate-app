@@ -3,62 +3,64 @@ import { pathToFileURL } from 'node:url'
 import express from 'express'
 import { Server } from 'socket.io'
 import { MatchRoom, serverNow } from './matchRoom.js'
-import { authenticate } from './auth/users.js'
-import { signToken } from './auth/jwt.js'
-import { requireAuth, requireRole, socketAuth, canControlMat } from './auth/middleware.js'
+import { socketAuth, canControlMat } from './auth/middleware.js'
+import { createStores } from './lib/store.js'
+import { withChangeEvents } from './lib/changes.js'
+import { security } from './middleware/security.js'
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
+import { authRoutes } from './routes/auth.js'
+import { userRoutes } from './routes/users.js'
+import { tournamentRoutes } from './routes/tournaments.js'
+import { categoryRoutes } from './routes/categories.js'
+import { competitorRoutes } from './routes/competitors.js'
+import { matchRoutes } from './routes/matches.js'
+import { displayRoutes } from './routes/display.js'
 
 const EXPIRY_SWEEP_MS = 250
-const LOGIN_WINDOW_MS = 60_000
-const LOGIN_MAX_ATTEMPTS = 10
+
+// Everything the browser calls is versioned, so a breaking change can ship
+// alongside the version it breaks instead of replacing it. /health is left
+// outside it: a probe wants a fixed address that outlives any version.
+export const API_BASE = '/api/v1'
 
 export function createApp() {
   const app = express()
-  app.use(express.json({ limit: '32kb' }))
 
-  // The client is served from a different origin in development, and from a
-  // venue machine in practice. No cookies are used — the token travels in a
-  // header — so credentials are deliberately not allowed.
-  const allowedOrigin = process.env.CORS_ORIGIN || '*'
-  app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
-    res.setHeader('Vary', 'Origin')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'content-type,authorization')
-    if (req.method === 'OPTIONS') return res.sendStatus(204)
-    next()
-  })
+  // Express advertises itself by default. Nothing good comes of telling callers
+  // what the server is built on.
+  app.disable('x-powered-by')
+  // Bounded before anything parses it: an unbounded body is a denial of service
+  // that needs no credentials.
+  app.use(express.json({ limit: '32kb' }))
+  app.use(security({ allowedOrigin: process.env.CORS_ORIGIN || '*' }))
 
   app.get('/health', (_req, res) => res.json({ ok: true, now: serverNow() }))
 
-  // Coarse per-address throttle so the login route cannot be brute forced by
-  // simply retrying quickly.
-  const attempts = new Map()
-  const tooManyAttempts = (key) => {
-    const now = Date.now()
-    const record = attempts.get(key)
-    if (!record || now - record.start > LOGIN_WINDOW_MS) {
-      attempts.set(key, { start: now, count: 1 })
-      return false
-    }
-    record.count += 1
-    return record.count > LOGIN_MAX_ATTEMPTS
-  }
+  // Built per instance and announced over the socket, so a device that is
+  // already looking at a list finds out it changed without polling for it.
+  const emitChange = (collection) => io.emit('data:changed', { collection })
+  const stores = withChangeEvents(createStores(), (collection) => emitChange(collection))
 
-  app.post('/auth/login', async (req, res) => {
-    const { email, password } = req.body || {}
-    if (tooManyAttempts(req.ip || 'unknown')) {
-      return res.status(429).json({ error: 'too_many_attempts' })
-    }
-    const user = await authenticate(email, password)
-    // One undifferentiated failure: never say which half was wrong.
-    if (!user) return res.status(401).json({ error: 'invalid_credentials' })
-    res.json({ token: signToken(user), user })
-  })
+  const categories = categoryRoutes(stores)
+  const competitors = competitorRoutes(stores)
+  const matches = matchRoutes(stores)
 
-  app.get('/auth/me', requireAuth, (req, res) => res.json({ user: req.user }))
+  app.use(`${API_BASE}/auth`, authRoutes())
+  app.use(`${API_BASE}/users`, userRoutes())
+  app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores))
+  app.use(`${API_BASE}/categories`, categories.flat)
+  app.use(`${API_BASE}/competitors`, competitors.flat)
+  app.use(`${API_BASE}/matches`, matches.flat)
+  app.use(`${API_BASE}/display`, displayRoutes(stores))
 
-  // Present so the guard is exercised; BE-5 fills this surface in.
-  app.get('/admin/ping', requireAuth, requireRole('admin'), (_req, res) => res.json({ ok: true }))
+  // The nested readers hang off their parent: /tournaments/:id/categories,
+  // /categories/:id/competitors, /categories/:id/matches.
+  app.use(`${API_BASE}/tournaments`, categories.nested)
+  app.use(`${API_BASE}/categories`, competitors.nested)
+  app.use(`${API_BASE}/categories`, matches.nested)
+
+  app.use(notFoundHandler)
+  app.use(errorHandler())
 
   const http = createServer(app)
   const io = new Server(http, { cors: { origin: true } })
@@ -124,7 +126,7 @@ export function createApp() {
 
   http.on('close', () => clearInterval(sweep))
 
-  return { app, http, io, rooms }
+  return { app, http, io, rooms, stores }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

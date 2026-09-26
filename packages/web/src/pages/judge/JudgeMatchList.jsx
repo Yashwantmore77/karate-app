@@ -3,40 +3,33 @@ import { useNavigate } from 'react-router-dom'
 import { Container, Box, AppBar, Toolbar, Typography, Button, Grid, Paper, Alert, Chip, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, IconButton } from '@mui/material'
 import { Visibility } from '@mui/icons-material'
 import { signOut, auth } from '../../firebase'
-import { isExpired } from '../../utils/dateUtils'
+import { competitors as competitorStore } from '../../data/domain'
+import { collectMatches } from '../../data/domain/tree'
 
 export default function JudgeMatchList({ uid, profile }) {
   const navigate = useNavigate()
   const [matches, setMatches] = useState([])
+  // Competitors are resolved up front and held by id: the table renders a name
+  // per side, and a read per cell cannot be done once reads are asynchronous.
+  const [competitorsById, setCompetitorsById] = useState({})
 
   useEffect(() => {
-    let all = []
-    const stored = localStorage.getItem('tournaments')
-    if (stored) {
-      JSON.parse(stored).forEach(t => {
-        if (isExpired(t.date)) return
-        const catStored = localStorage.getItem(`categories-${t.id}`)
-        if (catStored) {
-          JSON.parse(catStored).forEach(cat => {
-            const matchStored = localStorage.getItem(`matches-${cat.id}`)
-            if (matchStored) {
-              const ms = JSON.parse(matchStored)
-              all = [...all, ...ms.map(m => ({ ...m, categoryId: cat.id, tournament: t.name, category: cat.name }))]
-            }
-          })
-        }
-      })
-    }
-    setMatches(all.filter(m => m.status === 'open'))
+    let alive = true
+    ;(async () => {
+      const open = (await collectMatches({ skipExpired: true }))
+        .filter((m) => m.status === 'open')
+
+      const categoryIds = [...new Set(open.map((m) => m.categoryId))]
+      const rosters = await Promise.all(categoryIds.map((id) => competitorStore.list(id)))
+
+      if (!alive) return
+      setMatches(open)
+      setCompetitorsById(Object.fromEntries(rosters.flat().map((c) => [c.id, c])))
+    })()
+    return () => { alive = false }
   }, [])
 
-  const getCompetitor = (categoryId, id) => {
-    const compStored = localStorage.getItem(`competitors-${categoryId}`)
-    if (compStored) {
-      return JSON.parse(compStored).find(c => c.id === id)
-    }
-    return null
-  }
+  const getCompetitor = (_categoryId, id) => competitorsById[id] || null
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>

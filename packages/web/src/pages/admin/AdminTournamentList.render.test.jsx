@@ -20,9 +20,9 @@ describe('AdminTournamentList - rendered UI', () => {
     localStorage.clear()
   })
 
-  it('shows an empty state when there are no tournaments', () => {
+  it('shows an empty state when there are no tournaments', async () => {
     renderPage()
-    expect(screen.getByText(/no tournaments yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no tournaments yet/i)).toBeInTheDocument()
   })
 
   it('opens the create modal when "New Tournament" is clicked', async () => {
@@ -49,13 +49,13 @@ describe('AdminTournamentList - rendered UI', () => {
     expect(localStorage.getItem('tournaments')).toBeNull()
   })
 
-  it('renders existing tournaments in the table with an editable status dropdown', () => {
+  it('renders existing tournaments in the table with an editable status dropdown', async () => {
     localStorage.setItem('tournaments', JSON.stringify([
       { id: 't1', name: 'Spring Cup', location: 'NYC', date: '2026-09-20', template: 'kata', status: 'draft' }
     ]))
     renderPage()
 
-    expect(screen.getByText('Spring Cup')).toBeInTheDocument()
+    expect(await screen.findByText('Spring Cup')).toBeInTheDocument()
     expect(screen.getByText('NYC')).toBeInTheDocument()
     expect(screen.getByText(/draft/i)).toBeInTheDocument()
   })
@@ -67,7 +67,7 @@ describe('AdminTournamentList - rendered UI', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.click(await screen.findByRole('button', { name: /edit/i }))
     expect(screen.getByRole('heading', { name: /edit tournament/i })).toBeInTheDocument()
     expect(screen.getByDisplayValue('Spring Cup')).toBeInTheDocument()
   })
@@ -79,7 +79,7 @@ describe('AdminTournamentList - rendered UI', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /delete/i }))
+    await user.click(await screen.findByRole('button', { name: /delete/i }))
     expect(screen.getByRole('heading', { name: /delete tournament\?/i })).toBeInTheDocument()
 
     // Tournament must still exist until the delete is confirmed

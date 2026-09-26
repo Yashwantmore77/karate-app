@@ -5,6 +5,8 @@ import * as Yup from 'yup'
 import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, ButtonGroup, Alert, IconButton, Stack } from '@mui/material'
 import { ArrowBack, CheckCircle } from '@mui/icons-material'
 import { signOut, auth, SCORE_VALUES, clampScore } from '../../firebase'
+import { competitors as competitorStore } from '../../data/domain'
+import { findMatchContext } from '../../data/domain/tree'
 import { isExpired } from '../../utils/dateUtils'
 
 const validationSchema = Yup.object({
@@ -27,6 +29,7 @@ export default function JudgeScoring({ uid, profile }) {
   const [redComp, setRedComp] = useState(null)
   const [blueComp, setBlueComp] = useState(null)
   const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const formik = useFormik({
     initialValues: { score1: SCORE_VALUES[0], score2: SCORE_VALUES[0] },
@@ -46,48 +49,34 @@ export default function JudgeScoring({ uid, profile }) {
   })
 
   useEffect(() => {
-    let allMatches = []
-    let allCategories = []
-    let allTournaments = []
-    const stored = localStorage.getItem('tournaments')
-    if (stored) {
-      allTournaments = JSON.parse(stored)
-      allTournaments.forEach(t => {
-        const catStored = localStorage.getItem(`categories-${t.id}`)
-        if (catStored) {
-          const cats = JSON.parse(catStored)
-          allCategories = [...allCategories, ...cats]
-          cats.forEach(cat => {
-            const matchStored = localStorage.getItem(`matches-${cat.id}`)
-            if (matchStored) {
-              const ms = JSON.parse(matchStored)
-              allMatches = [...allMatches, ...ms.map(m => ({ ...m, categoryId: cat.id }))]
-            }
-          })
-        }
-      })
-    }
-    const m = allMatches.find(x => x.id === matchId)
-    if (m) {
-      setMatch(m)
-      const cat = allCategories.find(c => c.id === m.categoryId)
-      setCategory(cat)
-      if (cat) setTournament(allTournaments.find(t => t.id === cat.tournamentId))
-      const compStored = localStorage.getItem(`competitors-${m.categoryId}`)
-      if (compStored) {
-        const comps = JSON.parse(compStored)
-        setRedComp(comps.find(c => c.id === m.redId))
-        setBlueComp(comps.find(c => c.id === m.blueId))
+    let alive = true
+    ;(async () => {
+      const { match, category, tournament } = await findMatchContext(matchId)
+      if (!match) {
+        if (alive) setLoading(false)
+        return
       }
+      const roster = await competitorStore.list(match.categoryId)
+      if (!alive) return
+      setLoading(false)
+
+      setMatch(match)
+      setCategory(category)
+      setTournament(tournament)
+      setRedComp(roster.find(c => c.id === match.redId))
+      setBlueComp(roster.find(c => c.id === match.blueId))
+
       const scoreStored = localStorage.getItem(`judge-${profile?.seat}-${matchId}`)
       if (scoreStored) {
         const s = JSON.parse(scoreStored)
         formik.setValues({ score1: s.competitor1, score2: s.competitor2 })
         setSubmitted(true)
       }
-    }
+    })()
+    return () => { alive = false }
   }, [matchId, profile?.seat])
 
+  if (loading) return null
   if (!match || !redComp || !blueComp) {
     return <div>Match not found</div>
   }

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import {
   auth, db, onAuthStateChanged, doc, getDoc, signInWithEmailAndPassword, signOut,
 } from '../firebase'
-import { serverUrl, getToken, loginToServer, clearSession } from '../data/session'
+import { serverUrl, apiUrl, getToken, loginToServer, clearSession } from '../data/session'
 
 const SessionContext = createContext(null)
 
@@ -50,7 +50,7 @@ function ApiSession({ children }) {
         return
       }
       try {
-        const res = await fetch(`${serverUrl()}/auth/me`, {
+        const res = await fetch(apiUrl('/auth/me'), {
           headers: { authorization: `Bearer ${token}` },
         })
         if (!res.ok) throw new Error('session expired')

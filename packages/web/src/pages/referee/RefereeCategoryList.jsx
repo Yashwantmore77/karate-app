@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Alert, Chip, IconButton, Autocomplete, TextField } from '@mui/material'
 import { Visibility } from '@mui/icons-material'
 import { signOut, auth } from '../../firebase'
+import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 
 export default function RefereeCategoryList({ uid }) {
@@ -12,23 +13,25 @@ export default function RefereeCategoryList({ uid }) {
   const [selectedTournamentId, setSelectedTournamentId] = useState('')
 
   useEffect(() => {
-    const stored = localStorage.getItem('tournaments')
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      setTournaments(parsed)
-      if (parsed.length > 0 && !selectedTournamentId) {
-        const firstActive = parsed.find(t => !isExpired(t.date)) || parsed[0]
+    let alive = true
+    tournamentStore.list().then((rows) => {
+      if (!alive) return
+      setTournaments(rows)
+      if (rows.length > 0 && !selectedTournamentId) {
+        const firstActive = rows.find(t => !isExpired(t.date)) || rows[0]
         setSelectedTournamentId(firstActive.id)
       }
-    }
+    })
+    return () => { alive = false }
   }, [])
 
   useEffect(() => {
-    if (selectedTournamentId) {
-      const catStored = localStorage.getItem(`categories-${selectedTournamentId}`)
-      if (catStored) setCategories(JSON.parse(catStored))
-      else setCategories([])
-    }
+    if (!selectedTournamentId) return
+    let alive = true
+    categoryStore.list(selectedTournamentId).then((rows) => {
+      if (alive) setCategories(rows)
+    })
+    return () => { alive = false }
   }, [selectedTournamentId])
 
   const selectedTournament = tournaments.find(t => t.id === selectedTournamentId)
