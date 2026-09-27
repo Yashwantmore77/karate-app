@@ -6,6 +6,7 @@ import {
   Box, Typography, Button, TextField, CircularProgress, Stack, useMediaQuery
 } from '@mui/material'
 import { useSession } from '../state/SessionContext'
+import { currentCoords } from '../data/geolocation'
 import AppStage from '../components/AppStage'
 import { AO, AKA, CYAN } from '../theme/tokens'
 
@@ -60,10 +61,14 @@ export default function Login() {
     onSubmit: async (values) => {
       setBusy(true)
       try {
+        // Asked for before the credentials go anywhere, because it has to travel
+        // with them. Resolves to null whenever the browser will not say — denied,
+        // unsupported, or too slow — and the sign-in proceeds regardless.
+        const coords = await currentCoords()
         // One login surface either way: against the real API when a server
         // is configured, against the local mock otherwise. Either failure
         // reads the same to someone typing the wrong password.
-        await login(values.email.trim(), values.password)
+        await login(values.email.trim(), values.password, coords)
       } catch {
         formik.setFieldError('password', 'Wrong email or password')
         setBusy(false)
@@ -238,6 +243,14 @@ export default function Login() {
           mt: 2.5, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.4)',
         }}>
           Pick a role above to fill the demo credentials
+        </Typography>
+
+        {/* The browser's permission prompt is the only warning someone would
+            otherwise get, and it arrives without saying who is asking or why. */}
+        <Typography sx={{
+          mt: 1, textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.3)', lineHeight: 1.5,
+        }}>
+          Sign-ins are recorded with the time, device and location for the event log.
         </Typography>
       </Box>
     </AppStage>

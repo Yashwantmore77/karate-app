@@ -29,6 +29,16 @@ export function createApp() {
   // Express advertises itself by default. Nothing good comes of telling callers
   // what the server is built on.
   app.disable('x-powered-by')
+
+  // Behind a proxy (Vercel, nginx) the socket address is the proxy's, and the
+  // real caller is in X-Forwarded-For. Opt-in rather than always on: that
+  // header is client-supplied, so believing it with nothing in front lets a
+  // caller pick their own address, faking the login log and resetting the
+  // login rate limiter at will. Set TRUST_PROXY only where a proxy exists.
+  const trustProxy = process.env.TRUST_PROXY
+  if (trustProxy) {
+    app.set('trust proxy', /^[0-9]+$/.test(trustProxy) ? Number(trustProxy) : trustProxy)
+  }
   // Bounded before anything parses it: an unbounded body is a denial of service
   // that needs no credentials.
   app.use(express.json({ limit: '32kb' }))

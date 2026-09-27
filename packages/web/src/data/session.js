@@ -40,15 +40,19 @@ export const clearSession = () => store(null)
 /**
  * Exchanges credentials for a token. Returns null when no server is
  * configured, so the local-only mode carries on untouched.
+ *
+ * `coords` rides along when the browser has granted location permission, for
+ * the server's sign-in record. It is always optional, and never affects
+ * whether the sign-in succeeds.
  */
-export async function loginToServer(email, password) {
+export async function loginToServer(email, password, coords = null) {
   const url = apiUrl('/auth/login')
   if (!url) return null
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, ...(coords ? { coords } : {}) }),
   })
   if (!res.ok) throw Object.assign(new Error('login failed'), { status: res.status })
 

@@ -83,8 +83,10 @@ function ApiSession({ children }) {
     })
   }, [])
 
-  const login = useCallback(async (email, password) => {
-    const apiUser = await loginToServer(email, password)
+  // `coords` is whatever the sign-in screen managed to obtain from the browser,
+  // and is often null — denied, unsupported, or simply not resolved in time.
+  const login = useCallback(async (email, password, coords = null) => {
+    const apiUser = await loginToServer(email, password, coords)
     adopt(apiUser)
   }, [])
 
