@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { Box, AppBar, Toolbar, Typography, Button, IconButton, Chip } from '@mui/material'
+import { Box, Toolbar, Typography, Button, IconButton, Chip } from '@mui/material'
 import { ArrowBack } from '@mui/icons-material'
-import { signOut, auth } from '../../firebase'
+import PageBar from '../../components/PageBar'
 import { isExpired } from '../../utils/dateUtils'
 import { useMatchRecord } from '../../hooks/useMatchRecord'
 import KumiteConsole from '../../features/console/KumiteConsole'
@@ -17,8 +17,8 @@ export default function JudgeMatchView({ profile }) {
   if (!match || !redComp || !blueComp) return <div>Match not found</div>
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate('/judge')} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -30,9 +30,8 @@ export default function JudgeMatchView({ profile }) {
             </Typography>
           </Box>
           <Chip label="Watching" size="small" sx={{ mr: 2, bgcolor: 'rgba(255,255,255,0.2)', color: '#fff' }} />
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <KumiteConsole
         mode="observe"

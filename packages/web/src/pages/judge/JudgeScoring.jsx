@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, ButtonGroup, Alert, IconButton, Stack } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, ButtonGroup, Alert, IconButton, Stack } from '@mui/material'
 import { ArrowBack, CheckCircle } from '@mui/icons-material'
-import { signOut, auth, SCORE_VALUES, clampScore } from '../../firebase'
+import PageBar from '../../components/PageBar'
+import { SCORE_VALUES, clampScore } from '../../firebase'
 import { competitors as competitorStore } from '../../data/domain'
 import { findMatchContext } from '../../data/domain/tree'
 import { isExpired } from '../../utils/dateUtils'
@@ -84,8 +85,8 @@ export default function JudgeScoring({ uid, profile }) {
   const tournamentExpired = tournament && isExpired(tournament.date)
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate('/judge')} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -94,9 +95,8 @@ export default function JudgeScoring({ uid, profile }) {
             <Typography variant="h6">Score Match</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>{category?.name} • Judge #{profile?.seat}</Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="md" sx={{ py: 4, flex: 1 }}>
         {tournamentExpired && (

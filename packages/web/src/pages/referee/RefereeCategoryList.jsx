@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Alert, Chip, IconButton, Autocomplete, TextField } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, Paper, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Alert, Chip, IconButton, Autocomplete, TextField } from '@mui/material'
 import { Visibility } from '@mui/icons-material'
-import { signOut, auth } from '../../firebase'
+import PageBar from '../../components/PageBar'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 
@@ -39,8 +39,8 @@ export default function RefereeCategoryList({ uid }) {
   const isSelectedExpired = selectedTournament ? isExpired(selectedTournament.date) : false
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">Referee Dashboard</Typography>
@@ -48,9 +48,8 @@ export default function RefereeCategoryList({ uid }) {
               {selectedTournament ? selectedTournament.name : 'Select a tournament'}
             </Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>

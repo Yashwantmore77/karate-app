@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import {
-  Container, Box, AppBar, Toolbar, Typography, Button, TextField, Select, MenuItem,
+  Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem,
   FormControl, InputLabel, Paper, Table, TableContainer, TableHead, TableBody, TableRow,
   TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack, Chip,
   Alert, FormHelperText,
 } from '@mui/material'
 import { ArrowBack, Edit, Delete, Add } from '@mui/icons-material'
-import { signOut, auth } from '../../firebase'
+import PageBar from '../../components/PageBar'
 import * as users from '../../data/users'
 
 // Only on create: an existing account keeps its password unless a new one is
@@ -120,8 +120,8 @@ export default function AdminUserList({ uid }) {
     role === 'admin' ? 'primary' : role === 'referee' ? 'secondary' : 'default'
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate('/admin')} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -132,9 +132,8 @@ export default function AdminUserList({ uid }) {
               Referees and judges who can sign in
             </Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flexGrow: 1 }}>
         {!available ? (

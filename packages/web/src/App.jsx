@@ -14,6 +14,7 @@ import RequireRole from './routes/RequireRole'
 import { initializeMockData } from './utils/mockData'
 import { ConnectionProvider } from './state/ConnectionContext'
 import AppStage from './components/AppStage'
+import AppNav from './components/AppNav'
 import { AO_LIGHT, AKA_LIGHT, CYAN, INK, GLASS, TEXT } from './theme/tokens'
 
 // Initialize mock data on app start
@@ -176,6 +177,9 @@ function AppShell() {
       ) : (
         <BrowserRouter>
           <AppStage>
+          {/* One header for the whole signed-in app, so the menu survives
+              navigation instead of each page drawing its own. */}
+          <AppNav user={user} profile={profile} />
           <Routes>
             <Route path="/login" element={<Login />} />
 

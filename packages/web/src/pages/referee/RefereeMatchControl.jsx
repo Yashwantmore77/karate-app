@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Container, Box, AppBar, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, Alert, IconButton, Chip } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, Alert, IconButton, Chip } from '@mui/material'
 import { ArrowBack } from '@mui/icons-material'
-import { signOut, auth, JUDGE_COUNT } from '../../firebase'
+import PageBar from '../../components/PageBar'
+import { JUDGE_COUNT } from '../../firebase'
 import { competitors as competitorStore, matches as matchStore } from '../../data/domain'
 import { findMatchContext } from '../../data/domain/tree'
 import { isExpired } from '../../utils/dateUtils'
@@ -87,8 +88,8 @@ export default function RefereeMatchControl({ uid, profile }) {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate(-1)} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -97,9 +98,8 @@ export default function RefereeMatchControl({ uid, profile }) {
             <Typography variant="h6">Kumite WKF</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>{category?.name}</Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <KumiteConsole
         matchId={matchId}

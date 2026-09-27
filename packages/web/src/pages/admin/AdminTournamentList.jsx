@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import dayjs from 'dayjs'
-import { Container, Box, AppBar, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { Edit, Delete, Visibility, Add } from '@mui/icons-material'
-import { signOut, auth } from '../../firebase'
+import PageBar from '../../components/PageBar'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
 
@@ -94,17 +94,15 @@ export default function AdminTournamentList({ uid }) {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">Admin Dashboard</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>Manage tournaments</Typography>
           </Box>
-          <Button color="inherit" onClick={() => navigate('/admin/accounts')}>Accounts</Button>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

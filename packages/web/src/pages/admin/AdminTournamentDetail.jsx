@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, AppBar, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, IconButton, Chip, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, IconButton, Chip, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
 import { ArrowBack, Edit, Delete, Add, Visibility } from '@mui/icons-material'
-import { signOut, auth } from '../../firebase'
+import PageBar from '../../components/PageBar'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 
 const validationSchema = Yup.object({
@@ -98,8 +98,8 @@ export default function AdminTournamentDetail({ uid }) {
   if (!tournament) return <div>Tournament not found</div>
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate('/admin')} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -110,9 +110,8 @@ export default function AdminTournamentDetail({ uid }) {
               {tournament.location} • {new Date(tournament.date).toLocaleDateString()}
             </Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, AppBar, Toolbar, Typography, Button, TextField, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Alert, IconButton, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, TextField, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Alert, IconButton, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
 import { ArrowBack, Add, Edit, Delete, FileDownload } from '@mui/icons-material'
-import { signOut, auth } from '../../firebase'
+import PageBar from '../../components/PageBar'
 import {
   tournaments as tournamentStore,
   categories as categoryStore,
@@ -108,8 +108,8 @@ export default function AdminCategoryDetail({ uid }) {
   if (!tournament || !category) return <div>Category not found</div>
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate(`/admin/tournament/${tournamentId}`)} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -120,9 +120,8 @@ export default function AdminCategoryDetail({ uid }) {
               {tournament.name} • {category.ageGroup} • {category.gender}
             </Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

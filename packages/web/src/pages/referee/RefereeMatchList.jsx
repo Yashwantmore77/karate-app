@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, AppBar, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, Paper, IconButton, Chip, Divider, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, Paper, IconButton, Chip, Divider, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
 import { ArrowBack, Add, Visibility, Delete, FileDownload } from '@mui/icons-material'
-import { signOut, auth, JUDGE_COUNT } from '../../firebase'
+import PageBar from '../../components/PageBar'
+import { JUDGE_COUNT } from '../../firebase'
 import {
   tournaments as tournamentStore,
   categories as categoryStore,
@@ -104,8 +105,8 @@ export default function RefereeMatchList({ uid }) {
   const tournamentExpired = tournament && isExpired(tournament.date)
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate('/referee')} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -114,9 +115,8 @@ export default function RefereeMatchList({ uid }) {
             <Typography variant="h6">{category?.name}</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>{competitors.length} contestants • {matches.length} matches</Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         {tournamentExpired && (
