@@ -2,9 +2,16 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, AppBar, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, Paper, IconButton, Chip, Divider, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, Paper, IconButton, Chip, Divider, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
 import { ArrowBack, Add, Visibility, Delete, FileDownload } from '@mui/icons-material'
-import { signOut, auth, JUDGE_COUNT } from '../../firebase'
+import PageBar from '../../components/PageBar'
+import { JUDGE_COUNT } from '../../firebase'
+import {
+  tournaments as tournamentStore,
+  categories as categoryStore,
+  competitors as competitorStore,
+  matches as matchStore,
+} from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 import { downloadCSV } from '../../utils/csvExport'
 import StandingsTable from '../../components/StandingsTable'
@@ -29,63 +36,52 @@ export default function RefereeMatchList({ uid }) {
     validationSchema,
     validateOnChange: false,
     validateOnBlur: false,
-    onSubmit: (values) => {
+    onSubmit: async (values) => {
       if (values.redId === values.blueId) {
         formik.setFieldError('blueId', 'Competitors must be different')
         return
       }
-      const match = {
-        id: 'match-' + Date.now(),
-        categoryId,
+      await matchStore.create(categoryId, {
         redId: values.redId,
         blueId: values.blueId,
         status: 'open',
-        createdAt: new Date().toISOString()
-      }
-      const updated = [...matches, match]
-      setMatches(updated)
-      localStorage.setItem(`matches-${categoryId}`, JSON.stringify(updated))
+      })
+      setMatches(await matchStore.list(categoryId))
       formik.resetForm()
       setOpenModal(false)
     }
   })
 
   useEffect(() => {
-    let allCats = []
-    let allTournaments = []
-    const stored = localStorage.getItem('tournaments')
-    if (stored) {
-      allTournaments = JSON.parse(stored)
-      allTournaments.forEach(t => {
-        const catStored = localStorage.getItem(`categories-${t.id}`)
-        if (catStored) allCats = [...allCats, ...JSON.parse(catStored)]
-      })
-    }
-    const c = allCats.find(x => x.id === categoryId)
-    setCategory(c)
-
-    if (c) {
-      const t = allTournaments.find(t => t.id === c.tournamentId)
-      setTournament(t)
-    }
-
-    const compStored = localStorage.getItem(`competitors-${categoryId}`)
-    if (compStored) setCompetitors(JSON.parse(compStored))
-    const matchStored = localStorage.getItem(`matches-${categoryId}`)
-    if (matchStored) setMatches(JSON.parse(matchStored))
+    let alive = true
+    ;(async () => {
+      const [category, competitorRows, matchRows] = await Promise.all([
+        categoryStore.find(categoryId),
+        competitorStore.list(categoryId),
+        matchStore.list(categoryId),
+      ])
+      // Only the owning tournament is still unknown, and only if the category
+      // resolved at all.
+      const tournament = category ? await tournamentStore.get(category.tournamentId) : null
+      if (!alive) return
+      setCategory(category)
+      setTournament(tournament)
+      setCompetitors(competitorRows)
+      setMatches(matchRows)
+    })()
+    return () => { alive = false }
   }, [categoryId])
 
   const getCompetitor = (id) => competitors.find(c => c.id === id)
 
-  const handleDeleteMatch = (matchId) => {
+  const handleDeleteMatch = async (matchId) => {
     for (let seat = 1; seat <= JUDGE_COUNT; seat++) {
       localStorage.removeItem(`judge-${seat}-${matchId}`)
     }
     localStorage.removeItem(`match-control-${matchId}`)
 
-    const updated = matches.filter(m => m.id !== matchId)
-    setMatches(updated)
-    localStorage.setItem(`matches-${categoryId}`, JSON.stringify(updated))
+    await matchStore.remove(categoryId, matchId)
+    setMatches(await matchStore.list(categoryId))
     setDeleteConfirm(null)
   }
 
@@ -109,8 +105,8 @@ export default function RefereeMatchList({ uid }) {
   const tournamentExpired = tournament && isExpired(tournament.date)
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate('/referee')} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -119,9 +115,8 @@ export default function RefereeMatchList({ uid }) {
             <Typography variant="h6">{category?.name}</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>{competitors.length} contestants • {matches.length} matches</Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         {tournamentExpired && (

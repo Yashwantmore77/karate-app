@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import {
   auth, db, onAuthStateChanged, doc, getDoc, signInWithEmailAndPassword, signOut,
 } from '../firebase'
-import { serverUrl, getToken, loginToServer, clearSession } from '../data/session'
+import { serverUrl, apiUrl, getToken, loginToServer, clearSession } from '../data/session'
 
 const SessionContext = createContext(null)
 
@@ -50,7 +50,7 @@ function ApiSession({ children }) {
         return
       }
       try {
-        const res = await fetch(`${serverUrl()}/auth/me`, {
+        const res = await fetch(apiUrl('/auth/me'), {
           headers: { authorization: `Bearer ${token}` },
         })
         if (!res.ok) throw new Error('session expired')
@@ -83,8 +83,10 @@ function ApiSession({ children }) {
     })
   }, [])
 
-  const login = useCallback(async (email, password) => {
-    const apiUser = await loginToServer(email, password)
+  // `coords` is whatever the sign-in screen managed to obtain from the browser,
+  // and is often null — denied, unsupported, or simply not resolved in time.
+  const login = useCallback(async (email, password, coords = null) => {
+    const apiUser = await loginToServer(email, password, coords)
     adopt(apiUser)
   }, [])
 

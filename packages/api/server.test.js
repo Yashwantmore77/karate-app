@@ -14,7 +14,7 @@ const listen = () =>
   })
 
 const login = (email, password = 'test123') =>
-  fetch(`http://localhost:${port}/auth/login`, {
+  fetch(`http://localhost:${port}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -331,24 +331,136 @@ describe('BE-4 auth', () => {
       })
 
     it('refuses a protected route with no token', async () => {
-      expect((await get('/auth/me')).status).toBe(401)
+      expect((await get('/api/v1/auth/me')).status).toBe(401)
     })
 
     it('refuses a forged or malformed token', async () => {
-      expect((await get('/auth/me', 'not.a.token')).status).toBe(401)
-      expect((await get('/auth/me', `${refereeToken}tampered`)).status).toBe(401)
+      expect((await get('/api/v1/auth/me', 'not.a.token')).status).toBe(401)
+      expect((await get('/api/v1/auth/me', `${refereeToken}tampered`)).status).toBe(401)
     })
 
     it('accepts a valid token and reports the caller', async () => {
-      const res = await get('/auth/me', refereeToken)
+      const res = await get('/api/v1/auth/me', refereeToken)
       expect(res.status).toBe(200)
       expect((await res.json()).user).toMatchObject({ role: 'referee' })
     })
 
     it('keeps a judge out of an admin route but lets an admin through', async () => {
-      expect((await get('/admin/ping', judgeToken)).status).toBe(403)
+      expect((await get('/api/v1/users', judgeToken)).status).toBe(403)
       const adminToken = await tokenFor('admin@kata.local')
-      expect((await get('/admin/ping', adminToken)).status).toBe(200)
+      expect((await get('/api/v1/users', adminToken)).status).toBe(200)
+    })
+  })
+
+  describe('admin user management', () => {
+    let adminToken
+    const url = (path) => `http://localhost:${port}${path}`
+    const authed = (token, extra = {}) => ({
+      ...extra,
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...extra.headers },
+    })
+    const post = (path, body, token = adminToken) =>
+      fetch(url(path), authed(token, { method: 'POST', body: JSON.stringify(body) }))
+    const patch = (path, body, token = adminToken) =>
+      fetch(url(path), authed(token, { method: 'PATCH', body: JSON.stringify(body) }))
+    const del = (path, token = adminToken) =>
+      fetch(url(path), authed(token, { method: 'DELETE' }))
+    const get = (path, token = adminToken) => fetch(url(path), authed(token))
+
+    beforeEach(async () => {
+      adminToken = await tokenFor('admin@kata.local')
+    })
+
+    it('lists the seeded roster without password hashes', async () => {
+      const res = await get('/api/v1/users')
+      expect(res.status).toBe(200)
+      const { users } = await res.json()
+      expect(users.length).toBeGreaterThanOrEqual(6)
+      expect(JSON.stringify(users)).not.toMatch(/passwordHash/)
+    })
+
+    it('creates a new referee and immediately allows them to log in', async () => {
+      const res = await post('/api/v1/users', {
+        email: 'referee2@kata.local', password: 'freshpass1', role: 'referee',
+      })
+      expect(res.status).toBe(201)
+      const { user } = await res.json()
+      expect(user).toMatchObject({ email: 'referee2@kata.local', role: 'referee' })
+      expect(user.passwordHash).toBeUndefined()
+
+      const loginRes = await login('referee2@kata.local', 'freshpass1')
+      expect(loginRes.status).toBe(200)
+    })
+
+    it('rejects a duplicate email', async () => {
+      const res = await post('/api/v1/users', {
+        email: 'referee@kata.local', password: 'whatever1', role: 'referee',
+      })
+      expect(res.status).toBe(409)
+      expect((await res.json()).error).toBe('email_taken')
+    })
+
+    it('rejects an unknown role', async () => {
+      const res = await post('/api/v1/users', {
+        email: 'nobody-new@kata.local', password: 'whatever1', role: 'coach',
+      })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('invalid_role')
+    })
+
+    it('rejects a non-integer seat', async () => {
+      const res = await post('/api/v1/users', {
+        email: 'judge5@kata.local', password: 'whatever1', role: 'judge', seat: 'front row',
+      })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('invalid_seat')
+    })
+
+    it('updates a user\'s role and seat', async () => {
+      const created = await (await post('/api/v1/users', {
+        email: 'judge9@kata.local', password: 'whatever1', role: 'judge', seat: 9,
+      })).json()
+
+      const res = await patch(`/api/v1/users/${created.user.uid}`, { seat: 3 })
+      expect(res.status).toBe(200)
+      expect((await res.json()).user).toMatchObject({ role: 'judge', seat: 3 })
+    })
+
+    it('lets a user log in with a new password after a reset', async () => {
+      const created = await (await post('/api/v1/users', {
+        email: 'judge10@kata.local', password: 'oldpass1', role: 'judge', seat: 10,
+      })).json()
+
+      await patch(`/api/v1/users/${created.user.uid}`, { password: 'newpass1' })
+
+      expect((await login('judge10@kata.local', 'oldpass1')).status).toBe(401)
+      expect((await login('judge10@kata.local', 'newpass1')).status).toBe(200)
+    })
+
+    it('404s updating a user that does not exist', async () => {
+      const res = await patch('/api/v1/users/no-such-uid', { role: 'referee' })
+      expect(res.status).toBe(404)
+      expect((await res.json()).error).toBe('not_found')
+    })
+
+    it('deletes a user, who can no longer log in', async () => {
+      const created = await (await post('/api/v1/users', {
+        email: 'judge11@kata.local', password: 'whatever1', role: 'judge', seat: 11,
+      })).json()
+
+      expect((await del(`/api/v1/users/${created.user.uid}`)).status).toBe(204)
+      expect((await login('judge11@kata.local', 'whatever1')).status).toBe(401)
+    })
+
+    it('refuses to let an admin delete their own account', async () => {
+      const me = await (await get('/api/v1/auth/me')).json()
+      const res = await del(`/api/v1/users/${me.user.uid}`)
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe('cannot_delete_self')
+    })
+
+    it('keeps the admin routes closed to a referee', async () => {
+      expect((await post('/api/v1/users', { email: 'x@kata.local', password: 'whatever1', role: 'referee' }, refereeToken)).status).toBe(403)
     })
   })
 

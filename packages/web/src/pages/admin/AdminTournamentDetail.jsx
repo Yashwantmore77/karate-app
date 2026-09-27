@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, AppBar, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, IconButton, Chip, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, IconButton, Chip, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
 import { ArrowBack, Edit, Delete, Add, Visibility } from '@mui/icons-material'
-import { signOut, auth } from '../../firebase'
+import PageBar from '../../components/PageBar'
+import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 
 const validationSchema = Yup.object({
   catName: Yup.string().required('Category name required'),
@@ -21,15 +22,20 @@ export default function AdminTournamentDetail({ uid }) {
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  const refresh = () => categoryStore.list(tournamentId).then(setCategories)
 
   useEffect(() => {
-    const stored = localStorage.getItem('tournaments')
-    if (stored) {
-      const t = JSON.parse(stored).find(x => x.id === tournamentId)
-      setTournament(t)
-    }
-    const catStored = localStorage.getItem(`categories-${tournamentId}`)
-    if (catStored) setCategories(JSON.parse(catStored))
+    let alive = true
+    Promise.all([tournamentStore.get(tournamentId), categoryStore.list(tournamentId)])
+      .then(([t, rows]) => {
+        if (!alive) return
+        setTournament(t)
+        setCategories(rows)
+        setLoading(false)
+      })
+    return () => { alive = false }
   }, [tournamentId])
 
   const editingCategory = editingId ? categories.find(c => c.id === editingId) : null
@@ -45,32 +51,18 @@ export default function AdminTournamentDetail({ uid }) {
     validationSchema,
     validateOnChange: false,
     validateOnBlur: false,
-    onSubmit: (values) => {
+    onSubmit: async (values) => {
+      const fields = {
+        name: values.catName,
+        ageGroup: values.ageGroup,
+        gender: values.gender,
+        division: values.division,
+      }
       try {
-        if (editingId) {
-          const updated = categories.map(c =>
-            c.id === editingId
-              ? { ...c, name: values.catName, ageGroup: values.ageGroup, gender: values.gender, division: values.division }
-              : c
-          )
-          setCategories(updated)
-          localStorage.setItem(`categories-${tournamentId}`, JSON.stringify(updated))
-          handleCloseModal()
-        } else {
-          const category = {
-            id: 'cat-' + Date.now(),
-            tournamentId,
-            name: values.catName,
-            ageGroup: values.ageGroup,
-            gender: values.gender,
-            division: values.division,
-            createdAt: new Date().toISOString()
-          }
-          const updated = [...categories, category]
-          setCategories(updated)
-          localStorage.setItem(`categories-${tournamentId}`, JSON.stringify(updated))
-          handleCloseModal()
-        }
+        if (editingId) await categoryStore.update(tournamentId, editingId, fields)
+        else await categoryStore.create(tournamentId, fields)
+        await refresh()
+        handleCloseModal()
       } catch (error) {
         console.error('Error saving category:', error)
       }
@@ -93,21 +85,21 @@ export default function AdminTournamentDetail({ uid }) {
     setOpenModal(true)
   }
 
-  const handleDelete = (id) => {
-    localStorage.removeItem(`competitors-${id}`)
-    localStorage.removeItem(`matches-${id}`)
-
-    const updated = categories.filter(c => c.id !== id)
-    setCategories(updated)
-    localStorage.setItem(`categories-${tournamentId}`, JSON.stringify(updated))
+  const handleDelete = async (id) => {
+    // The store takes the category's competitors and matches with it.
+    await categoryStore.remove(tournamentId, id)
+    await refresh()
     setDeleteConfirm(null)
   }
 
+  // Nothing until the read settles: announcing "not found" while it is still in
+  // flight would be wrong every time, and only briefly.
+  if (loading) return null
   if (!tournament) return <div>Tournament not found</div>
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <IconButton color="inherit" onClick={() => navigate('/admin')} sx={{ mr: 2 }}>
             <ArrowBack />
@@ -118,9 +110,8 @@ export default function AdminTournamentDetail({ uid }) {
               {tournament.location} • {new Date(tournament.date).toLocaleDateString()}
             </Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

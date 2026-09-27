@@ -1,4 +1,5 @@
 import { verifyToken } from './jwt.js'
+import { unauthorized, forbidden } from '../lib/errors.js'
 
 const bearer = (header) => {
   const value = String(header || '')
@@ -6,19 +7,19 @@ const bearer = (header) => {
 }
 
 /** HTTP: rejects anything without a valid token, and attaches req.user. */
-export function requireAuth(req, res, next) {
+export function requireAuth(req, _res, next) {
   const claims = verifyToken(bearer(req.headers.authorization))
-  if (!claims) return res.status(401).json({ error: 'unauthorized' })
+  if (!claims) return next(unauthorized())
   req.user = claims
-  next()
+  return next()
 }
 
 /** HTTP: use after requireAuth. Admin passes every role gate. */
 export function requireRole(...roles) {
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'unauthorized' })
+  return (req, _res, next) => {
+    if (!req.user) return next(unauthorized())
     if (req.user.role === 'admin' || roles.includes(req.user.role)) return next()
-    return res.status(403).json({ error: 'forbidden' })
+    return next(forbidden())
   }
 }
 

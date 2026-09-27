@@ -25,14 +25,20 @@ const seed = () => {
   ]))
 }
 
-const renderPage = () =>
-  render(
+// The match is read asynchronously, so the console is not on screen the instant
+// render() returns. Waiting for it here is what a referee actually experiences,
+// and keeps every test below asserting against a loaded page.
+const renderPage = async () => {
+  const result = render(
     <MemoryRouter initialEntries={[`/referee/match/${matchId}`]}>
       <Routes>
         <Route path="/referee/match/:matchId" element={<RefereeMatchControl uid="ref-uid" profile={{}} />} />
       </Routes>
     </MemoryRouter>
   )
+  await screen.findByText('Kumite WKF')
+  return result
+}
 
 describe('RefereeMatchControl - kumite template shows the WKF scoring console', () => {
   beforeEach(() => {
@@ -44,35 +50,35 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
     localStorage.clear()
   })
 
-  it('renders the Ao/Aka score panel with the configured match time', () => {
-    renderPage()
+  it('renders the Ao/Aka score panel with the configured match time', async () => {
+    await renderPage()
     expect(screen.getByText('Kumite WKF')).toBeInTheDocument()
     expect(screen.getByText('Ao')).toBeInTheDocument()
     expect(screen.getByText('Aka')).toBeInTheDocument()
     expect(screen.getByText('1:30')).toBeInTheDocument()
   })
 
-  it('shows the same console whatever the tournament template says', () => {
+  it('shows the same console whatever the tournament template says', async () => {
     const tournaments = JSON.parse(localStorage.getItem('tournaments'))
     tournaments[0].template = 'kata'
     localStorage.setItem('tournaments', JSON.stringify(tournaments))
 
-    renderPage()
+    await renderPage()
 
     expect(screen.getByText('Ao')).toBeInTheDocument()
     expect(screen.getByText('Aka')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Ippon' })).toHaveLength(2)
   })
 
-  it('no longer offers the kata judge round, whose scoring screen is gone', () => {
-    renderPage()
+  it('no longer offers the kata judge round, whose scoring screen is gone', async () => {
+    await renderPage()
     expect(screen.queryByText('Judge panel')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open Round' })).not.toBeInTheDocument()
   })
 
   it('awards points via Ippon/Waza-ari and updates each side\'s total independently', async () => {
     const user = userEvent.setup()
-    renderPage()
+    await renderPage()
 
     const aoPanel = screen.getByText('Ao').closest('div')
     const akaPanel = screen.getByText('Aka').closest('div')
@@ -86,7 +92,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
 
   it('finalizes the match and persists the winner when Close is clicked', async () => {
     const user = userEvent.setup()
-    renderPage()
+    await renderPage()
 
     const aoPanel = screen.getByText('Ao').closest('div')
     await user.click(within(aoPanel).getByRole('button', { name: 'Ippon' }))
@@ -108,7 +114,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
 
     it('asks for confirmation before resetting the time and leaves the clock alone on cancel', async () => {
       const user = userEvent.setup()
-      renderPage()
+      await renderPage()
       await startClock(user)
 
       await user.click(screen.getByRole('button', { name: 'Reset time' }))
@@ -121,7 +127,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
 
     it('runs the guarded action only after Confirm', async () => {
       const user = userEvent.setup()
-      renderPage()
+      await renderPage()
       await startClock(user)
 
       await user.click(screen.getByRole('button', { name: '60 seconds' }))
@@ -134,7 +140,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
 
     it('does not guard scoring or penalties', async () => {
       const user = userEvent.setup()
-      renderPage()
+      await renderPage()
       await startClock(user)
 
       const aoPanel = screen.getByText('Ao').closest('div')
@@ -146,7 +152,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
 
     it('does not guard actions once the clock is stopped', async () => {
       const user = userEvent.setup()
-      renderPage()
+      await renderPage()
       await startClock(user)
       await user.click(screen.getByRole('button', { name: 'Stop' }))
 

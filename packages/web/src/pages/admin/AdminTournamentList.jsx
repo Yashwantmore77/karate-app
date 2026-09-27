@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import dayjs from 'dayjs'
-import { Container, Box, AppBar, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { Edit, Delete, Visibility, Add } from '@mui/icons-material'
-import { signOut, auth } from '../../firebase'
+import PageBar from '../../components/PageBar'
+import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
 
 const validationSchema = Yup.object({
@@ -25,9 +26,14 @@ export default function AdminTournamentList({ uid }) {
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
+  // One place to re-read from, so a write never has to guess what the store now
+  // holds — in API mode the server may have filled in fields we did not send.
+  const refresh = () => tournamentStore.list().then(setTournaments)
+
   useEffect(() => {
-    const stored = localStorage.getItem('tournaments')
-    if (stored) setTournaments(JSON.parse(stored))
+    let alive = true
+    tournamentStore.list().then((rows) => { if (alive) setTournaments(rows) })
+    return () => { alive = false }
   }, [])
 
   const editingTournament = editingId ? tournaments.find(t => t.id === editingId) : null
@@ -43,37 +49,19 @@ export default function AdminTournamentList({ uid }) {
     validationSchema,
     validateOnChange: false,
     validateOnBlur: false,
-    onSubmit: (values) => {
-      if (editingId) {
-        const updated = tournaments.map(t =>
-          t.id === editingId
-            ? {
-                ...t,
-                name: values.name,
-                location: values.location,
-                date: formatDate(values.date),
-                template: values.template
-              }
-            : t
-        )
-        setTournaments(updated)
-        localStorage.setItem('tournaments', JSON.stringify(updated))
-        handleCloseModal()
-      } else {
-        const tournament = {
-          id: 'tournament-' + Date.now(),
-          name: values.name,
-          location: values.location,
-          date: formatDate(values.date),
-          template: values.template,
-          status: 'draft',
-          createdAt: new Date().toISOString()
-        }
-        const updated = [...tournaments, tournament]
-        setTournaments(updated)
-        localStorage.setItem('tournaments', JSON.stringify(updated))
-        handleCloseModal()
+    onSubmit: async (values) => {
+      // Only the fields a tournament actually owns: id, createdAt and status are
+      // the store's to set, and the API rejects a body that tries to choose them.
+      const fields = {
+        name: values.name,
+        location: values.location,
+        date: formatDate(values.date),
+        template: values.template,
       }
+      if (editingId) await tournamentStore.update(editingId, fields)
+      else await tournamentStore.create(fields)
+      await refresh()
+      handleCloseModal()
     }
   })
 
@@ -93,39 +81,28 @@ export default function AdminTournamentList({ uid }) {
     setOpenModal(true)
   }
 
-  const handleDelete = (id) => {
-    const catStored = localStorage.getItem(`categories-${id}`)
-    if (catStored) {
-      JSON.parse(catStored).forEach((c) => {
-        localStorage.removeItem(`competitors-${c.id}`)
-        localStorage.removeItem(`matches-${c.id}`)
-      })
-      localStorage.removeItem(`categories-${id}`)
-    }
-
-    const updated = tournaments.filter(t => t.id !== id)
-    setTournaments(updated)
-    localStorage.setItem('tournaments', JSON.stringify(updated))
+  const handleDelete = async (id) => {
+    // The store cascades to categories, competitors and matches.
+    await tournamentStore.remove(id)
+    await refresh()
     setDeleteConfirm(null)
   }
 
-  const handleStatusChange = (id, status) => {
-    const updated = tournaments.map(t => (t.id === id ? { ...t, status } : t))
-    setTournaments(updated)
-    localStorage.setItem('tournaments', JSON.stringify(updated))
+  const handleStatusChange = async (id, status) => {
+    await tournamentStore.update(id, { status })
+    await refresh()
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static">
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
+      <PageBar>
         <Toolbar>
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">Admin Dashboard</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>Manage tournaments</Typography>
           </Box>
-          <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
-      </AppBar>
+      </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
