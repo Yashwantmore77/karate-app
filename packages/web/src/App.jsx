@@ -11,14 +11,10 @@ import AdminRouter from './routes/AdminRouter'
 import DisplayScoreboard from './pages/DisplayScoreboard'
 import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
-import { initializeMockData } from './utils/mockData'
 import { ConnectionProvider } from './state/ConnectionContext'
 import AppStage from './components/AppStage'
 import AppNav from './components/AppNav'
 import { AO_LIGHT, AKA_LIGHT, CYAN, INK, GLASS, TEXT } from './theme/tokens'
-
-// Initialize mock data on app start
-initializeMockData()
 
 const theme = createTheme({
   palette: {
