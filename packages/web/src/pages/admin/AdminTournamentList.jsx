@@ -101,6 +101,7 @@ export default function AdminTournamentList({ uid }) {
             <Typography variant="h6">Admin Dashboard</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>Manage tournaments</Typography>
           </Box>
+          <Button color="inherit" onClick={() => navigate('/admin/accounts')}>Accounts</Button>
           <Button color="inherit" onClick={() => signOut(auth)}>Sign out</Button>
         </Toolbar>
       </AppBar>
