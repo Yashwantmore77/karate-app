@@ -274,6 +274,22 @@ export async function listUsers({ q = '', page = 1, limit = 25 } = {}) {
   return { rows: ordered.slice(start, start + limit).map(strip), total: found.length }
 }
 
+/**
+ * Everyone who can be put on a match, for the assignment pickers.
+ *
+ * Deliberately not the account roster: this is readable by a referee building
+ * their own panel, so it carries only what is needed to choose a person and
+ * nothing about managing them. Admins are included because an admin may take
+ * a mat.
+ */
+export async function listAssignableOfficials() {
+  const users = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
+  return users
+    .filter((user) => ROLES.includes(user.role))
+    .map(({ uid, email, role, seat }) => ({ uid, email, role, ...(seat === undefined ? {} : { seat }) }))
+    .sort((a, b) => a.role.localeCompare(b.role) || String(a.email).localeCompare(String(b.email)))
+}
+
 export async function createUser(input) {
   const user = await (isMongoConfigured() ? createMongoUser(input) : createMemoryUser(input))
   return strip(user)

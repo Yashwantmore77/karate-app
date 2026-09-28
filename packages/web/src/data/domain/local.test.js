@@ -101,6 +101,50 @@ describe('local domain storage', () => {
     expect(await tournaments.list()).toEqual([])
   })
 
+  describe('paging and search', () => {
+    const enter = (n) => competitors.create('c1', { name: `Athlete ${String(n).padStart(2, '0')}`, bib: `${100 + n}`, age: 13 })
+
+    it('returns one page with the total behind it', async () => {
+      for (let i = 1; i <= 30; i += 1) await enter(i)
+      const first = await competitors.page('c1', { page: 1, limit: 10 })
+
+      expect(first.rows).toHaveLength(10)
+      expect(first.total).toBe(30)
+      expect(first.pages).toBe(3)
+    })
+
+    it('does not repeat a row between pages', async () => {
+      for (let i = 1; i <= 30; i += 1) await enter(i)
+      const a = await competitors.page('c1', { page: 1, limit: 10 })
+      const b = await competitors.page('c1', { page: 2, limit: 10 })
+      expect(a.rows.filter((x) => b.rows.some((y) => y.id === x.id))).toEqual([])
+    })
+
+    it('searches the fields the API searches, ignoring case', async () => {
+      await competitors.create('c1', { name: 'Aarav Deshmukh', bib: '101', age: 13 })
+      await competitors.create('c1', { name: 'Rohan Kulkarni', bib: '102', age: 13 })
+
+      expect((await competitors.page('c1', { q: 'AARAV' })).total).toBe(1)
+      expect((await competitors.page('c1', { q: '102' })).total).toBe(1)
+      expect((await competitors.page('c1', { q: 'nobody' })).total).toBe(0)
+    })
+
+    it('reports one page even when nothing matches', async () => {
+      const empty = await competitors.page('c1', { q: 'nothing' })
+      expect(empty).toMatchObject({ total: 0, pages: 1 })
+      expect(empty.rows).toEqual([])
+    })
+
+    it('pages tournaments and categories on their own fields', async () => {
+      await tournaments.create({ name: 'Spring Cup', location: 'Pune' })
+      await tournaments.create({ name: 'Winter Cup', location: 'Mumbai' })
+      expect((await tournaments.page({ q: 'mumbai' })).total).toBe(1)
+
+      await categories.create('t1', { name: 'U14 Boys', ageGroup: 'U14', division: 'Beginner' })
+      expect((await categories.page('t1', { q: 'u14' })).total).toBe(1)
+    })
+  })
+
   it('gives every row a distinct id', async () => {
     const ids = new Set()
     for (let i = 0; i < 50; i += 1) {

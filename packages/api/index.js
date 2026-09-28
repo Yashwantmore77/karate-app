@@ -10,6 +10,7 @@ import { security } from './middleware/security.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { authRoutes } from './routes/auth.js'
 import { userRoutes } from './routes/users.js'
+import { officialRoutes } from './routes/officials.js'
 import { tournamentRoutes } from './routes/tournaments.js'
 import { categoryRoutes } from './routes/categories.js'
 import { competitorRoutes } from './routes/competitors.js'
@@ -57,6 +58,7 @@ export function createApp() {
 
   app.use(`${API_BASE}/auth`, authRoutes())
   app.use(`${API_BASE}/users`, userRoutes())
+  app.use(`${API_BASE}/officials`, officialRoutes())
   app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores))
   app.use(`${API_BASE}/categories`, categories.flat)
   app.use(`${API_BASE}/competitors`, competitors.flat)

@@ -44,7 +44,7 @@ describe('api domain adapter', () => {
   it('unwraps the collection envelope on a list', async () => {
     respondWith({ tournaments: [{ id: 't1', name: 'Spring Cup' }] })
     expect(await tournaments.list()).toEqual([{ id: 't1', name: 'Spring Cup' }])
-    expect(lastCall().url).toBe('http://api.test/api/v1/tournaments')
+    expect(lastCall().url).toBe('http://api.test/api/v1/tournaments?page=1&limit=100')
   })
 
   it('creates a tournament with POST and unwraps the single document', async () => {
@@ -95,7 +95,7 @@ describe('api domain adapter', () => {
   it('nests categories under their tournament for listing and creating', async () => {
     respondWith({ categories: [] })
     await categories.list('t1')
-    expect(lastCall().url).toBe('http://api.test/api/v1/tournaments/t1/categories')
+    expect(lastCall().url).toBe('http://api.test/api/v1/tournaments/t1/categories?page=1&limit=100')
 
     respondWith({ category: { id: 'c1' } })
     await categories.create('t1', { name: 'U14 Boys' })
@@ -117,7 +117,7 @@ describe('api domain adapter', () => {
   it('nests competitors under their category', async () => {
     respondWith({ competitors: [] })
     await competitors.list('c1')
-    expect(lastCall().url).toBe('http://api.test/api/v1/categories/c1/competitors')
+    expect(lastCall().url).toBe('http://api.test/api/v1/categories/c1/competitors?page=1&limit=100')
 
     respondWith({ competitor: { id: 'p1' } })
     await competitors.create('c1', { name: 'Aiden Parker', bib: '101', age: 13 })
@@ -131,13 +131,40 @@ describe('api domain adapter', () => {
   it('nests matches under their category and patches them by id', async () => {
     respondWith({ matches: [] })
     await matches.list('c1')
-    expect(lastCall().url).toBe('http://api.test/api/v1/categories/c1/matches')
+    expect(lastCall().url).toBe('http://api.test/api/v1/categories/c1/matches?page=1&limit=100')
 
     respondWith({ match: { id: 'm1', winner: 'aka' } })
     await matches.update('c1', 'm1', { winner: 'aka' })
     expect(lastCall()).toMatchObject({
       url: 'http://api.test/api/v1/matches/m1', method: 'PATCH', body: { winner: 'aka' },
     })
+  })
+
+  it('asks for a page and hands back the counts a pager needs', async () => {
+    respondWith({ tournaments: [{ id: 't1' }], page: 2, limit: 10, total: 31, pages: 4 })
+    const result = await tournaments.page({ page: 2, limit: 10 })
+
+    expect(lastCall().url).toBe('http://api.test/api/v1/tournaments?page=2&limit=10')
+    expect(result).toEqual({ rows: [{ id: 't1' }], total: 31, pages: 4, page: 2 })
+  })
+
+  it('passes a search term through, and omits it when empty', async () => {
+    respondWith({ tournaments: [], page: 1, limit: 25, total: 0, pages: 1 })
+    await tournaments.page({ q: 'spring cup' })
+    expect(lastCall().url).toContain('q=spring+cup')
+
+    await tournaments.page({ q: '' })
+    expect(lastCall().url).not.toContain('q=')
+  })
+
+  it('pages the nested collections under their parent', async () => {
+    respondWith({ competitors: [], page: 1, limit: 25, total: 0, pages: 1 })
+    await competitors.page('c1', { page: 3, q: 'aarav' })
+    expect(lastCall().url).toBe('http://api.test/api/v1/categories/c1/competitors?page=3&limit=25&q=aarav')
+
+    respondWith({ categories: [], page: 1, limit: 25, total: 0, pages: 1 })
+    await categories.page('t1', {})
+    expect(lastCall().url).toBe('http://api.test/api/v1/tournaments/t1/categories?page=1&limit=25')
   })
 
   it('sends no content-type on a request with no body', async () => {

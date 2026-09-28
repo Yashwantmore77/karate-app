@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import { Container, Box, Toolbar, Typography, Button, TextField, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Alert, IconButton, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
 import { ArrowBack, Add, Edit, Delete, FileDownload } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import {
   tournaments as tournamentStore,
   categories as categoryStore,
@@ -23,25 +25,27 @@ export default function AdminCategoryDetail({ uid }) {
   const { tournamentId, categoryId } = useParams()
   const [tournament, setTournament] = useState(null)
   const [category, setCategory] = useState(null)
-  const [competitors, setCompetitors] = useState([])
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const refresh = () => competitorStore.list(categoryId).then(setCompetitors)
+  const {
+    rows: competitors, total, page, limit, search, setSearch, setPage, refresh, reset,
+  } = usePagedList(
+    useCallback((options) => competitorStore.page(categoryId, options), [categoryId]),
+    { deps: [categoryId] }
+  )
 
   useEffect(() => {
     let alive = true
     Promise.all([
       tournamentStore.get(tournamentId),
       categoryStore.get(tournamentId, categoryId),
-      competitorStore.list(categoryId),
-    ]).then(([t, c, rows]) => {
+    ]).then(([t, c]) => {
       if (!alive) return
       setTournament(t)
       setCategory(c)
-      setCompetitors(rows)
       setLoading(false)
     })
     return () => { alive = false }
@@ -64,7 +68,12 @@ export default function AdminCategoryDetail({ uid }) {
       // want the number it represents.
       const fields = { name: values.name, bib: values.bib, age: Number(values.age) }
       if (editingId) await competitorStore.update(categoryId, editingId, fields)
-      else await competitorStore.create(categoryId, fields)
+      else {
+        await competitorStore.create(categoryId, fields)
+        await reset()
+        handleCloseModal()
+        return
+      }
       await refresh()
       handleCloseModal()
     }
@@ -92,7 +101,10 @@ export default function AdminCategoryDetail({ uid }) {
     setDeleteConfirm(null)
   }
 
-  const handleExportCompetitors = () => {
+  const handleExportCompetitors = async () => {
+    // The whole roster, not the page on screen: an export that silently
+    // stopped at 25 rows would be worse than no export at all.
+    const everyone = await competitorStore.list(categoryId)
     downloadCSV(
       `${category?.name || 'category'}-competitors.csv`,
       [
@@ -100,7 +112,7 @@ export default function AdminCategoryDetail({ uid }) {
         { label: 'Name', value: (c) => c.name },
         { label: 'Age', value: (c) => c.age },
       ],
-      competitors
+      everyone
     )
   }
 
@@ -125,13 +137,14 @@ export default function AdminCategoryDetail({ uid }) {
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">Competitors ({competitors.length})</Typography>
+          <Typography variant="h6">Competitors ({total})</Typography>
+          <TableSearch value={search} onChange={setSearch} placeholder="Search name or bib" />
           <Stack direction="row" spacing={1}>
             <Button
               variant="outlined"
               startIcon={<FileDownload />}
               onClick={handleExportCompetitors}
-              disabled={competitors.length === 0}
+              disabled={total === 0}
             >
               Export CSV
             </Button>
@@ -142,9 +155,8 @@ export default function AdminCategoryDetail({ uid }) {
         </Box>
 
         {competitors.length === 0 ? (
-          <Paper elevation={0} sx={{ p: 3, textAlign: 'center', border: '1px dashed', borderColor: 'divider' }}>
-            <Typography color="text.secondary">No competitors yet</Typography>
-            <Typography variant="caption" color="text.secondary">Click "New Competitor" to add one</Typography>
+          <Paper elevation={0} sx={{ border: '1px dashed', borderColor: 'divider' }}>
+            <NoResults query={search} noun="competitors" />
           </Paper>
         ) : (
           <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
@@ -175,6 +187,7 @@ export default function AdminCategoryDetail({ uid }) {
                 ))}
               </TableBody>
             </Table>
+            <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
           </TableContainer>
         )}
       </Container>

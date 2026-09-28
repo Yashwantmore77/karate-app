@@ -20,9 +20,28 @@ const orNull = async (promise) => {
 // and ignored where the server addresses the row directly by id — keeping one
 // signature means no call site has to know which implementation it is talking to.
 
+// Page and search arrive as query parameters; the server answers with the rows
+// plus how many there are in total, which is what a pager needs to draw itself.
+const pageQuery = ({ page = 1, limit = 25, q = '' } = {}) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+  if (q) params.set('q', q)
+  return `?${params}`
+}
+
+const pageOf = (payload, key) => ({
+  rows: payload[key],
+  total: payload.total,
+  pages: payload.pages,
+  page: payload.page,
+})
+
 export const tournaments = {
   async list() {
-    return (await httpGet('/tournaments')).tournaments
+    // Everything, for callers that walk the tree rather than show a table.
+    return (await httpGet(`/tournaments${pageQuery({ limit: 100 })}`)).tournaments
+  },
+  async page(options) {
+    return pageOf(await httpGet(`/tournaments${pageQuery(options)}`), 'tournaments')
   },
   async get(id) {
     const res = await orNull(httpGet(`/tournaments/${id}`))
@@ -42,7 +61,10 @@ export const tournaments = {
 
 export const categories = {
   async list(tournamentId) {
-    return (await httpGet(`/tournaments/${tournamentId}/categories`)).categories
+    return (await httpGet(`/tournaments/${tournamentId}/categories${pageQuery({ limit: 100 })}`)).categories
+  },
+  async page(tournamentId, options) {
+    return pageOf(await httpGet(`/tournaments/${tournamentId}/categories${pageQuery(options)}`), 'categories')
   },
   async get(_tournamentId, id) {
     const res = await orNull(httpGet(`/categories/${id}`))
@@ -65,7 +87,10 @@ export const categories = {
 
 export const competitors = {
   async list(categoryId) {
-    return (await httpGet(`/categories/${categoryId}/competitors`)).competitors
+    return (await httpGet(`/categories/${categoryId}/competitors${pageQuery({ limit: 100 })}`)).competitors
+  },
+  async page(categoryId, options) {
+    return pageOf(await httpGet(`/categories/${categoryId}/competitors${pageQuery(options)}`), 'competitors')
   },
   async create(categoryId, doc) {
     return (await httpPost(`/categories/${categoryId}/competitors`, doc)).competitor
@@ -80,7 +105,10 @@ export const competitors = {
 
 export const matches = {
   async list(categoryId) {
-    return (await httpGet(`/categories/${categoryId}/matches`)).matches
+    return (await httpGet(`/categories/${categoryId}/matches${pageQuery({ limit: 100 })}`)).matches
+  },
+  async page(categoryId, options) {
+    return pageOf(await httpGet(`/categories/${categoryId}/matches${pageQuery(options)}`), 'matches')
   },
   async get(_categoryId, id) {
     const res = await orNull(httpGet(`/matches/${id}`))

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -9,6 +9,8 @@ import {
   Alert, FormHelperText,
 } from '@mui/material'
 import { ArrowBack, Edit, Delete, Add } from '@mui/icons-material'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import PageBar from '../../components/PageBar'
 import * as users from '../../data/users'
 
@@ -39,37 +41,30 @@ const messageFor = (err) => MESSAGES[err?.code] || 'Something went wrong. Try ag
 
 export default function AdminUserList({ uid }) {
   const navigate = useNavigate()
-  const [accounts, setAccounts] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [writeError, setWriteError] = useState(null)
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   const available = users.isAvailable()
+
+  const {
+    rows: accounts, total, page, limit, loading, error: loadError,
+    search, setSearch, setPage, refresh, reset,
+  } = usePagedList(
+    // With no server there are no accounts to fetch, so the list stays empty
+    // rather than calling an endpoint that does not exist.
+    useCallback((options) => (
+      available ? users.page(options) : Promise.resolve({ rows: [], total: 0, pages: 1 })
+    ), [available]),
+    { deps: [available] }
+  )
+
   const editing = editingId ? accounts.find((a) => a.uid === editingId) : null
-
-  const refresh = async () => {
-    try {
-      setAccounts(await users.list())
-      setError(null)
-    } catch (err) {
-      setError(messageFor(err))
-    }
-  }
-
-  useEffect(() => {
-    if (!available) {
-      setLoading(false)
-      return
-    }
-    let alive = true
-    users.list()
-      .then((rows) => { if (alive) setAccounts(rows) })
-      .catch((err) => { if (alive) setError(messageFor(err)) })
-      .finally(() => { if (alive) setLoading(false) })
-    return () => { alive = false }
-  }, [available])
+  // A failed read and a failed write are both worth showing, and only one
+  // can be on screen at a time.
+  const error = writeError || (loadError ? messageFor(loadError) : null)
+  const setError = setWriteError
 
   const formik = useFormik({
     initialValues: {
@@ -90,9 +85,13 @@ export default function AdminUserList({ uid }) {
       if (values.password) fields.password = values.password
 
       try {
-        if (editingId) await users.update(editingId, fields)
-        else await users.create(fields)
-        await refresh()
+        if (editingId) {
+          await users.update(editingId, fields)
+          await refresh()
+        } else {
+          await users.create(fields)
+          await reset()
+        }
         closeModal()
       } catch (err) {
         setError(messageFor(err))
@@ -145,7 +144,8 @@ export default function AdminUserList({ uid }) {
           <>
             {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
 
-            <Stack direction="row" justifyContent="flex-end" sx={{ mb: 3 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+              <TableSearch value={search} onChange={setSearch} placeholder="Search email or role" />
               <Button
                 variant="contained"
                 startIcon={<Add />}
@@ -156,8 +156,8 @@ export default function AdminUserList({ uid }) {
             </Stack>
 
             {loading ? null : accounts.length === 0 ? (
-              <Paper sx={{ p: 4, textAlign: 'center' }}>
-                <Typography color="text.secondary">No accounts yet</Typography>
+              <Paper>
+                <NoResults query={search} noun="accounts" />
               </Paper>
             ) : (
               <TableContainer component={Paper}>
@@ -200,6 +200,7 @@ export default function AdminUserList({ uid }) {
                     ))}
                   </TableBody>
                 </Table>
+                <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
               </TableContainer>
             )}
           </>

@@ -41,9 +41,33 @@ const patchIn = (key, id, patch) => {
 
 const removeFrom = (key, id) => write(key, read(key).filter((row) => row.id !== id))
 
+/**
+ * Pages and searches a stored list, mirroring what the API does server-side.
+ *
+ * Kept in step deliberately: a screen written against one implementation has
+ * to behave the same against the other, or the offline mode quietly becomes a
+ * different product.
+ */
+const pageFrom = (key, searchFields, { page = 1, limit = 25, q = '' } = {}) => {
+  const needle = q.trim().toLowerCase()
+  const found = read(key).filter((row) => (
+    !needle || searchFields.some((field) => String(row[field] ?? '').toLowerCase().includes(needle))
+  ))
+  const start = (page - 1) * limit
+  return {
+    rows: found.slice(start, start + limit),
+    total: found.length,
+    pages: Math.max(1, Math.ceil(found.length / limit)),
+    page,
+  }
+}
+
 export const tournaments = {
   async list() {
     return read(TOURNAMENTS)
+  },
+  async page(options) {
+    return pageFrom(TOURNAMENTS, ['name', 'location'], options)
   },
   async get(id) {
     return read(TOURNAMENTS).find((row) => row.id === id) || null
@@ -69,6 +93,9 @@ export const tournaments = {
 export const categories = {
   async list(tournamentId) {
     return read(categoriesKey(tournamentId))
+  },
+  async page(tournamentId, options) {
+    return pageFrom(categoriesKey(tournamentId), ['name', 'ageGroup', 'division'], options)
   },
   async get(tournamentId, id) {
     return read(categoriesKey(tournamentId)).find((row) => row.id === id) || null
@@ -105,6 +132,9 @@ export const competitors = {
   async list(categoryId) {
     return read(competitorsKey(categoryId))
   },
+  async page(categoryId, options) {
+    return pageFrom(competitorsKey(categoryId), ['name', 'bib'], options)
+  },
   async create(categoryId, doc) {
     return insertInto(competitorsKey(categoryId), { ...doc, categoryId }, 'comp')
   },
@@ -119,6 +149,9 @@ export const competitors = {
 export const matches = {
   async list(categoryId) {
     return read(matchesKey(categoryId))
+  },
+  async page(categoryId, options) {
+    return pageFrom(matchesKey(categoryId), ['status', 'winner'], options)
   },
   async get(categoryId, id) {
     return read(matchesKey(categoryId)).find((row) => row.id === id) || null

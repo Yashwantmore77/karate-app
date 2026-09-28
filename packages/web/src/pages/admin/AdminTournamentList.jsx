@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -9,6 +9,8 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { Edit, Delete, Visibility, Add } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
 
@@ -21,20 +23,13 @@ const validationSchema = Yup.object({
 
 export default function AdminTournamentList({ uid }) {
   const navigate = useNavigate()
-  const [tournaments, setTournaments] = useState([])
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  // One place to re-read from, so a write never has to guess what the store now
-  // holds — in API mode the server may have filled in fields we did not send.
-  const refresh = () => tournamentStore.list().then(setTournaments)
-
-  useEffect(() => {
-    let alive = true
-    tournamentStore.list().then((rows) => { if (alive) setTournaments(rows) })
-    return () => { alive = false }
-  }, [])
+  const {
+    rows: tournaments, total, page, limit, search, setSearch, setPage, refresh, reset,
+  } = usePagedList(useCallback((options) => tournamentStore.page(options), []))
 
   const editingTournament = editingId ? tournaments.find(t => t.id === editingId) : null
 
@@ -58,9 +53,14 @@ export default function AdminTournamentList({ uid }) {
         date: formatDate(values.date),
         template: values.template,
       }
-      if (editingId) await tournamentStore.update(editingId, fields)
-      else await tournamentStore.create(fields)
-      await refresh()
+      if (editingId) {
+        await tournamentStore.update(editingId, fields)
+        await refresh()
+      } else {
+        await tournamentStore.create(fields)
+        // A new tournament belongs on the first page, not wherever we were.
+        await reset()
+      }
       handleCloseModal()
     }
   })
@@ -105,21 +105,28 @@ export default function AdminTournamentList({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
-        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">Tournaments ({tournaments.length})</Typography>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={handleOpenCreate}
-          >
-            New Tournament
-          </Button>
+        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          {/* The count is the total behind the search, not the rows on screen. */}
+          <Typography variant="h6">Tournaments ({total})</Typography>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <TableSearch
+              value={search}
+              onChange={setSearch}
+              placeholder="Search name or location"
+            />
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={handleOpenCreate}
+            >
+              New Tournament
+            </Button>
+          </Box>
         </Box>
 
         {tournaments.length === 0 ? (
-          <Paper elevation={0} sx={{ p: 3, textAlign: 'center', border: '1px dashed', borderColor: 'divider' }}>
-            <Typography color="text.secondary">No tournaments yet</Typography>
-            <Typography variant="caption" color="text.secondary">Click "New Tournament" to create one</Typography>
+          <Paper elevation={0} sx={{ border: '1px dashed', borderColor: 'divider' }}>
+            <NoResults query={search} noun="tournaments" />
           </Paper>
         ) : (
           <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
@@ -197,6 +204,7 @@ export default function AdminTournamentList({ uid }) {
                 ))}
               </TableBody>
             </Table>
+            <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
           </TableContainer>
         )}
       </Container>
