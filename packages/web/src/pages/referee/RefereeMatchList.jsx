@@ -16,6 +16,10 @@ import {
 import { isExpired } from '../../utils/dateUtils'
 import { downloadCSV } from '../../utils/csvExport'
 import StandingsTable from '../../components/StandingsTable'
+import * as users from '../../data/users'
+
+// Used until a tournament says otherwise; matches the server's own default.
+const DEFAULT_JUDGE_COUNT = 4
 
 const validationSchema = Yup.object({
   redId: Yup.string().required('Select red competitor'),
@@ -31,6 +35,11 @@ const MESSAGES = {
   invalid_redId: 'That red competitor is not entered in this category.',
   invalid_blueId: 'That blue competitor is not entered in this category.',
   not_found: 'This category no longer exists.',
+  invalid_refereeId: 'That person cannot referee a bout.',
+  invalid_judgeIds: 'One of those judges is not a judge, or is listed twice.',
+  referee_also_judge: 'The referee cannot also sit on the judging panel.',
+  too_many_judges: 'That is more judges than this tournament seats.',
+  same_competitor: 'A bout needs two different competitors.',
 }
 const messageFor = (err) => MESSAGES[err?.code] || 'Could not save that. Try again.'
 
@@ -50,8 +59,14 @@ export default function RefereeMatchList({ uid, profile }) {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [error, setError] = useState(null)
 
+  // Who can be put on a bout. Empty in local mode, where there is no server
+  // holding accounts, so the pickers simply offer nothing.
+  const [referees, setReferees] = useState([])
+  const [judges, setJudges] = useState([])
+  const judgeLimit = tournament?.judgeCount ?? DEFAULT_JUDGE_COUNT
+
   const formik = useFormik({
-    initialValues: { redId: '', blueId: '' },
+    initialValues: { redId: '', blueId: '', refereeId: '', judgeIds: [] },
     validationSchema,
     validateOnChange: false,
     validateOnBlur: false,
@@ -65,6 +80,10 @@ export default function RefereeMatchList({ uid, profile }) {
           redId: values.redId,
           blueId: values.blueId,
           status: 'open',
+          // Omitted rather than sent empty: the schema rejects an unknown
+          // shape, and "no referee" is the absence of the field.
+          ...(values.refereeId ? { refereeId: values.refereeId } : {}),
+          ...(values.judgeIds.length ? { judgeIds: values.judgeIds } : {}),
         })
       } catch (err) {
         // Kept in the dialog rather than behind it: the selections are still
@@ -98,6 +117,21 @@ export default function RefereeMatchList({ uid, profile }) {
     })()
     return () => { alive = false }
   }, [categoryId])
+
+  useEffect(() => {
+    if (!isRemote) return
+    let alive = true
+    Promise.all([users.officials('referee'), users.officials('judge')])
+      .then(([refs, js]) => {
+        if (!alive) return
+        setReferees(refs)
+        setJudges(js)
+      })
+      // A referee who cannot read the roster can still schedule a bout; they
+      // just get no pickers, which is better than a broken dialog.
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   const getCompetitor = (id) => competitors.find(c => c.id === id)
 
@@ -322,6 +356,63 @@ export default function RefereeMatchList({ uid, profile }) {
                 ))}
               </Select>
               {formik.errors.blueId && <FormHelperText>{formik.errors.blueId}</FormHelperText>}
+            </FormControl>
+
+            {/* Officials are optional: a bout is often listed before the panel
+                for it is settled, and the server accepts it either way. */}
+            <Divider sx={{ my: 2 }}>
+              <Typography variant="caption" color="text.secondary">Officials (optional)</Typography>
+            </Divider>
+
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Referee</InputLabel>
+              <Select
+                name="refereeId"
+                value={formik.values.refereeId}
+                label="Referee"
+                onChange={formik.handleChange}
+              >
+                <MenuItem value="">Unassigned</MenuItem>
+                {referees.map((r) => (
+                  <MenuItem key={r.uid} value={r.uid}>{r.email}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Judges</InputLabel>
+              <Select
+                multiple
+                name="judgeIds"
+                value={formik.values.judgeIds}
+                label="Judges"
+                onChange={formik.handleChange}
+                renderValue={(selected) => (
+                  selected.length === 0
+                    ? 'None'
+                    : selected
+                      .map((id) => judges.find((j) => j.uid === id)?.email || id)
+                      .join(', ')
+                )}
+              >
+                {judges.map((j) => (
+                  <MenuItem
+                    key={j.uid}
+                    value={j.uid}
+                    // The panel is capped by the tournament, so the surplus is
+                    // unpickable rather than rejected after the fact.
+                    disabled={
+                      !formik.values.judgeIds.includes(j.uid)
+                      && formik.values.judgeIds.length >= judgeLimit
+                    }
+                  >
+                    {j.email}{j.seat ? ` · seat ${j.seat}` : ''}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                {formik.values.judgeIds.length} of {judgeLimit} selected
+              </FormHelperText>
             </FormControl>
           </Box>
         </DialogContent>

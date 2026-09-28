@@ -12,6 +12,19 @@ import { isExpired } from '../../utils/dateUtils'
  * a request per category, and doing them one after another would make the page
  * wait for the sum of them instead of the slowest.
  */
+/**
+ * True when this bout is one of mine.
+ *
+ * A match nobody has been put on is everybody's: the schedule is often built
+ * before the panels are, and hiding unassigned bouts would leave a judge
+ * staring at an empty screen on the day.
+ */
+export const isAssignedTo = (match, uid) => {
+  if (!uid) return true
+  const assigned = [match.refereeId, ...(match.judgeIds || [])].filter(Boolean)
+  return assigned.length === 0 || assigned.includes(uid)
+}
+
 export async function collectMatches({ skipExpired = false } = {}) {
   const all = await tournaments.list()
   const relevant = skipExpired ? all.filter((t) => !isExpired(t.date)) : all

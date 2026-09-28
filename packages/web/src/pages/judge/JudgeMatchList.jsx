@@ -4,7 +4,7 @@ import { Container, Box, Toolbar, Typography, Button, Grid, Paper, Alert, Chip, 
 import { Visibility } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { competitors as competitorStore } from '../../data/domain'
-import { collectMatches } from '../../data/domain/tree'
+import { collectMatches, isAssignedTo } from '../../data/domain/tree'
 
 export default function JudgeMatchList({ uid, profile }) {
   const navigate = useNavigate()
@@ -16,8 +16,11 @@ export default function JudgeMatchList({ uid, profile }) {
   useEffect(() => {
     let alive = true
     ;(async () => {
+      // Only the bouts this judge is sitting on, plus any that nobody has been
+      // assigned to yet — a panel is often settled after the schedule is.
       const open = (await collectMatches({ skipExpired: true }))
         .filter((m) => m.status === 'open')
+        .filter((m) => isAssignedTo(m, uid))
 
       const categoryIds = [...new Set(open.map((m) => m.categoryId))]
       const rosters = await Promise.all(categoryIds.map((id) => competitorStore.list(id)))
@@ -27,7 +30,7 @@ export default function JudgeMatchList({ uid, profile }) {
       setCompetitorsById(Object.fromEntries(rosters.flat().map((c) => [c.id, c])))
     })()
     return () => { alive = false }
-  }, [])
+  }, [uid])
 
   const getCompetitor = (_categoryId, id) => competitorsById[id] || null
 
