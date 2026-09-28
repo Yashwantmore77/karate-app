@@ -11,6 +11,7 @@ import {
   categories as categoryStore,
   competitors as competitorStore,
   matches as matchStore,
+  isRemote,
 } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 import { downloadCSV } from '../../utils/csvExport'
@@ -21,15 +22,33 @@ const validationSchema = Yup.object({
   blueId: Yup.string().required('Select blue competitor'),
 })
 
-export default function RefereeMatchList({ uid }) {
+// The server answers with a code; these are the ones a person can act on.
+// Without them a refused write looked exactly like a broken button: the
+// promise rejected, nothing caught it, and the dialog just sat there.
+const MESSAGES = {
+  forbidden: 'Your role cannot schedule matches. Ask an administrator to add it.',
+  unauthorized: 'Your session has expired. Sign in again.',
+  invalid_redId: 'That red competitor is not entered in this category.',
+  invalid_blueId: 'That blue competitor is not entered in this category.',
+  not_found: 'This category no longer exists.',
+}
+const messageFor = (err) => MESSAGES[err?.code] || 'Could not save that. Try again.'
+
+export default function RefereeMatchList({ uid, profile }) {
   const navigate = useNavigate()
   const { categoryId } = useParams()
+
+  // The server lets a referee schedule a bout but not remove one, so the icon
+  // is hidden rather than left to fail on click. Local mode has no server to
+  // refuse it, and hiding it there would take away something that works.
+  const canDelete = !isRemote || profile?.role === 'admin'
   const [category, setCategory] = useState(null)
   const [tournament, setTournament] = useState(null)
   const [competitors, setCompetitors] = useState([])
   const [matches, setMatches] = useState([])
   const [openModal, setOpenModal] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [error, setError] = useState(null)
 
   const formik = useFormik({
     initialValues: { redId: '', blueId: '' },
@@ -41,11 +60,19 @@ export default function RefereeMatchList({ uid }) {
         formik.setFieldError('blueId', 'Competitors must be different')
         return
       }
-      await matchStore.create(categoryId, {
-        redId: values.redId,
-        blueId: values.blueId,
-        status: 'open',
-      })
+      try {
+        await matchStore.create(categoryId, {
+          redId: values.redId,
+          blueId: values.blueId,
+          status: 'open',
+        })
+      } catch (err) {
+        // Kept in the dialog rather than behind it: the selections are still
+        // on screen, and closing over a failure would look like it worked.
+        setError(messageFor(err))
+        return
+      }
+      setError(null)
       setMatches(await matchStore.list(categoryId))
       formik.resetForm()
       setOpenModal(false)
@@ -80,8 +107,13 @@ export default function RefereeMatchList({ uid }) {
     }
     localStorage.removeItem(`match-control-${matchId}`)
 
-    await matchStore.remove(categoryId, matchId)
-    setMatches(await matchStore.list(categoryId))
+    try {
+      await matchStore.remove(categoryId, matchId)
+      setError(null)
+      setMatches(await matchStore.list(categoryId))
+    } catch (err) {
+      setError(messageFor(err))
+    }
     setDeleteConfirm(null)
   }
 
@@ -119,6 +151,11 @@ export default function RefereeMatchList({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
+        {/* A delete refused by the server surfaces here, where the table is. */}
+        {error && !openModal && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>
+        )}
+
         {tournamentExpired && (
           <Alert severity="error" sx={{ mb: 2 }}>
             Tournament expired on {new Date(tournament.date).toLocaleDateString()}. You can view matches but cannot create new ones.
@@ -139,7 +176,7 @@ export default function RefereeMatchList({ uid }) {
             <Button
               variant="contained"
               startIcon={<Add />}
-              onClick={() => setOpenModal(true)}
+              onClick={() => { setError(null); setOpenModal(true) }}
               disabled={competitors.length < 2 || tournamentExpired}
               title={
                 tournamentExpired
@@ -210,14 +247,16 @@ export default function RefereeMatchList({ uid }) {
                         >
                           <Visibility fontSize="small" />
                         </IconButton>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => setDeleteConfirm(m.id)}
-                          title="Delete Match"
-                        >
-                          <Delete fontSize="small" />
-                        </IconButton>
+                        {canDelete && (
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => setDeleteConfirm(m.id)}
+                            title="Delete Match"
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        )}
                       </TableCell>
                     </TableRow>
                   )
@@ -231,9 +270,13 @@ export default function RefereeMatchList({ uid }) {
         <StandingsTable competitors={competitors} matches={matches} />
       </Container>
 
-      <Dialog open={openModal} onClose={() => { setOpenModal(false); formik.resetForm() }} maxWidth="sm" fullWidth>
+      <Dialog open={openModal} onClose={() => { setOpenModal(false); setError(null); formik.resetForm() }} maxWidth="sm" fullWidth>
         <DialogTitle>Create Match</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>
+          )}
+
           <Box sx={{ mb: 2, p: 2, bgcolor: 'info.main', borderRadius: 1, color: 'white' }}>
             <Stack direction="row" spacing={3}>
               <Box>

@@ -10,6 +10,17 @@ const nowIso = () => new Date().toISOString()
 const matchesFilter = (row, filter) =>
   Object.entries(filter).every(([field, value]) => row[field] === value)
 
+// A search term goes into a regex on the Mongo side, so every character that
+// means something to a regex engine is neutered first. Without this, a search
+// for "(a+)+b" is a denial of service that needs no credentials.
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const matchesSearch = (row, q, fields) => {
+  if (!q || fields.length === 0) return true
+  const needle = q.toLowerCase()
+  return fields.some((field) => String(row[field] ?? '').toLowerCase().includes(needle))
+}
+
 function memoryCollection(name) {
   const rows = new Map()
 
@@ -17,6 +28,15 @@ function memoryCollection(name) {
     name,
     async list(filter = {}) {
       return [...rows.values()].filter((row) => matchesFilter(row, filter))
+    },
+    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25 } = {}) {
+      const found = [...rows.values()]
+        .filter((row) => matchesFilter(row, filter))
+        .filter((row) => matchesSearch(row, q, searchFields))
+      const start = (page - 1) * limit
+      // Total counts everything the search matched, not the page — the caller
+      // needs it to know how many pages there are.
+      return { rows: found.slice(start, start + limit), total: found.length }
     },
     async get(id) {
       return rows.get(id) ?? null
@@ -60,6 +80,25 @@ function mongoCollection(name) {
     name,
     async list(filter = {}) {
       return (await collection()).find(filter, withoutInternalId).toArray()
+    },
+    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25 } = {}) {
+      const query = { ...filter }
+      if (q && searchFields.length) {
+        const pattern = new RegExp(escapeRegex(q), 'i')
+        query.$or = searchFields.map((field) => ({ [field]: pattern }))
+      }
+      const col = await collection()
+      // Ordered so paging is stable: without a sort, skip/limit can repeat or
+      // drop rows between pages as the storage engine pleases.
+      const [rows, total] = await Promise.all([
+        col.find(query, withoutInternalId)
+          .sort({ createdAt: 1, id: 1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .toArray(),
+        col.countDocuments(query),
+      ])
+      return { rows, total }
     },
     async get(id) {
       return (await collection()).findOne({ id }, withoutInternalId)

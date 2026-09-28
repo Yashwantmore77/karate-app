@@ -47,6 +47,15 @@ function coerce(field, raw, rule) {
       if (!isPlainObject(raw)) reject()
       return raw
     }
+    case 'array': {
+      if (!Array.isArray(raw)) reject()
+      if (rule.maxItems !== undefined && raw.length > rule.maxItems) reject()
+      // Items report under the field's own name rather than an index, so the
+      // caller gets one code to branch on instead of invalid_judgeIds[2].
+      const items = raw.map((item) => coerce(field, item, rule.items))
+      if (rule.unique && new Set(items).size !== items.length) reject()
+      return items
+    }
     default:
       throw new Error(`unsupported schema type: ${rule.type}`)
   }

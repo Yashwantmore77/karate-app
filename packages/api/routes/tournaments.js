@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, requireRole } from '../auth/middleware.js'
 import { bodyReader, loadOrFail } from './resource.js'
+import { readPageQuery, pageMeta } from '../lib/pagination.js'
 
 const TOURNAMENT_SCHEMA = {
   name: { type: 'string', required: true, min: 3, max: 120 },
@@ -10,6 +11,9 @@ const TOURNAMENT_SCHEMA = {
   date: { type: 'string', required: true, pattern: /^\d{4}-\d{2}-\d{2}$/, max: 10 },
   template: { type: 'enum', values: ['kata', 'kumite'], required: true },
   status: { type: 'enum', values: ['draft', 'active', 'completed'], default: 'draft' },
+  // How many judges sit on a panel here. Four is the usual WKF panel, but
+  // smaller events run three or two, so it is the tournament's to decide.
+  judgeCount: { type: 'integer', min: 1, max: 8, default: 4 },
 }
 
 export function tournamentRoutes(stores) {
@@ -21,7 +25,13 @@ export function tournamentRoutes(stores) {
   // what is on before they can be sent to a mat.
   router.use(requireAuth)
 
-  router.get('/', async (_req, res) => res.json({ tournaments: await tournaments.list() }))
+  router.get('/', async (req, res) => {
+    const { page, limit, q } = readPageQuery(req.query)
+    const { rows, total } = await tournaments.paginate({}, {
+      q, searchFields: ['name', 'location'], page, limit,
+    })
+    res.json({ tournaments: rows, ...pageMeta({ page, limit, total }) })
+  })
 
   router.get('/:id', async (req, res) => {
     res.json({ tournament: await loadOrFail(tournaments, req.params.id) })

@@ -252,9 +252,26 @@ export async function findUser(uid) {
   return user ? strip(user) : null
 }
 
-export async function listUsers() {
+/**
+ * The roster, a page at a time, searchable by address or role.
+ *
+ * Paged in memory for both backends: the account list is small by nature —
+ * the officials at one venue — and a Mongo-side skip/limit would buy nothing
+ * while splitting the search rules across two implementations.
+ */
+export async function listUsers({ q = '', page = 1, limit = 25 } = {}) {
   const users = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
-  return users.map(strip)
+  const needle = q.trim().toLowerCase()
+
+  const found = needle
+    ? users.filter((user) =>
+      String(user.email || '').toLowerCase().includes(needle)
+      || String(user.role || '').toLowerCase().includes(needle))
+    : users
+
+  const ordered = [...found].sort((a, b) => String(a.email).localeCompare(String(b.email)))
+  const start = (page - 1) * limit
+  return { rows: ordered.slice(start, start + limit).map(strip), total: found.length }
 }
 
 export async function createUser(input) {

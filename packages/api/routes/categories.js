@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, requireRole } from '../auth/middleware.js'
 import { bodyReader, loadOrFail } from './resource.js'
+import { readPageQuery, pageMeta } from '../lib/pagination.js'
 
 const CATEGORY_SCHEMA = {
   name: { type: 'string', required: true, min: 1, max: 120 },
@@ -28,7 +29,11 @@ export function categoryRoutes(stores) {
 
   nested.get('/:tournamentId/categories', async (req, res) => {
     await loadOrFail(tournaments, req.params.tournamentId)
-    res.json({ categories: await categories.list({ tournamentId: req.params.tournamentId }) })
+    const { page, limit, q } = readPageQuery(req.query)
+    const { rows, total } = await categories.paginate({ tournamentId: req.params.tournamentId }, {
+      q, searchFields: ['name', 'ageGroup', 'division'], page, limit,
+    })
+    res.json({ categories: rows, ...pageMeta({ page, limit, total }) })
   })
 
   nested.post('/:tournamentId/categories', requireRole('admin'), async (req, res) => {

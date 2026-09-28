@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { listUsers, createUser, updateUser, deleteUser } from '../auth/users.js'
 import { requireAuth, requireRole } from '../auth/middleware.js'
 import { badRequest } from '../lib/errors.js'
+import { readPageQuery, pageMeta } from '../lib/pagination.js'
 
 /**
  * Account administration. There is no self-service signup anywhere in the
@@ -12,7 +13,11 @@ export function userRoutes() {
   const router = Router()
   router.use(requireAuth, requireRole('admin'))
 
-  router.get('/', async (_req, res) => res.json({ users: await listUsers() }))
+  router.get('/', async (req, res) => {
+    const { page, limit, q } = readPageQuery(req.query)
+    const { rows, total } = await listUsers({ q, page, limit })
+    res.json({ users: rows, ...pageMeta({ page, limit, total }) })
+  })
 
   router.post('/', async (req, res) => {
     res.status(201).json({ user: await createUser(req.body) })
