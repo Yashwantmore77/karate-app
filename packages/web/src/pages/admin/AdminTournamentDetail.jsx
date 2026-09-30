@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import { Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, IconButton, Chip, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
 import { ArrowBack, Edit, Delete, Add, Visibility } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 
 const validationSchema = Yup.object({
@@ -18,21 +20,24 @@ export default function AdminTournamentDetail({ uid }) {
   const navigate = useNavigate()
   const { tournamentId } = useParams()
   const [tournament, setTournament] = useState(null)
-  const [categories, setCategories] = useState([])
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const refresh = () => categoryStore.list(tournamentId).then(setCategories)
+  const {
+    rows: categories, total, page, limit, search, setSearch, setPage, refresh, reset,
+  } = usePagedList(
+    useCallback((options) => categoryStore.page(tournamentId, options), [tournamentId]),
+    { deps: [tournamentId] }
+  )
 
   useEffect(() => {
     let alive = true
-    Promise.all([tournamentStore.get(tournamentId), categoryStore.list(tournamentId)])
-      .then(([t, rows]) => {
+    tournamentStore.get(tournamentId)
+      .then((t) => {
         if (!alive) return
         setTournament(t)
-        setCategories(rows)
         setLoading(false)
       })
     return () => { alive = false }
@@ -115,7 +120,8 @@ export default function AdminTournamentDetail({ uid }) {
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">Categories ({categories.length})</Typography>
+          <Typography variant="h6">Categories ({total})</Typography>
+          <TableSearch value={search} onChange={setSearch} placeholder="Search name, age or division" />
           <Button
             variant="contained"
             startIcon={<Add />}
@@ -127,7 +133,7 @@ export default function AdminTournamentDetail({ uid }) {
 
         {categories.length === 0 ? (
           <Paper elevation={0} sx={{ p: 3, textAlign: 'center', border: '1px dashed', borderColor: 'divider' }}>
-            <Typography color="text.secondary">No categories yet</Typography>
+            <NoResults query={search} noun="categories" />
             <Typography variant="caption" color="text.secondary">Click "New Category" to create one</Typography>
           </Paper>
         ) : (
@@ -181,6 +187,7 @@ export default function AdminTournamentDetail({ uid }) {
                 ))}
               </TableBody>
             </Table>
+            <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
           </TableContainer>
         )}
       </Container>

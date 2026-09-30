@@ -59,18 +59,47 @@ export async function syncTime() {
 export function openSocketMatch(matchId, { control = false } = {}) {
   const s = connect()
   let listeners = new Set()
+  let statusListeners = new Set()
   let state = null
   let seq = 0
+
+  // Asking for control is not the same as having it: the server gives a mat to
+  // one socket, and everyone else is a spectator whose commands are refused.
+  // The screen has to be able to tell the difference, or it shows live-looking
+  // buttons that quietly do nothing.
+  let controllerId = null
+  let lastError = null
 
   const push = (next) => {
     state = next
     listeners.forEach((cb) => cb(next))
   }
 
+  const statusOf = () => ({
+    // Before the first snapshot arrives nothing is known, so the screen is told
+    // "not yours" rather than being allowed to assume it is.
+    holdsControl: control && !!s.id && controllerId === s.id,
+    controllerId,
+    contested: control && !!controllerId && controllerId !== s.id,
+    lastError,
+  })
+
+  const pushStatus = () => {
+    const status = statusOf()
+    statusListeners.forEach((cb) => cb(status))
+  }
+
+  const setError = (code) => {
+    lastError = code
+    pushStatus()
+  }
+
   const onSnapshot = (snap) => {
     if (!snap || snap.matchId !== matchId) return
     seq = snap.seq
+    controllerId = snap.controllerId ?? null
     push(snap.state)
+    pushStatus()
   }
 
   const onEvent = (event) => {
@@ -81,10 +110,21 @@ export function openSocketMatch(matchId, { control = false } = {}) {
     push(event.state)
   }
 
+  // The mat changing hands is its own event: whoever just lost it needs to know
+  // before they reach for a button.
+  const onControl = (msg) => {
+    if (!msg || msg.matchId !== matchId) return
+    controllerId = msg.controllerId ?? null
+    if (msg.takenFrom && msg.takenFrom === s.id) lastError = 'taken_over'
+    else if (controllerId === s.id) lastError = null
+    pushStatus()
+  }
+
   const join = () => s.emit('match:join', { matchId, control }, onSnapshot)
 
   s.on('match:event', onEvent)
   s.on('match:snapshot', onSnapshot)
+  s.on('match:control', onControl)
   s.on('connect', join)
   if (s.connected) join()
 
@@ -95,15 +135,45 @@ export function openSocketMatch(matchId, { control = false } = {}) {
       if (state) cb(state)
       return () => listeners.delete(cb)
     },
+    subscribeStatus(cb) {
+      statusListeners.add(cb)
+      cb(statusOf())
+      return () => statusListeners.delete(cb)
+    },
     send(cmd, payload) {
       if (!control) return
-      s.emit('match:cmd', { matchId, cmd, payload, clientEventId: `${Date.now()}-${Math.random()}` })
+      // The ack is the only place the server can say no. Emitting without one
+      // threw away every refusal, which is what made a mat someone else held
+      // look like a broken console.
+      s.emit(
+        'match:cmd',
+        { matchId, cmd, payload, clientEventId: `${Date.now()}-${Math.random()}` },
+        (reply) => {
+          if (reply?.error) setError(reply.error)
+          else if (lastError) setError(null)
+        }
+      )
+    },
+    takeover() {
+      return new Promise((resolve) => {
+        s.emit('match:takeover', { matchId }, (reply) => {
+          if (reply?.error) setError(reply.error)
+          else {
+            controllerId = reply?.controllerId ?? controllerId
+            lastError = null
+            pushStatus()
+          }
+          resolve(reply)
+        })
+      })
     },
     close() {
       s.off('match:event', onEvent)
       s.off('match:snapshot', onSnapshot)
+      s.off('match:control', onControl)
       s.off('connect', join)
       listeners = new Set()
+      statusListeners = new Set()
     },
   }
 }

@@ -106,6 +106,29 @@ export function createApp() {
       io.to(matchId).emit('match:control', { matchId, controllerId: room.controllerId })
     })
 
+    /**
+     * Seizes a mat someone else holds.
+     *
+     * Deliberate and explicit, because control is otherwise only released on
+     * disconnect: a tab that died without the server noticing keeps a mat
+     * forever, and every referee after it presses dead buttons. The loser is
+     * told, so a mat never changes hands silently mid-bout.
+     */
+    socket.on('match:takeover', ({ matchId } = {}, ack) => {
+      const room = rooms.get(matchId)
+      if (!room) return ack?.({ error: 'unknown_match' })
+      if (!canControlMat(socket.user)) return ack?.({ error: 'forbidden' })
+
+      const previousId = room.controllerId
+      room.claim(socket.id, { force: true })
+      io.to(matchId).emit('match:control', {
+        matchId,
+        controllerId: room.controllerId,
+        takenFrom: previousId,
+      })
+      ack?.({ ok: true, controllerId: room.controllerId })
+    })
+
     socket.on('match:cmd', ({ matchId, cmd, payload, clientEventId } = {}, ack) => {
       const room = rooms.get(matchId)
       if (!room) return ack?.({ error: 'unknown_match' })

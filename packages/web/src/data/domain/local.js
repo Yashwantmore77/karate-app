@@ -41,6 +41,14 @@ const patchIn = (key, id, patch) => {
 
 const removeFrom = (key, id) => write(key, read(key).filter((row) => row.id !== id))
 
+// Matches the server's rule: a bout nobody has been put on belongs to everyone,
+// because schedules are built before panels are. Defined here rather than
+// imported, since the shared helper sits above this module.
+const onPanel = (match, uid) => {
+  const panel = [match.refereeId, ...(match.judgeIds || [])].filter(Boolean)
+  return panel.length === 0 || panel.includes(uid)
+}
+
 /**
  * Pages and searches a stored list, mirroring what the API does server-side.
  *
@@ -169,6 +177,47 @@ export const matches = {
       }
     }
     return null
+  },
+  /**
+   * Matches across the whole event, with the names of what they sit under.
+   *
+   * The server answers this from one query; here the keys are grouped by
+   * category, so there is no way to reach it but to walk them. Same shape out,
+   * so the screens cannot tell which side they are on.
+   */
+  async feed({ status, mine, categoryId, page = 1, limit = 25, q = '' } = {}) {
+    const all = []
+    for (const tournament of read(TOURNAMENTS)) {
+      for (const category of read(categoriesKey(tournament.id))) {
+        if (categoryId && category.id !== categoryId) continue
+        for (const match of read(matchesKey(category.id))) {
+          all.push({
+            ...match,
+            categoryId: match.categoryId || category.id,
+            category: category.name,
+            tournament: tournament.name,
+            tournamentId: tournament.id,
+            tournamentDate: tournament.date,
+          })
+        }
+      }
+    }
+
+    const needle = q.trim().toLowerCase()
+    const found = all.filter((match) => {
+      if (status && match.status !== status) return false
+      if (mine && !onPanel(match, mine)) return false
+      if (needle && !['status', 'winner'].some((f) => String(match[f] ?? '').toLowerCase().includes(needle))) return false
+      return true
+    })
+
+    const start = (page - 1) * limit
+    return {
+      rows: found.slice(start, start + limit),
+      total: found.length,
+      pages: Math.max(1, Math.ceil(found.length / limit)),
+      page,
+    }
   },
   async create(categoryId, doc) {
     return insertInto(matchesKey(categoryId), { ...doc, categoryId }, 'match')

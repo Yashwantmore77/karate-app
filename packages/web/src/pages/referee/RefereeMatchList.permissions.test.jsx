@@ -12,7 +12,7 @@ const domain = vi.hoisted(() => ({
   tournaments: { get: vi.fn() },
   categories: { find: vi.fn() },
   competitors: { list: vi.fn() },
-  matches: { list: vi.fn(), create: vi.fn(), remove: vi.fn() },
+  matches: { list: vi.fn(), page: vi.fn(), create: vi.fn(), remove: vi.fn() },
 }))
 vi.mock('../../data/domain', () => domain)
 
@@ -58,6 +58,7 @@ beforeEach(() => {
   domain.tournaments.get.mockResolvedValue({ id: 't1', date: future.toISOString().split('T')[0] })
   domain.competitors.list.mockResolvedValue(COMPETITORS)
   domain.matches.list.mockResolvedValue([A_MATCH])
+  domain.matches.page.mockResolvedValue({ rows: [A_MATCH], total: 1, pages: 1, page: 1 })
   domain.matches.create.mockResolvedValue(A_MATCH)
   domain.matches.remove.mockResolvedValue(null)
 })

@@ -1,36 +1,41 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Container, Box, Toolbar, Typography, Button, Grid, Paper, Alert, Chip, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, IconButton } from '@mui/material'
 import { Visibility } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
-import { competitors as competitorStore } from '../../data/domain'
-import { collectMatches, isAssignedTo } from '../../data/domain/tree'
+import { competitors as competitorStore, matches as matchStore } from '../../data/domain'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 
 export default function JudgeMatchList({ uid, profile }) {
   const navigate = useNavigate()
-  const [matches, setMatches] = useState([])
   // Competitors are resolved up front and held by id: the table renders a name
   // per side, and a read per cell cannot be done once reads are asynchronous.
   const [competitorsById, setCompetitorsById] = useState({})
 
+  // Open bouts this judge is sitting on, plus any nobody has been put on yet.
+  // Both the filtering and the paging happen on the server: walking every
+  // category here to then throw most of it away grows with the tournament.
+  const {
+    rows: matches, total, page, limit, search, setSearch, setPage, loading,
+  } = usePagedList(
+    useCallback(
+      (options) => matchStore.feed({ ...options, status: 'open', mine: uid }),
+      [uid]
+    ),
+    { deps: [uid] }
+  )
+
   useEffect(() => {
+    if (matches.length === 0) return
     let alive = true
-    ;(async () => {
-      // Only the bouts this judge is sitting on, plus any that nobody has been
-      // assigned to yet — a panel is often settled after the schedule is.
-      const open = (await collectMatches({ skipExpired: true }))
-        .filter((m) => m.status === 'open')
-        .filter((m) => isAssignedTo(m, uid))
-
-      const categoryIds = [...new Set(open.map((m) => m.categoryId))]
-      const rosters = await Promise.all(categoryIds.map((id) => competitorStore.list(id)))
-
-      if (!alive) return
-      setMatches(open)
-      setCompetitorsById(Object.fromEntries(rosters.flat().map((c) => [c.id, c])))
-    })()
+    const categoryIds = [...new Set(matches.map((m) => m.categoryId).filter(Boolean))]
+    Promise.all(categoryIds.map((id) => competitorStore.list(id)))
+      .then((rosters) => {
+        if (alive) setCompetitorsById(Object.fromEntries(rosters.flat().map((c) => [c.id, c])))
+      })
     return () => { alive = false }
-  }, [uid])
+  }, [matches])
 
   const getCompetitor = (_categoryId, id) => competitorsById[id] || null
 
@@ -40,7 +45,7 @@ export default function JudgeMatchList({ uid, profile }) {
         <Toolbar>
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">Judge</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9 }}>Judge #{profile?.seat || '?'} • {matches.length} matches live</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.9 }}>Judge #{profile?.seat || '?'} • {total} matches live</Typography>
           </Box>
         </Toolbar>
       </PageBar>
@@ -50,7 +55,7 @@ export default function JudgeMatchList({ uid, profile }) {
           <Grid item xs={6} sm={3}>
             <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>Matches Live</Typography>
-              <Typography variant="h4" sx={{ color: 'primary.main', fontWeight: 700, mt: 1 }}>{matches.length}</Typography>
+              <Typography variant="h4" sx={{ color: 'primary.main', fontWeight: 700, mt: 1 }}>{total}</Typography>
             </Paper>
           </Grid>
           <Grid item xs={6} sm={3}>
@@ -61,10 +66,15 @@ export default function JudgeMatchList({ uid, profile }) {
           </Grid>
         </Grid>
 
-        <Typography variant="h6" mb={2}>Live Matches ({matches.length})</Typography>
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <Typography variant="h6">Live Matches ({total})</Typography>
+          <TableSearch value={search} onChange={setSearch} placeholder="Search status or winner" />
+        </Box>
 
-        {matches.length === 0 ? (
-          <Alert severity="info">No matches are open right now</Alert>
+        {loading ? null : matches.length === 0 ? (
+          <Paper elevation={0} sx={{ border: '1px dashed', borderColor: 'divider' }}>
+            <NoResults query={search} noun="open matches" />
+          </Paper>
         ) : (
           <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
             <Table>
@@ -121,6 +131,7 @@ export default function JudgeMatchList({ uid, profile }) {
                 })}
               </TableBody>
             </Table>
+            <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
           </TableContainer>
         )}
       </Container>

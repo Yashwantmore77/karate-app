@@ -10,6 +10,7 @@ const loginLog = vi.hoisted(() => ({
   isAvailable: vi.fn(() => true),
   OUTCOMES: ['success', 'invalid_credentials', 'rate_limited'],
   list: vi.fn(),
+  page: vi.fn(),
 }))
 vi.mock('../../data/loginLog', () => loginLog)
 
@@ -50,7 +51,7 @@ const renderPage = () =>
 beforeEach(() => {
   vi.clearAllMocks()
   loginLog.isAvailable.mockReturnValue(true)
-  loginLog.list.mockResolvedValue(ENTRIES)
+  loginLog.page.mockResolvedValue({ rows: ENTRIES, total: ENTRIES.length, pages: 1, page: 1 })
 })
 
 describe('AdminLoginLog', () => {
@@ -81,7 +82,7 @@ describe('AdminLoginLog', () => {
     await user.click(screen.getByLabelText('Outcome'))
     await user.click(within(screen.getByRole('listbox')).getByText('Throttled'))
 
-    expect(loginLog.list).toHaveBeenLastCalledWith(
+    expect(loginLog.page).toHaveBeenLastCalledWith(
       expect.objectContaining({ outcome: 'rate_limited' })
     )
   })
@@ -90,13 +91,13 @@ describe('AdminLoginLog', () => {
     const user = userEvent.setup()
     renderPage()
     await screen.findByText('admin@kata.local')
-    const callsAfterLoad = loginLog.list.mock.calls.length
+    const callsAfterLoad = loginLog.page.mock.calls.length
 
     await user.type(screen.getByLabelText('Account'), 'referee@kata.local')
-    expect(loginLog.list).toHaveBeenCalledTimes(callsAfterLoad)
+    expect(loginLog.page).toHaveBeenCalledTimes(callsAfterLoad)
 
     await user.click(screen.getByRole('button', { name: /apply/i }))
-    expect(loginLog.list).toHaveBeenLastCalledWith(
+    expect(loginLog.page).toHaveBeenLastCalledWith(
       expect.objectContaining({ email: 'referee@kata.local' })
     )
   })
@@ -105,11 +106,11 @@ describe('AdminLoginLog', () => {
     loginLog.isAvailable.mockReturnValue(false)
     renderPage()
     expect(await screen.findByText(/recorded on the server/i)).toBeInTheDocument()
-    expect(loginLog.list).not.toHaveBeenCalled()
+    expect(loginLog.page).not.toHaveBeenCalled()
   })
 
   it('reports a refused read instead of showing an empty log', async () => {
-    loginLog.list.mockRejectedValue(Object.assign(new Error('forbidden'), { code: 'forbidden' }))
+    loginLog.page.mockRejectedValue(Object.assign(new Error('forbidden'), { code: 'forbidden' }))
     renderPage()
     expect(await screen.findByText(/only an administrator/i)).toBeInTheDocument()
   })

@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import { Container, Box, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, Paper, IconButton, Chip, Divider, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
 import { ArrowBack, Add, Visibility, Delete, FileDownload } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import { JUDGE_COUNT } from '../../firebase'
 import {
   tournaments as tournamentStore,
@@ -54,10 +56,16 @@ export default function RefereeMatchList({ uid, profile }) {
   const [category, setCategory] = useState(null)
   const [tournament, setTournament] = useState(null)
   const [competitors, setCompetitors] = useState([])
-  const [matches, setMatches] = useState([])
   const [openModal, setOpenModal] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [error, setError] = useState(null)
+
+  const {
+    rows: matches, total, page, limit, search, setSearch, setPage, refresh, reset,
+  } = usePagedList(
+    useCallback((options) => matchStore.page(categoryId, options), [categoryId]),
+    { deps: [categoryId] }
+  )
 
   // Who can be put on a bout. Empty in local mode, where there is no server
   // holding accounts, so the pickers simply offer nothing.
@@ -92,7 +100,7 @@ export default function RefereeMatchList({ uid, profile }) {
         return
       }
       setError(null)
-      setMatches(await matchStore.list(categoryId))
+      await reset()
       formik.resetForm()
       setOpenModal(false)
     }
@@ -101,10 +109,9 @@ export default function RefereeMatchList({ uid, profile }) {
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const [category, competitorRows, matchRows] = await Promise.all([
+      const [category, competitorRows] = await Promise.all([
         categoryStore.find(categoryId),
         competitorStore.list(categoryId),
-        matchStore.list(categoryId),
       ])
       // Only the owning tournament is still unknown, and only if the category
       // resolved at all.
@@ -113,7 +120,6 @@ export default function RefereeMatchList({ uid, profile }) {
       setCategory(category)
       setTournament(tournament)
       setCompetitors(competitorRows)
-      setMatches(matchRows)
     })()
     return () => { alive = false }
   }, [categoryId])
@@ -144,7 +150,7 @@ export default function RefereeMatchList({ uid, profile }) {
     try {
       await matchStore.remove(categoryId, matchId)
       setError(null)
-      setMatches(await matchStore.list(categoryId))
+      await refresh()
     } catch (err) {
       setError(messageFor(err))
     }
@@ -179,7 +185,7 @@ export default function RefereeMatchList({ uid, profile }) {
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">{category?.name}</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9 }}>{competitors.length} contestants • {matches.length} matches</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.9 }}>{competitors.length} contestants • {total} matches</Typography>
           </Box>
         </Toolbar>
       </PageBar>
@@ -197,13 +203,14 @@ export default function RefereeMatchList({ uid, profile }) {
         )}
 
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">Matches ({matches.length})</Typography>
+          <Typography variant="h6">Matches ({total})</Typography>
+          <TableSearch value={search} onChange={setSearch} placeholder="Search status or winner" />
           <Stack direction="row" spacing={1}>
             <Button
               variant="outlined"
               startIcon={<FileDownload />}
               onClick={handleExportResults}
-              disabled={matches.length === 0}
+              disabled={total === 0}
             >
               Export Results
             </Button>
@@ -297,6 +304,7 @@ export default function RefereeMatchList({ uid, profile }) {
                 })}
               </TableBody>
             </Table>
+            <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
           </TableContainer>
         )}
 
@@ -320,7 +328,7 @@ export default function RefereeMatchList({ uid, profile }) {
               <Divider orientation="vertical" flexItem />
               <Box>
                 <Typography variant="caption">Matches</Typography>
-                <Typography variant="h6">{matches.length}</Typography>
+                <Typography variant="h6">{total}</Typography>
               </Box>
             </Stack>
           </Box>

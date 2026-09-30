@@ -7,6 +7,8 @@ import {
 } from '@mui/material'
 import { ArrowBack, Refresh } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
+import { TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import * as loginLog from '../../data/loginLog'
 
 // The server answers with a code; these are the ones a person can act on.
@@ -62,42 +64,31 @@ const coordsOf = ({ geo, browserCoords }) => {
 
 export default function AdminLoginLog() {
   const navigate = useNavigate()
-  const [entries, setEntries] = useState([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [outcome, setOutcome] = useState('')
   const [email, setEmail] = useState('')
+  const [appliedEmail, setAppliedEmail] = useState('')
   const [limit, setLimit] = useState(50)
 
   const available = loginLog.isAvailable()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      setEntries(await loginLog.list({ limit, email: email.trim(), outcome }))
-      setError(null)
-    } catch (err) {
-      setError(messageFor(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [limit, email, outcome])
+  const {
+    rows: entries, total, page, setPage, loading, error: loadError, refresh: load,
+  } = usePagedList(
+    useCallback((options) => (
+      available
+        ? loginLog.page({ ...options, outcome, email: appliedEmail })
+        : Promise.resolve({ rows: [], total: 0, pages: 1 })
+    ), [available, outcome, appliedEmail]),
+    { limit, deps: [available, outcome, appliedEmail] }
+  )
 
-  // The address box is left out of the dependencies on purpose: refiltering on
-  // every keystroke would fire a request per letter. It applies on Apply/Enter.
-  useEffect(() => {
-    if (!available) {
-      setLoading(false)
-      return
-    }
-    let alive = true
-    loginLog.list({ limit, outcome, email: email.trim() })
-      .then((rows) => { if (alive) setEntries(rows) })
-      .catch((err) => { if (alive) setError(messageFor(err)) })
-      .finally(() => { if (alive) setLoading(false) })
-    return () => { alive = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [available, limit, outcome])
+  // The address applies on Apply/Enter rather than per keystroke, so typing
+  // does not fire a request per letter.
+  const applyEmail = () => setAppliedEmail(email.trim())
+
+  // Nothing on this page writes, so the only failure worth showing is the read.
+  const shownError = error || (loadError ? messageFor(loadError) : null)
 
   return (
     <Box sx={{
@@ -131,14 +122,14 @@ export default function AdminLoginLog() {
           </Alert>
         ) : (
           <>
-            {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
+            {shownError && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{shownError}</Alert>}
 
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
               spacing={2}
               sx={{ mb: 3 }}
               component="form"
-              onSubmit={(e) => { e.preventDefault(); load() }}
+              onSubmit={(e) => { e.preventDefault(); applyEmail() }}
             >
               <TextField
                 label="Account"
@@ -180,7 +171,7 @@ export default function AdminLoginLog() {
 
             {loading ? null : entries.length === 0 ? (
               <Paper sx={{ p: 4, textAlign: 'center' }}>
-                <Typography color="text.secondary">No sign-ins match that filter</Typography>
+                <NoResults query={appliedEmail || outcome} noun="sign-ins" />
               </Paper>
             ) : (
               <TableContainer component={Paper}>
@@ -251,6 +242,7 @@ export default function AdminLoginLog() {
                     })}
                   </TableBody>
                 </Table>
+                <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
               </TableContainer>
             )}
           </>

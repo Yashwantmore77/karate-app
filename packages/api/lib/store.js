@@ -21,6 +21,19 @@ const matchesSearch = (row, q, fields) => {
   return fields.some((field) => String(row[field] ?? '').toLowerCase().includes(needle))
 }
 
+/**
+ * Whether a match belongs to one official.
+ *
+ * A bout nobody has been put on counts as everyone's: schedules are built
+ * before panels are, and excluding unassigned bouts would hide most of the day
+ * from the very people working it.
+ */
+const assignedTo = (row, uid) => {
+  if (!uid) return true
+  const panel = [row.refereeId, ...(row.judgeIds || [])].filter(Boolean)
+  return panel.length === 0 || panel.includes(uid)
+}
+
 function memoryCollection(name) {
   const rows = new Map()
 
@@ -29,9 +42,10 @@ function memoryCollection(name) {
     async list(filter = {}) {
       return [...rows.values()].filter((row) => matchesFilter(row, filter))
     },
-    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25 } = {}) {
+    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25, official = null } = {}) {
       const found = [...rows.values()]
         .filter((row) => matchesFilter(row, filter))
+        .filter((row) => assignedTo(row, official))
         .filter((row) => matchesSearch(row, q, searchFields))
       const start = (page - 1) * limit
       // Total counts everything the search matched, not the page — the caller
@@ -81,12 +95,32 @@ function mongoCollection(name) {
     async list(filter = {}) {
       return (await collection()).find(filter, withoutInternalId).toArray()
     },
-    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25 } = {}) {
+    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25, official = null } = {}) {
       const query = { ...filter }
+      // Both of these are ORs, so they are combined under $and rather than
+      // written to query.$or, where the second would overwrite the first.
+      const conditions = []
+
       if (q && searchFields.length) {
         const pattern = new RegExp(escapeRegex(q), 'i')
-        query.$or = searchFields.map((field) => ({ [field]: pattern }))
+        conditions.push({ $or: searchFields.map((field) => ({ [field]: pattern })) })
       }
+
+      if (official) {
+        const unassigned = {
+          $and: [
+            { $or: [{ refereeId: null }, { refereeId: { $exists: false } }] },
+            { $or: [{ judgeIds: { $size: 0 } }, { judgeIds: { $exists: false } }] },
+          ],
+        }
+        conditions.push({
+          // judgeIds is an array, and Mongo matches an array field against a
+          // scalar by testing its elements, which is exactly what is wanted.
+          $or: [{ refereeId: official }, { judgeIds: official }, unassigned],
+        })
+      }
+
+      if (conditions.length) query.$and = conditions
       const col = await collection()
       // Ordered so paging is stable: without a sort, skip/limit can repeat or
       // drop rows between pages as the storage engine pleases.

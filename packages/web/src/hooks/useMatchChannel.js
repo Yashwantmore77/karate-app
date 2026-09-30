@@ -6,22 +6,31 @@ import { openMatch } from '../data/channel'
  * plus a command sender. Observers pass control: false and get the same
  * projection with a sender that does nothing.
  */
+const IDLE_STATUS = { holdsControl: false, controllerId: null, contested: false, lastError: null }
+
 export function useMatchChannel(matchId, { control = true } = {}) {
   const [state, setState] = useState(null)
+  // Whether this screen actually holds the mat, which is the server's call and
+  // not the same as having asked for it.
+  const [status, setStatus] = useState(IDLE_STATUS)
   const channel = useRef(null)
 
   useEffect(() => {
     const ch = openMatch(matchId, { control })
     channel.current = ch
     const off = ch.subscribe(setState)
+    const offStatus = ch.subscribeStatus?.(setStatus) ?? (() => {})
     return () => {
       off()
+      offStatus()
       ch.close()
       channel.current = null
+      setStatus(IDLE_STATUS)
     }
   }, [matchId, control])
 
   const send = useRef((cmd, payload) => channel.current?.send(cmd, payload)).current
+  const takeover = useRef(() => channel.current?.takeover?.()).current
 
-  return [state, send]
+  return [state, send, { ...status, takeover }]
 }

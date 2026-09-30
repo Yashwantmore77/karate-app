@@ -118,6 +118,19 @@ export const matches = {
     const res = await orNull(httpGet(`/matches/${id}`))
     return res && res.match
   },
+  /**
+   * Matches across the whole event, filtered and paged by the server.
+   *
+   * `mine` asks for the caller's own assignments; it is a flag rather than an
+   * id, so there is no way to ask after somebody else's.
+   */
+  async feed({ status, mine, categoryId, ...options } = {}) {
+    const params = new URLSearchParams(pageQuery(options).slice(1))
+    if (status) params.set('status', status)
+    if (mine) params.set('mine', 'true')
+    if (categoryId) params.set('categoryId', categoryId)
+    return pageOf(await httpGet(`/matches?${params}`), 'matches')
+  },
   async create(categoryId, doc) {
     return (await httpPost(`/categories/${categoryId}/matches`, doc)).match
   },

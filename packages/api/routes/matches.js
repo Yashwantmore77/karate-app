@@ -128,6 +128,61 @@ export function matchRoutes(stores) {
     res.status(201).json({ match })
   })
 
+  /**
+   * Matches across the whole event, for the screens that ask "what can I work
+   * on" rather than opening one category.
+   *
+   * Filtering and paging happen here rather than in the browser. Walking every
+   * category client-side to then discard most of it means the work grows with
+   * the tournament while the screen still shows one page.
+   */
+  flat.get('/', async (req, res) => {
+    const { page, limit, q } = readPageQuery(req.query)
+    const { status, categoryId, mine } = req.query
+
+    if (status !== undefined && !MATCH_SCHEMA.status.values.includes(status)) {
+      throw badRequest('invalid_status')
+    }
+
+    const filter = {}
+    if (status) filter.status = status
+    if (categoryId) filter.categoryId = categoryId
+
+    const { rows, total } = await matches.paginate(filter, {
+      q,
+      searchFields: ['status', 'winner'],
+      page,
+      limit,
+      // Only ever the caller's own id: letting a client name someone else would
+      // turn this into a way to read another official's assignments.
+      official: mine === 'true' ? req.user.uid : null,
+    })
+
+    // The names belong to other collections, so they are resolved for the page
+    // being returned rather than joined across everything.
+    const categoryIds = [...new Set(rows.map((m) => m.categoryId).filter(Boolean))]
+    const found = await Promise.all(categoryIds.map((id) => categories.get(id)))
+    const categoryById = new Map(found.filter(Boolean).map((c) => [c.id, c]))
+
+    const tournamentIds = [...new Set([...categoryById.values()].map((c) => c.tournamentId))]
+    const tournamentsFound = await Promise.all(tournamentIds.map((id) => tournaments.get(id)))
+    const tournamentById = new Map(tournamentsFound.filter(Boolean).map((t) => [t.id, t]))
+
+    const enriched = rows.map((match) => {
+      const category = categoryById.get(match.categoryId)
+      const tournament = category ? tournamentById.get(category.tournamentId) : null
+      return {
+        ...match,
+        category: category?.name ?? null,
+        tournament: tournament?.name ?? null,
+        tournamentId: category?.tournamentId ?? null,
+        tournamentDate: tournament?.date ?? null,
+      }
+    })
+
+    res.json({ matches: enriched, ...pageMeta({ page, limit, total }) })
+  })
+
   flat.get('/:id', async (req, res) => {
     res.json({ match: await loadOrFail(matches, req.params.id) })
   })

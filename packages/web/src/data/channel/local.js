@@ -48,6 +48,11 @@ export function openLocalMatch(matchId, { control = true } = {}) {
       }, EXPIRY_SWEEP_MS)
     : null
 
+  // No server, so no contest: whoever asked for control has it, and nothing can
+  // refuse a command. Reported anyway so screens read control the same way on
+  // both transports rather than branching on which one they got.
+  const status = { holdsControl: control, controllerId: null, contested: false, lastError: null }
+
   return {
     control,
     subscribe(cb) {
@@ -55,6 +60,11 @@ export function openLocalMatch(matchId, { control = true } = {}) {
       if (state) cb(state)
       return () => listeners.delete(cb)
     },
+    subscribeStatus(cb) {
+      cb(status)
+      return () => {}
+    },
+    takeover: async () => ({ ok: true }),
     send(cmd, payload) {
       if (!control || !state) return
       const at = Date.now()
