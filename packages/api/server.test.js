@@ -37,6 +37,18 @@ const emit = (socket, event, payload) =>
 const nextEvent = (socket, event) =>
   new Promise((resolve) => socket.once(event, resolve))
 
+// For events a room broadcasts more than once: joining also announces the
+// controller, so "the next one" is not necessarily the one under test.
+const nextMatching = (socket, event, matches) =>
+  new Promise((resolve) => {
+    const handler = (payload) => {
+      if (!matches(payload)) return
+      socket.off(event, handler)
+      resolve(payload)
+    }
+    socket.on(event, handler)
+  })
+
 describe('BE-1 match server', () => {
   beforeEach(async () => {
     clients = []
@@ -168,7 +180,7 @@ describe('BE-1 match server', () => {
 
     // Control is otherwise only released on disconnect, so a device that died
     // without the server noticing would hold this mat for good.
-    const announced = nextEvent(referee, 'match:control')
+    const announced = nextMatching(referee, 'match:control', (e) => !!e.takenFrom)
     const reply = await emit(second, 'match:takeover', { matchId: 'm1' })
     expect(reply.ok).toBe(true)
     expect(reply.controllerId).toBe(second.id)
