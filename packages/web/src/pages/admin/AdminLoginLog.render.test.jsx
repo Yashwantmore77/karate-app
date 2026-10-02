@@ -7,7 +7,6 @@ import { MemoryRouter } from 'react-router-dom'
 // than the transport: these tests are about the screen, and the endpoint itself
 // is covered against the real API in the server suite.
 const loginLog = vi.hoisted(() => ({
-  isAvailable: vi.fn(() => true),
   OUTCOMES: ['success', 'invalid_credentials', 'rate_limited'],
   list: vi.fn(),
   page: vi.fn(),
@@ -50,7 +49,6 @@ const renderPage = () =>
 
 beforeEach(() => {
   vi.clearAllMocks()
-  loginLog.isAvailable.mockReturnValue(true)
   loginLog.page.mockResolvedValue({ rows: ENTRIES, total: ENTRIES.length, pages: 1, page: 1 })
 })
 
@@ -100,13 +98,6 @@ describe('AdminLoginLog', () => {
     expect(loginLog.page).toHaveBeenLastCalledWith(
       expect.objectContaining({ email: 'referee@kata.local' })
     )
-  })
-
-  it('says so plainly when there is no server to read a log from', async () => {
-    loginLog.isAvailable.mockReturnValue(false)
-    renderPage()
-    expect(await screen.findByText(/recorded on the server/i)).toBeInTheDocument()
-    expect(loginLog.page).not.toHaveBeenCalled()
   })
 
   it('reports a refused read instead of showing an empty log', async () => {

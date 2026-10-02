@@ -38,13 +38,6 @@ export default function RefereeCategoryList({ uid }) {
     return () => { alive = false }
   }, [])
 
-  useEffect(() => {
-    if (!selectedTournamentId) return
-    let alive = true
-    // Rows come from the paged hook below.
-    return () => { alive = false }
-  }, [selectedTournamentId])
-
   const selectedTournament = tournaments.find(t => t.id === selectedTournamentId)
 
   const isSelectedExpired = selectedTournament ? isExpired(selectedTournament.date) : false

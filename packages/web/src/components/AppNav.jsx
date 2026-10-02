@@ -5,7 +5,7 @@ import {
   ListItemText, Typography, Divider, Chip, Tooltip,
 } from '@mui/material'
 import { Menu as MenuIcon, Logout } from '@mui/icons-material'
-import { signOut, auth } from '../firebase'
+import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
 
 // What each role can reach. The scoreboard is on every list because it is the
@@ -55,6 +55,7 @@ export const activeItem = (items, pathname) => {
 export default function AppNav({ user, profile }) {
   const location = useLocation()
   const navigate = useNavigate()
+  const { logout } = useSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   const items = MENUS[profile?.role] || []
@@ -126,7 +127,7 @@ export default function AppNav({ user, profile }) {
             <IconButton
               color="inherit"
               aria-label="Sign out"
-              onClick={() => signOut(auth)}
+              onClick={logout}
             >
               <Logout />
             </IconButton>

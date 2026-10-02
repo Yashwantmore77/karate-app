@@ -1,122 +1,128 @@
-# Kata scoring — React + Firebase
+# Kumite tournament scoring
 
-Four judges score both competitors from their phones. The referee opens the round
-and reveals. A scoreboard updates live. No backend server.
+WKF-style kumite scoring for a tournament day: an admin sets up tournaments,
+categories and competitors; a referee draws and schedules the bouts and runs
+each one from a live console; judges watch the same console on their own
+devices; a public scoreboard shows the hall what is on.
 
-## Project layout
+What it is meant to do, and what is out of scope, is in
+[KUMITE-PRD.md](KUMITE-PRD.md).
 
-This is an npm-workspaces monorepo. Frontend and backend are separate, independently
-deployable projects that share nothing except one small versioned package:
+## How it fits together
 
 ```
 packages/
-  shared/   @kumite/shared — clock math, WKF scoring rules, the command reducer.
-            Pure logic with no UI/DB code. Installed as an ordinary dependency by
-            both packages below so a referee's device and the server can never
-            disagree on how a match clock or score is computed.
-  web/      @kumite/web    — the React/Vite/MUI frontend.
-  api/      @kumite/api    — the Node/Express/Socket.IO backend (MongoDB-backed
-            auth with an in-memory fallback for local dev).
+  shared/   @kumite/shared  Clock maths, WKF scoring rules, the command reducer.
+                            Pure logic, used by both sides so a device and the
+                            server can never disagree on a score or a clock.
+  web/      @kumite/web     React + Vite + MUI front end. Deployed to Vercel.
+  api/      @kumite/api     Node + Express + Socket.IO. Deployed to Render.
+                            MongoDB Atlas when MONGODB_URI is set, otherwise an
+                            in-memory store that starts empty on every boot.
 ```
 
-The Node API is the single source of truth for a live match: it computes state
-and pushes it to every connected device over Socket.IO, so clients display —
-rather than independently recompute — the authoritative clock and score.
+The API is the source of truth for everything, including a live bout: it
+applies each referee command and pushes the result to every device on that
+match over Socket.IO. The front end has no offline or local mode; with no API
+there is nothing to sign in against.
 
-From the repo root:
+REST lives under `/api/v1`. `/health` sits outside it for uptime checks.
 
-```bash
-npm install          # installs all three packages and links @kumite/shared
-npm run dev           # starts the web frontend (Vite)
-npm run server:dev    # starts the API in watch mode
-npm test              # runs every package's test suite
-npm run build          # builds @kumite/web for production
-```
+## Roles
 
-Each package also has its own `.env.example` (`packages/web/.env.example`,
-`packages/api/.env.example`) — copy to `.env` in that package's directory.
+| Role | Can do |
+| --- | --- |
+| Admin | Everything a referee can, plus tournaments, categories, competitors, accounts, the sign-in log, and deleting a match |
+| Referee | Draw and create bouts, set time, mat and panel, run the console |
+| Judge | Watch the console for bouts they are assigned to (read-only, per the PRD) |
+| Scoreboard | `/display`, no sign-in |
 
-## 1. Firebase console
+There is no signup. Accounts are created by an admin.
 
-1. Create a project at console.firebase.google.com (Spark / free plan is fine)
-2. **Build → Firestore Database → Create database** → start in production mode
-3. **Build → Authentication → Get started → Email/Password → Enable**
-4. Under Authentication → Users, add five accounts:
+## Scheduling rules
 
-   ```
-   referee@kata.local
-   judge1@kata.local
-   judge2@kata.local
-   judge3@kata.local
-   judge4@kata.local
-   ```
+- A tournament sets the **slot length** (default 15 min) and **panel size**
+  (default 4 judges).
+- A bout can be given a time and a mat. Its slot runs from that time for the
+  slot length.
+- **Nobody can be in two overlapping bouts** — referee, judge or competitor —
+  and **a mat holds one bout at a time**. The API refuses the write with
+  `409 schedule_conflict` and names who or what clashes. Back-to-back slots are
+  fine, unscheduled bouts hold nobody, and a completed bout releases everyone.
+- **Draw Round Robin** creates a bout for every pair in a category that does not
+  have one yet (up to 32 competitors). It can be pressed again after a late
+  entry and only adds what is missing.
 
-   Use any password you'll remember. Copy each account's **User UID**.
+## Running it locally
 
-5. In Firestore, create a collection called `roles`. Add one document per account,
-   using the **UID as the document ID**:
-
-   | Document ID   | Fields                                  |
-   |---------------|-----------------------------------------|
-   | referee's UID | `role: "referee"`                        |
-   | judge1's UID  | `role: "judge"`, `seat: 1` (number)      |
-   | judge2's UID  | `role: "judge"`, `seat: 2`               |
-   | judge3's UID  | `role: "judge"`, `seat: 3`               |
-   | judge4's UID  | `role: "judge"`, `seat: 4`               |
-
-   `seat` must be a **number**, not a string.
-
-6. **Project settings → Your apps → Web app** → register one, copy the config values
-
-## 2. Local setup
+Needs Node 22.9 or later (the API reads its `.env` with `--env-file-if-exists`).
 
 ```bash
 npm install
-cp .env.example .env      # paste your Firebase config values in
+
+# Terminal 1 — the API, in memory, with the seeded accounts
+npm run server:dev
+
+# Terminal 2 — the front end, at http://localhost:5173
+cp packages/web/.env.example packages/web/.env
 npm run dev
 ```
 
-Open http://localhost:5173 and sign in as the referee.
-The scoreboard is at http://localhost:5173/?portal — no login needed.
+With no `MONGODB_URI` the API keeps everything in memory and forgets it on
+restart. Its seeded accounts are listed in `packages/api/auth/users.js`.
 
-## 3. Deploy
+## Configuration
+
+**Front end** (`packages/web/.env`, or Vercel project settings):
+
+| Variable | Meaning |
+| --- | --- |
+| `VITE_SERVER_URL` | The API's origin, e.g. `http://localhost:4000`. Read at **build** time, so changing it on Vercel needs a redeploy. |
+
+**API** (`packages/api/.env`, or Render environment). See
+`packages/api/.env.example` for the full list with notes. The ones that matter in
+production:
+
+| Variable | Meaning |
+| --- | --- |
+| `MONGODB_URI`, `MONGODB_DB` | Atlas connection. Unset means in-memory. |
+| `JWT_SECRET` | Token signing secret. Unset means a random one per boot, which signs everyone out on every restart. |
+| `CORS_ORIGIN` | The front end's origin, exactly — no trailing slash. |
+| `TRUST_PROXY` | Set only when a proxy sits in front (Render does). |
+
+## Deploying
+
+- **Front end — Vercel.** Builds from the repo root using `vercel.json`
+  (`npm run build`, output `packages/web/dist`, every path rewritten to
+  `index.html` so deep links survive a refresh).
+- **API — Render**, as a persistent web service, not serverless: the live
+  console needs a long-lived WebSocket and in-memory match rooms, neither of
+  which survives on Vercel functions.
+- **Database — MongoDB Atlas.**
+
+Both deploy from `main`.
+
+## Tests
 
 ```bash
-npm install -g firebase-tools
-firebase login
-firebase use --add            # pick your project
-npm run build
-firebase deploy
+npm test             # every package
+npm run test:api
+npm run test:web
+npm run test:shared
 ```
 
-Deploy the rules too — `firebase deploy` covers both because they're listed in
-`firebase.json`. Verify in the console that `firestore.rules` matches this repo;
-the default rules deny everything and nothing will work until you replace them.
+The web tests never call a real API. Pages are tested against an in-memory
+stand-in for the data layer (`packages/web/src/test/fakeDomain.js`), and the
+live console against an in-memory match channel that runs the real shared
+scoring engine (`packages/web/src/test/memoryMatchChannel.js`).
 
-## 4. On the phones
+## Known gaps
 
-Open the deployed URL in Chrome on Android → menu (⋮) → **Add to Home screen**.
-Then set screen timeout to 10 minutes and turn on Do Not Disturb.
-
-## How it runs
-
-1. Referee enters both names → **Create match**
-2. Referee taps **Open round** — judges' steppers unlock
-3. Each judge sets a score for AKA and AO, taps **Submit scores**
-4. Referee sees seats fill in, but not the values
-5. Referee taps **Reveal** — totals computed, scoreboard shows the winner
-6. Referee creates the next match
-
-## Changing the scoring rules
-
-`src/firebase.js` holds the range, step and judge count. If you change the range,
-update the matching bounds in `firestore.rules` — they're enforced server-side.
-
-Totals are a straight sum of all four judges. To switch to a trimmed mean, change
-the reduce in `reveal()` inside `src/pages/Referee.jsx`.
-
-## Known limits
-
-- The referee's phone computes the total. If it dies mid-reveal, nobody writes the result.
-- No offline queueing. A judge with no signal can't submit.
-- Free tier: 50k reads and 20k writes per day. A match costs about 12 writes.
+- **Kata** has no console yet; it is parked in the PRD. A kata tournament still
+  opens the kumite console.
+- **The scoreboard shows one mat.** `/display` is a single "what is on now"
+  document, so with two mats live the last referee to publish wins.
+- **Assignment is not enforced live.** The schedule refuses double-booking, but
+  nothing yet stops an unassigned referee from opening and running a bout.
+- **Seeded accounts use a known password.** Change them on any deployment that
+  anyone else can reach.

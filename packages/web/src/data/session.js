@@ -1,5 +1,4 @@
-// The server's session. Separate from the client's own sign-in because the app
-// still runs with no server at all, and in that mode there is no token to hold.
+// The token the API issued at sign-in, kept for the life of the browser tab.
 
 const KEY = 'kt:v1:token'
 
@@ -17,7 +16,7 @@ export const serverUrl = () => import.meta.env?.VITE_SERVER_URL || null
 // hunt through every fetch in the app.
 export const API_BASE = '/api/v1'
 
-/** Absolute URL for an API path, or null when no server is configured. */
+/** Absolute URL for an API path, or null when VITE_SERVER_URL is not set. */
 export const apiUrl = (path) => {
   const base = serverUrl()
   return base ? `${base}${API_BASE}${path}` : null
@@ -38,8 +37,7 @@ const store = (value) => {
 export const clearSession = () => store(null)
 
 /**
- * Exchanges credentials for a token. Returns null when no server is
- * configured, so the local-only mode carries on untouched.
+ * Exchanges credentials for a token, and returns the signed-in user.
  *
  * `coords` rides along when the browser has granted location permission, for
  * the server's sign-in record. It is always optional, and never affects
@@ -47,7 +45,9 @@ export const clearSession = () => store(null)
  */
 export async function loginToServer(email, password, coords = null) {
   const url = apiUrl('/auth/login')
-  if (!url) return null
+  // The app has no other way to sign anyone in, so a missing setting is said
+  // plainly instead of the button appearing to do nothing.
+  if (!url) throw new Error('VITE_SERVER_URL is not set, so there is no API to sign in against.')
 
   const res = await fetch(url, {
     method: 'POST',

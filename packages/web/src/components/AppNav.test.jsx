@@ -1,8 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import AppNav, { activeItem } from './AppNav'
+
+// Signing out goes through the session, which these tests are not about.
+const session = vi.hoisted(() => ({ logout: vi.fn() }))
+vi.mock('../state/SessionContext', () => ({ useSession: () => session }))
 
 const USER = { uid: 'u1', email: 'referee@kata.local' }
 
@@ -102,9 +106,11 @@ describe('AppNav', () => {
     expect(screen.getByRole('img', { name: /kumite/i })).toHaveAttribute('src', '/icon-192.png')
   })
 
-  it('offers a way out', () => {
+  it('offers a way out, through the session', async () => {
+    const user = userEvent.setup()
     renderNav()
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /sign out/i }))
+    expect(session.logout).toHaveBeenCalled()
   })
 
   it('stays out of the way before sign-in', () => {

@@ -7,13 +7,11 @@ import { ArrowBack, Add, Visibility, Delete, FileDownload, Groups, Shuffle } fro
 import PageBar from '../../components/PageBar'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
-import { JUDGE_COUNT } from '../../firebase'
 import {
   tournaments as tournamentStore,
   categories as categoryStore,
   competitors as competitorStore,
   matches as matchStore,
-  isRemote,
 } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 import { localInputToIso, isoToLocalInput, formatSlotTime, describeClashes } from '../../utils/scheduleTime'
@@ -69,9 +67,8 @@ export default function RefereeMatchList({ uid, profile }) {
   const { categoryId } = useParams()
 
   // The server lets a referee schedule a bout but not remove one, so the icon
-  // is hidden rather than left to fail on click. Local mode has no server to
-  // refuse it, and hiding it there would take away something that works.
-  const canDelete = !isRemote || profile?.role === 'admin'
+  // is hidden rather than left to fail on click.
+  const canDelete = profile?.role === 'admin'
   const [category, setCategory] = useState(null)
   const [tournament, setTournament] = useState(null)
   const [competitors, setCompetitors] = useState([])
@@ -110,8 +107,7 @@ export default function RefereeMatchList({ uid, profile }) {
   }, [categoryId])
   useEffect(() => { loadAllMatches() }, [loadAllMatches])
 
-  // Who can be put on a bout. Empty in local mode, where there is no server
-  // holding accounts, so the pickers simply offer nothing.
+  // Who can be put on a bout, for the referee and judge pickers.
   const [referees, setReferees] = useState([])
   const [judges, setJudges] = useState([])
   const judgeLimit = tournament?.judgeCount ?? DEFAULT_JUDGE_COUNT
@@ -214,7 +210,6 @@ export default function RefereeMatchList({ uid, profile }) {
   }, [categoryId])
 
   useEffect(() => {
-    if (!isRemote) return
     let alive = true
     Promise.all([users.officials('referee'), users.officials('judge')])
       .then(([refs, js]) => {
@@ -261,11 +256,6 @@ export default function RefereeMatchList({ uid, profile }) {
   )
 
   const handleDeleteMatch = async (matchId) => {
-    for (let seat = 1; seat <= JUDGE_COUNT; seat++) {
-      localStorage.removeItem(`judge-${seat}-${matchId}`)
-    }
-    localStorage.removeItem(`match-control-${matchId}`)
-
     try {
       await matchStore.remove(categoryId, matchId)
       setError(null)

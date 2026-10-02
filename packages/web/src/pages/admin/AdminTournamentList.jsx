@@ -302,7 +302,7 @@ export default function AdminTournamentList({ uid }) {
                 length is the window a bout holds everyone on it for, which is
                 what the double-booking check measures. */}
             <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <TextField
                   fullWidth
                   type="number"
@@ -316,7 +316,7 @@ export default function AdminTournamentList({ uid }) {
                   inputProps={{ min: 1, max: 8 }}
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid size={6}>
                 <TextField
                   fullWidth
                   type="number"

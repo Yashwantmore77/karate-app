@@ -1,43 +1,44 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import RefereeMatchList from './RefereeMatchList'
+import * as fake from '../../test/fakeDomain'
+
+vi.mock('../../data/domain', () => import('../../test/fakeDomain'))
+vi.mock('../../data/users', () => ({ officials: vi.fn(async () => []) }))
 
 const categoryId = 'cat-1'
 
 const seed = () => {
   const future = new Date()
   future.setFullYear(future.getFullYear() + 1)
-  localStorage.setItem('tournaments', JSON.stringify([
+  fake.seed({ tournaments: [
     { id: 't1', name: 'Spring Cup', location: 'NYC', date: future.toISOString().split('T')[0], template: 'kumite', status: 'active' }
-  ]))
-  localStorage.setItem('categories-t1', JSON.stringify([
+  ] })
+  fake.seed({ categories: [
     { id: categoryId, tournamentId: 't1', name: 'U12 Boys Kumite', ageGroup: 'U12', gender: 'M', division: 'Beginner' }
-  ]))
-  localStorage.setItem(`competitors-${categoryId}`, JSON.stringify([
+  ] })
+  fake.seed({ competitors: [
     { id: 'comp-1', bib: '101', name: 'Alice' },
     { id: 'comp-2', bib: '102', name: 'Bob' }
-  ]))
+  ].map((row) => ({ ...row, categoryId: categoryId })) })
 }
 
+// Opened as an admin, the one role that may also delete a bout.
 const renderPage = () =>
   render(
     <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
       <Routes>
-        <Route path="/referee/category/:categoryId" element={<RefereeMatchList uid="ref-uid" />} />
+        <Route path="/referee/category/:categoryId" element={<RefereeMatchList uid="ref-uid" profile={{ role: 'admin' }} />} />
       </Routes>
     </MemoryRouter>
   )
 
 describe('RefereeMatchList - rendered UI', () => {
   beforeEach(() => {
-    localStorage.clear()
+    fake.reset()
     seed()
-  })
-
-  afterEach(() => {
-    localStorage.clear()
   })
 
   it('shows the category name and an empty matches state', async () => {
@@ -64,7 +65,7 @@ describe('RefereeMatchList - rendered UI', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument()
     expect(screen.getByText('Bob')).toBeInTheDocument()
 
-    const stored = JSON.parse(localStorage.getItem(`matches-${categoryId}`))
+    const stored = fake.rows('matches')
     expect(stored).toHaveLength(1)
     expect(stored[0].redId).toBe('comp-1')
     expect(stored[0].blueId).toBe('comp-2')
@@ -86,13 +87,13 @@ describe('RefereeMatchList - rendered UI', () => {
     await user.click(within(dialog).getByRole('button', { name: /create match/i }))
 
     expect(await within(dialog).findByText(/must be different/i)).toBeInTheDocument()
-    expect(localStorage.getItem(`matches-${categoryId}`)).toBeNull()
+    expect(fake.rows('matches')).toHaveLength(0)
   })
 
   it('deletes a match after confirmation', async () => {
-    localStorage.setItem(`matches-${categoryId}`, JSON.stringify([
+    fake.seed({ matches: [
       { id: 'match-1', categoryId, redId: 'comp-1', blueId: 'comp-2', status: 'open', createdAt: new Date().toISOString() }
-    ]))
+    ].map((row) => ({ ...row, categoryId: categoryId })) })
     const user = userEvent.setup()
     renderPage()
 
@@ -103,6 +104,6 @@ describe('RefereeMatchList - rendered UI', () => {
     await user.click(within(dialog).getByRole('button', { name: /^delete$/i }))
 
     expect(await screen.findByText(/no matches yet/i)).toBeInTheDocument()
-    expect(JSON.parse(localStorage.getItem(`matches-${categoryId}`))).toHaveLength(0)
+    expect(fake.rows('matches')).toHaveLength(0)
   })
 })
