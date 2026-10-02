@@ -3,17 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import { Container, Box, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, AlertTitle, Paper, IconButton, Chip, Divider, FormHelperText, TextField, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
-import { ArrowBack, Add, Visibility, Delete, FileDownload, Groups } from '@mui/icons-material'
+import { ArrowBack, Add, Visibility, Delete, FileDownload, Groups, Shuffle } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
-import { JUDGE_COUNT } from '../../firebase'
 import {
   tournaments as tournamentStore,
   categories as categoryStore,
   competitors as competitorStore,
   matches as matchStore,
-  isRemote,
 } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 import { localInputToIso, isoToLocalInput, formatSlotTime, describeClashes } from '../../utils/scheduleTime'
@@ -45,20 +43,32 @@ const MESSAGES = {
   too_many_judges: 'That is more judges than this tournament seats.',
   same_competitor: 'A bout needs two different competitors.',
   invalid_scheduledAt: 'That is not a valid date and time.',
+  invalid_mat: 'A mat is a whole number from 1 to 99.',
   // A clash is reported on its own, with the detail the server sent, so this
   // is only the headline above it.
-  schedule_conflict: 'Somebody on this bout is already busy at that time.',
+  schedule_conflict: 'Somebody on this bout, or the mat, is already busy at that time.',
 }
 const messageFor = (err) => MESSAGES[err?.code] || 'Could not save that. Try again.'
+
+const drawMessage = (err) => {
+  if (err?.code === 'too_many_for_round_robin') {
+    const { count, max } = err.details || {}
+    return `A round robin is limited to ${max ?? 32} competitors, and this category has ${count ?? 'more'}. Split it into pools.`
+  }
+  if (err?.code === 'not_enough_competitors') return 'Enter at least two competitors before drawing.'
+  return messageFor(err)
+}
+
+/** How many bouts a full round robin of `n` entrants is. */
+const roundRobinSize = (n) => (n * (n - 1)) / 2
 
 export default function RefereeMatchList({ uid, profile }) {
   const navigate = useNavigate()
   const { categoryId } = useParams()
 
   // The server lets a referee schedule a bout but not remove one, so the icon
-  // is hidden rather than left to fail on click. Local mode has no server to
-  // refuse it, and hiding it there would take away something that works.
-  const canDelete = !isRemote || profile?.role === 'admin'
+  // is hidden rather than left to fail on click.
+  const canDelete = profile?.role === 'admin'
   const [category, setCategory] = useState(null)
   const [tournament, setTournament] = useState(null)
   const [competitors, setCompetitors] = useState([])
@@ -68,6 +78,10 @@ export default function RefereeMatchList({ uid, profile }) {
   // the draw is made, and who is officiating is settled later.
   const [editingMatch, setEditingMatch] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [drawConfirm, setDrawConfirm] = useState(false)
+  // What the last draw did, or why it could not. Kept apart from `error`,
+  // which belongs to the dialog and to deletes.
+  const [notice, setNotice] = useState(null)
   const [error, setError] = useState(null)
   // Kept apart from `error`: a clash is a list of people, not one sentence,
   // and the referee needs to see every name to decide what to move.
@@ -80,8 +94,20 @@ export default function RefereeMatchList({ uid, profile }) {
     { deps: [categoryId] }
   )
 
-  // Who can be put on a bout. Empty in local mode, where there is no server
-  // holding accounts, so the pickers simply offer nothing.
+  // Every bout in the category, for the standings and the export. Kept apart
+  // from the table rows: those are one page of a search, and a standings table
+  // built from them changed whenever someone paged or typed in the search box.
+  const [allMatches, setAllMatches] = useState([])
+  const loadAllMatches = useCallback(async () => {
+    try {
+      setAllMatches(await matchStore.list(categoryId))
+    } catch {
+      // The table reports its own load failure; standings just stay as they were.
+    }
+  }, [categoryId])
+  useEffect(() => { loadAllMatches() }, [loadAllMatches])
+
+  // Who can be put on a bout, for the referee and judge pickers.
   const [referees, setReferees] = useState([])
   const [judges, setJudges] = useState([])
   const judgeLimit = tournament?.judgeCount ?? DEFAULT_JUDGE_COUNT
@@ -94,6 +120,7 @@ export default function RefereeMatchList({ uid, profile }) {
       refereeId: editingMatch?.refereeId || '',
       judgeIds: editingMatch?.judgeIds || [],
       scheduledAt: isoToLocalInput(editingMatch?.scheduledAt),
+      mat: editingMatch?.mat ?? '',
     },
     // So opening the dialog on a different match reloads the fields rather
     // than showing the one opened before it.
@@ -114,6 +141,12 @@ export default function RefereeMatchList({ uid, profile }) {
         formik.setFieldError('scheduledAt', 'That is not a valid date and time')
         return
       }
+
+      const mat = values.mat === '' ? null : Number(values.mat)
+      if (mat !== null && !(Number.isInteger(mat) && mat >= 1 && mat <= 99)) {
+        formik.setFieldError('mat', 'A mat is a whole number from 1 to 99')
+        return
+      }
       try {
         if (editingMatch) {
           // A patch sends null to clear, where a create simply omits: the two
@@ -125,6 +158,7 @@ export default function RefereeMatchList({ uid, profile }) {
             refereeId: values.refereeId || null,
             judgeIds: values.judgeIds,
             scheduledAt: scheduledIso,
+            mat,
           })
         } else {
           await matchStore.create(categoryId, {
@@ -137,6 +171,7 @@ export default function RefereeMatchList({ uid, profile }) {
             ...(values.judgeIds.length ? { judgeIds: values.judgeIds } : {}),
             // The input gives naive wall-clock text; the API wants an instant.
             ...(scheduledIso ? { scheduledAt: scheduledIso } : {}),
+            ...(mat !== null ? { mat } : {}),
           })
         }
       } catch (err) {
@@ -149,7 +184,7 @@ export default function RefereeMatchList({ uid, profile }) {
       setError(null)
       setClashes([])
       // An edit stays where it is; a new bout belongs on the first page.
-      await (editingMatch ? refresh() : reset())
+      await Promise.all([editingMatch ? refresh() : reset(), loadAllMatches()])
       formik.resetForm()
       setEditingMatch(null)
       setOpenModal(false)
@@ -175,7 +210,6 @@ export default function RefereeMatchList({ uid, profile }) {
   }, [categoryId])
 
   useEffect(() => {
-    if (!isRemote) return
     let alive = true
     Promise.all([users.officials('referee'), users.officials('judge')])
       .then(([refs, js]) => {
@@ -222,19 +256,32 @@ export default function RefereeMatchList({ uid, profile }) {
   )
 
   const handleDeleteMatch = async (matchId) => {
-    for (let seat = 1; seat <= JUDGE_COUNT; seat++) {
-      localStorage.removeItem(`judge-${seat}-${matchId}`)
-    }
-    localStorage.removeItem(`match-control-${matchId}`)
-
     try {
       await matchStore.remove(categoryId, matchId)
       setError(null)
-      await refresh()
+      await Promise.all([refresh(), loadAllMatches()])
     } catch (err) {
       setError(messageFor(err))
     }
     setDeleteConfirm(null)
+  }
+
+  const handleDraw = async () => {
+    setDrawConfirm(false)
+    try {
+      const { created, skipped } = await matchStore.draw(categoryId)
+      setNotice(created === 0
+        ? { severity: 'info', text: 'Every pair already has a bout. Nothing new to draw.' }
+        : {
+            severity: 'success',
+            text: `Drew ${created} bout${created === 1 ? '' : 's'}`
+              + (skipped ? `, skipping ${skipped} already made.` : '.')
+              + ' Set their times, mats and panels from each row.',
+          })
+      await Promise.all([reset(), loadAllMatches()])
+    } catch (err) {
+      setNotice({ severity: 'error', text: drawMessage(err) })
+    }
   }
 
   const handleExportResults = () => {
@@ -250,7 +297,8 @@ export default function RefereeMatchList({ uid, profile }) {
         { label: 'Red Avg Score', value: (m) => m.avgRed ?? '' },
         { label: 'Blue Avg Score', value: (m) => m.avgBlue ?? '' },
       ],
-      matches
+      // The whole category, not the page on screen.
+      allMatches
     )
   }
 
@@ -276,6 +324,12 @@ export default function RefereeMatchList({ uid, profile }) {
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>
         )}
 
+        {notice && (
+          <Alert severity={notice.severity} sx={{ mb: 2 }} onClose={() => setNotice(null)}>
+            {notice.text}
+          </Alert>
+        )}
+
         {tournamentExpired && (
           <Alert severity="error" sx={{ mb: 2 }}>
             Tournament expired on {new Date(tournament.date).toLocaleDateString()}. You can view matches but cannot create new ones.
@@ -295,9 +349,18 @@ export default function RefereeMatchList({ uid, profile }) {
               Export Results
             </Button>
             <Button
+              variant="outlined"
+              startIcon={<Shuffle />}
+              onClick={() => setDrawConfirm(true)}
+              disabled={competitors.length < 2 || tournamentExpired}
+              title={competitors.length < 2 ? 'Need at least 2 competitors' : 'Create a bout for every pair'}
+            >
+              Draw Round Robin
+            </Button>
+            <Button
               variant="contained"
               startIcon={<Add />}
-              onClick={() => { setError(null); setOpenModal(true) }}
+              onClick={() => openFor(null)}
               disabled={competitors.length < 2 || tournamentExpired}
               title={
                 tournamentExpired
@@ -316,7 +379,7 @@ export default function RefereeMatchList({ uid, profile }) {
           <Alert severity="info">
             {competitors.length < 2
               ? `Need at least 2 competitors to create a match (${competitors.length}/2)`
-              : 'No matches yet • Click "New Match" to get started'}
+              : 'No matches yet • Draw a round robin, or add bouts one at a time with "New Match"'}
           </Alert>
         ) : (
           <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', mb: 4 }}>
@@ -357,6 +420,9 @@ export default function RefereeMatchList({ uid, profile }) {
                         <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
                           {formatSlotTime(m.scheduledAt)}
                         </Typography>
+                        {m.mat && (
+                          <Typography variant="caption" color="text.secondary">Mat {m.mat}</Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         {/* Shown as counts rather than names: a panel of four
@@ -426,7 +492,7 @@ export default function RefereeMatchList({ uid, profile }) {
         )}
 
         <Typography variant="h6" sx={{ mb: 2 }}>Standings</Typography>
-        <StandingsTable competitors={competitors} matches={matches} />
+        <StandingsTable competitors={competitors} matches={allMatches} />
       </Container>
 
       <Dialog open={openModal} onClose={closeDialog} maxWidth="sm" fullWidth>
@@ -495,21 +561,38 @@ export default function RefereeMatchList({ uid, profile }) {
             {/* Optional, like the panel: the draw is made before the timetable
                 is, and a bout with no time yet blocks nobody. Giving it one is
                 what brings it into the clash check. */}
-            <TextField
-              fullWidth
-              margin="normal"
-              type="datetime-local"
-              name="scheduledAt"
-              label="Scheduled time (optional)"
-              value={formik.values.scheduledAt}
-              onChange={formik.handleChange}
-              error={!!formik.errors.scheduledAt}
-              helperText={
-                formik.errors.scheduledAt
-                || `Holds everyone on this bout for ${slotMinutes} minutes.`
-              }
-              InputLabelProps={{ shrink: true }}
-            />
+            <Stack direction="row" spacing={2} alignItems="flex-start">
+              <TextField
+                fullWidth
+                margin="normal"
+                type="datetime-local"
+                name="scheduledAt"
+                label="Scheduled time (optional)"
+                value={formik.values.scheduledAt}
+                onChange={formik.handleChange}
+                error={!!formik.errors.scheduledAt}
+                helperText={
+                  formik.errors.scheduledAt
+                  || `Holds everyone on this bout for ${slotMinutes} minutes.`
+                }
+                InputLabelProps={{ shrink: true }}
+              />
+              {/* Which mat the bout is fought on. Two bouts can share a time
+                  on different mats, but not on the same one. */}
+              <TextField
+                margin="normal"
+                type="number"
+                name="mat"
+                label="Mat"
+                value={formik.values.mat}
+                onChange={formik.handleChange}
+                error={!!formik.errors.mat}
+                helperText={formik.errors.mat || ' '}
+                inputProps={{ min: 1, max: 99 }}
+                InputLabelProps={{ shrink: true }}
+                sx={{ width: 110, flexShrink: 0 }}
+              />
+            </Stack>
 
             {/* Officials are optional: a bout is often listed before the panel
                 for it is settled, and the server accepts it either way. */}
@@ -574,6 +657,24 @@ export default function RefereeMatchList({ uid, profile }) {
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={closeDialog}>Cancel</Button>
           <Button variant="contained" onClick={formik.handleSubmit}>{editingMatch ? 'Save Changes' : 'Create Match'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={drawConfirm} onClose={() => setDrawConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Draw a round robin?</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 1 }}>
+            Every pair of the {competitors.length} competitors gets a bout:{' '}
+            <strong>{roundRobinSize(competitors.length)} in all</strong>. Pairs that already
+            have one are skipped, so drawing again only adds what is missing.
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            The bouts are created without a time, mat or panel. Set those from each row afterwards.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDrawConfirm(false)}>Cancel</Button>
+          <Button onClick={handleDraw} variant="contained">Draw</Button>
         </DialogActions>
       </Dialog>
 

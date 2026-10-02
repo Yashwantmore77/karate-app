@@ -4,14 +4,21 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import DisplayScoreboard from './DisplayScoreboard'
 import KumiteConsole from '../features/console/KumiteConsole'
-import { displayRepo } from '../data/repo'
+import { displayRepo } from '../data/display'
+import { resetDisplay } from '../test/memoryDisplay'
+import { resetMemoryMatches } from '../test/memoryMatchChannel'
+
+// The console publishes and the scoreboard reads, both in memory: one process
+// standing in for the referee's device, the server and the hall screen.
+vi.mock('../data/display', () => import('../test/memoryDisplay'))
+vi.mock('../data/channel', () => import('../test/memoryMatchChannel'))
 import { makeClock, startClock } from '@kumite/shared/clock.js'
 
 const renderDisplay = () => render(<MemoryRouter><DisplayScoreboard /></MemoryRouter>)
 
 describe('DisplayScoreboard', () => {
-  beforeEach(() => localStorage.clear())
-  afterEach(() => localStorage.clear())
+  beforeEach(() => { resetDisplay(); resetMemoryMatches() })
+  afterEach(() => resetMemoryMatches())
 
   it('says there is nothing on when no match is published', () => {
     renderDisplay()
@@ -62,8 +69,8 @@ describe('DisplayScoreboard', () => {
 })
 
 describe('console observe mode', () => {
-  beforeEach(() => localStorage.clear())
-  afterEach(() => localStorage.clear())
+  beforeEach(() => { resetDisplay(); resetMemoryMatches() })
+  afterEach(() => resetMemoryMatches())
 
   const props = {
     matchId: 'm1',
@@ -130,8 +137,8 @@ describe('console observe mode', () => {
 })
 
 describe('console undo and referee decisions', () => {
-  beforeEach(() => localStorage.clear())
-  afterEach(() => localStorage.clear())
+  beforeEach(() => { resetDisplay(); resetMemoryMatches() })
+  afterEach(() => resetMemoryMatches())
 
   const props = {
     matchId: 'm-undo',

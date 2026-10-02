@@ -1,91 +1,28 @@
-import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Container, Box, Toolbar, Typography, Button, Paper, Grid, Card, CardContent, Alert, IconButton, Chip } from '@mui/material'
+import { Box, Toolbar, Typography, IconButton } from '@mui/material'
 import { ArrowBack } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
-import { JUDGE_COUNT } from '../../firebase'
-import { competitors as competitorStore, matches as matchStore } from '../../data/domain'
-import { findMatchContext } from '../../data/domain/tree'
+import { matches as matchStore } from '../../data/domain'
+import { useMatchRecord } from '../../hooks/useMatchRecord'
 import { isExpired } from '../../utils/dateUtils'
-import { getScoreSpread, hasDisagreement, DISAGREEMENT_THRESHOLD } from '../../utils/scoring'
 import KumiteConsole from '../../features/console/KumiteConsole'
 
-export default function RefereeMatchControl({ uid, profile }) {
+export default function RefereeMatchControl() {
   const navigate = useNavigate()
   const { matchId } = useParams()
-  const [match, setMatch] = useState(null)
-  const [category, setCategory] = useState(null)
-  const [tournament, setTournament] = useState(null)
-  const [redComp, setRedComp] = useState(null)
-  const [blueComp, setBlueComp] = useState(null)
-  const [status, setStatus] = useState('hidden')
+  const { match, category, tournament, redComp, blueComp, loading } = useMatchRecord(matchId)
 
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      const { match, category, tournament } = await findMatchContext(matchId)
-      if (!match) return
-      const roster = await competitorStore.list(match.categoryId)
-      if (!alive) return
+  // Nothing until the read settles, rather than a "not found" that flashes up
+  // on every load before the match arrives.
+  if (loading) return null
+  if (!match || !redComp || !blueComp) return <div>Match not found</div>
 
-      setMatch(match)
-      setStatus(match.status === 'completed'
-        ? 'revealed'
-        : (localStorage.getItem(`match-control-${matchId}`) || 'hidden'))
-      setCategory(category)
-      setTournament(tournament)
-      setRedComp(roster.find(c => c.id === match.redId))
-      setBlueComp(roster.find(c => c.id === match.blueId))
-    })()
-    return () => { alive = false }
-  }, [matchId])
-
-  const tournamentExpired = tournament && isExpired(tournament.date)
-
-  // Collect all judge scores
-  const allJudgeScores = { red: [], blue: [] }
-  for (let seat = 1; seat <= JUDGE_COUNT; seat++) {
-    const judgeScore = localStorage.getItem(`judge-${seat}-${matchId}`)
-    if (judgeScore) {
-      const s = JSON.parse(judgeScore)
-      if (s.competitor1 !== undefined) allJudgeScores.red.push(s.competitor1)
-      if (s.competitor2 !== undefined) allJudgeScores.blue.push(s.competitor2)
-    }
-  }
-
-  const avgRed = allJudgeScores.red.length > 0 ? allJudgeScores.red.reduce((a, b) => a + b, 0) / allJudgeScores.red.length : 0
-  const avgBlue = allJudgeScores.blue.length > 0 ? allJudgeScores.blue.reduce((a, b) => a + b, 0) / allJudgeScores.blue.length : 0
-  const winner = avgRed > avgBlue ? 'red' : avgBlue > avgRed ? 'blue' : 'tie'
-  const judgesSubmitted = allJudgeScores.red.length
-
-  const redDisagreement = hasDisagreement(allJudgeScores.red)
-  const blueDisagreement = hasDisagreement(allJudgeScores.blue)
-  const redSpread = getScoreSpread(allJudgeScores.red)
-  const blueSpread = getScoreSpread(allJudgeScores.blue)
+  const tournamentExpired = !!tournament && isExpired(tournament.date)
 
   // How a bout ended is the one record that has to outlive this device, so it
-  // goes through the store rather than straight to local storage.
+  // goes to the server rather than staying in the console.
   const updateMatchRecord = (updates) =>
     matchStore.update(match.categoryId, matchId, updates)
-
-  function openRound() {
-    for (let seat = 1; seat <= JUDGE_COUNT; seat++) {
-      localStorage.removeItem(`judge-${seat}-${matchId}`)
-    }
-    setStatus('open')
-    localStorage.setItem(`match-control-${matchId}`, 'open')
-    updateMatchRecord({ status: 'open' })
-  }
-
-  function revealResults() {
-    setStatus('revealed')
-    localStorage.setItem(`match-control-${matchId}`, 'revealed')
-    updateMatchRecord({ status: 'completed', winner, avgRed, avgBlue })
-  }
-
-  if (!match || !redComp || !blueComp) {
-    return <div>Match not found</div>
-  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
@@ -110,7 +47,6 @@ export default function RefereeMatchControl({ uid, profile }) {
         onBack={() => navigate(-1)}
         onFinalize={updateMatchRecord}
       />
-
     </Box>
   )
 }

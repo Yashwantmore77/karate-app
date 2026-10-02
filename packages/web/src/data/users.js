@@ -1,14 +1,6 @@
 import { httpGet, httpPost, httpPatch, httpDelete } from './http'
-import { serverUrl } from './session'
 
-/**
- * Accounts, which only ever exist on the server.
- *
- * There is no local implementation the way there is for the competition data:
- * with no API configured, sign-in runs against the built-in mock roster, and
- * there is nothing to administer. `isAvailable` is how screens ask.
- */
-export const isAvailable = () => !!serverUrl()
+/** Accounts. Administered here; there is no self-service signup. */
 
 export const ROLES = ['admin', 'referee', 'judge']
 

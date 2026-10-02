@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import { Container, Box, Toolbar, Typography, Button, TextField, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Alert, IconButton, Chip, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
-import { ArrowBack, Add, Edit, Delete, FileDownload } from '@mui/icons-material'
+import { ArrowBack, Add, Edit, Delete, FileDownload, SportsMma } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
@@ -140,6 +140,15 @@ export default function AdminCategoryDetail({ uid }) {
           <Typography variant="h6">Competitors ({total})</Typography>
           <TableSearch value={search} onChange={setSearch} placeholder="Search name or bib" />
           <Stack direction="row" spacing={1}>
+            {/* Competitors are entered here; their bouts are drawn and run on
+                the match screen, which this used to give no way to reach. */}
+            <Button
+              variant="outlined"
+              startIcon={<SportsMma />}
+              onClick={() => navigate(`/referee/category/${categoryId}`)}
+            >
+              Matches
+            </Button>
             <Button
               variant="outlined"
               startIcon={<FileDownload />}

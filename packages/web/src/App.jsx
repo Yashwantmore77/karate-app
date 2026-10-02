@@ -210,7 +210,7 @@ function AppShell() {
                   {!profile ? (
                     <Navigate to="/no-role" replace />
                   ) : (
-                    <RequireRole role="referee" profile={profile}><RefereeRouter uid={user.uid} profile={profile} /></RequireRole>
+                    <RequireRole role={['referee', 'admin']} profile={profile}><RefereeRouter uid={user.uid} profile={profile} /></RequireRole>
                   )}
                 </RequireAuth>
               }

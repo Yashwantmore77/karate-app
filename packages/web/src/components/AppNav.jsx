@@ -5,7 +5,7 @@ import {
   ListItemText, Typography, Divider, Chip, Tooltip,
 } from '@mui/material'
 import { Menu as MenuIcon, Logout } from '@mui/icons-material'
-import { signOut, auth } from '../firebase'
+import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
 
 // What each role can reach. The scoreboard is on every list because it is the
@@ -13,12 +13,15 @@ import { CYAN, TEXT } from '../theme/tokens'
 const MENUS = {
   admin: [
     { label: 'Tournaments', to: '/admin' },
+    // The referee screens, which an admin may also use: scheduling, panels,
+    // the draw, and deleting a bout.
+    { label: 'Matches', to: '/referee' },
     { label: 'Accounts', to: '/admin/accounts' },
     { label: 'Sign-ins', to: '/admin/sign-ins' },
     { label: 'Scoreboard', to: '/display' },
   ],
   referee: [
-    { label: 'Categories', to: '/referee' },
+    { label: 'Matches', to: '/referee' },
     { label: 'Scoreboard', to: '/display' },
   ],
   judge: [
@@ -52,6 +55,7 @@ export const activeItem = (items, pathname) => {
 export default function AppNav({ user, profile }) {
   const location = useLocation()
   const navigate = useNavigate()
+  const { logout } = useSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   const items = MENUS[profile?.role] || []
@@ -123,7 +127,7 @@ export default function AppNav({ user, profile }) {
             <IconButton
               color="inherit"
               aria-label="Sign out"
-              onClick={() => signOut(auth)}
+              onClick={logout}
             >
               <Logout />
             </IconButton>

@@ -46,18 +46,11 @@ export default function AdminUserList({ uid }) {
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  const available = users.isAvailable()
-
   const {
     rows: accounts, total, page, limit, loading, error: loadError,
     search, setSearch, setPage, refresh, reset,
   } = usePagedList(
-    // With no server there are no accounts to fetch, so the list stays empty
-    // rather than calling an endpoint that does not exist.
-    useCallback((options) => (
-      available ? users.page(options) : Promise.resolve({ rows: [], total: 0, pages: 1 })
-    ), [available]),
-    { deps: [available] }
+    useCallback((options) => users.page(options), [])
   )
 
   const editing = editingId ? accounts.find((a) => a.uid === editingId) : null
@@ -135,76 +128,69 @@ export default function AdminUserList({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flexGrow: 1 }}>
-        {!available ? (
-          <Alert severity="info">
-            Accounts live on the server. This build is running on local storage only,
-            where sign-in uses the built-in roster and there is nothing to manage.
-          </Alert>
-        ) : (
-          <>
-            {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
+        <>
+          {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
 
-            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-              <TableSearch value={search} onChange={setSearch} placeholder="Search email or role" />
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => { setEditingId(null); setOpenModal(true) }}
-              >
-                New account
-              </Button>
-            </Stack>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+            <TableSearch value={search} onChange={setSearch} placeholder="Search email or role" />
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => { setEditingId(null); setOpenModal(true) }}
+            >
+              New account
+            </Button>
+          </Stack>
 
-            {loading ? null : accounts.length === 0 ? (
-              <Paper>
-                <NoResults query={search} noun="accounts" />
-              </Paper>
-            ) : (
-              <TableContainer component={Paper}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Email</TableCell>
-                      <TableCell>Role</TableCell>
-                      <TableCell>Seat</TableCell>
-                      <TableCell align="right">Actions</TableCell>
+          {loading ? null : accounts.length === 0 ? (
+            <Paper>
+              <NoResults query={search} noun="accounts" />
+            </Paper>
+          ) : (
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell>Seat</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {accounts.map((account) => (
+                    <TableRow key={account.uid}>
+                      <TableCell>{account.email}</TableCell>
+                      <TableCell>
+                        <Chip label={account.role} size="small" color={roleColour(account.role)} />
+                      </TableCell>
+                      <TableCell>{account.seat ?? '—'}</TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          aria-label={`Edit ${account.email}`}
+                          onClick={() => { setEditingId(account.uid); setOpenModal(true) }}
+                        >
+                          <Edit />
+                        </IconButton>
+                        {/* Deleting the signed-in account is refused by the
+                            server; disabling it here says so before the click. */}
+                        <IconButton
+                          aria-label={`Delete ${account.email}`}
+                          disabled={account.uid === uid}
+                          title={account.uid === uid ? 'You cannot delete your own account' : undefined}
+                          onClick={() => setDeleteConfirm(account)}
+                        >
+                          <Delete />
+                        </IconButton>
+                      </TableCell>
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {accounts.map((account) => (
-                      <TableRow key={account.uid}>
-                        <TableCell>{account.email}</TableCell>
-                        <TableCell>
-                          <Chip label={account.role} size="small" color={roleColour(account.role)} />
-                        </TableCell>
-                        <TableCell>{account.seat ?? '—'}</TableCell>
-                        <TableCell align="right">
-                          <IconButton
-                            aria-label={`Edit ${account.email}`}
-                            onClick={() => { setEditingId(account.uid); setOpenModal(true) }}
-                          >
-                            <Edit />
-                          </IconButton>
-                          {/* Deleting the signed-in account is refused by the
-                              server; disabling it here says so before the click. */}
-                          <IconButton
-                            aria-label={`Delete ${account.email}`}
-                            disabled={account.uid === uid}
-                            title={account.uid === uid ? 'You cannot delete your own account' : undefined}
-                            onClick={() => setDeleteConfirm(account)}
-                          >
-                            <Delete />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
-              </TableContainer>
-            )}
-          </>
-        )}
+                  ))}
+                </TableBody>
+              </Table>
+              <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
+            </TableContainer>
+          )}
+        </>
       </Container>
 
       <Dialog open={openModal} onClose={closeModal} fullWidth maxWidth="sm">

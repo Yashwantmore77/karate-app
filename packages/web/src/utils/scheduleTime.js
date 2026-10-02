@@ -66,6 +66,10 @@ const ROLE_WORDS = {
 export function describeClashes(clashes, nameFor) {
   if (!Array.isArray(clashes)) return []
   return clashes.map((clash) => {
+    // A mat has no name to look up; it is the thing that is busy.
+    if (clash.role === 'mat') {
+      return `Mat ${clash.mat} already has a bout at ${formatSlot(clash.scheduledAt)}.`
+    }
     const who = nameFor?.(clash.uid) || clash.uid
     const doing = ROLE_WORDS[clash.otherRole] || 'is already on'
     const when = formatSlot(clash.scheduledAt)

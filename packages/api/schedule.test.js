@@ -274,3 +274,39 @@ describe('rescheduling an existing match', () => {
     expect(res.status).toBe(200)
   })
 })
+
+describe('a mat holds one bout at a time', () => {
+  it('refuses a second bout on the same mat in an overlapping slot', async () => {
+    await matchIn(ids.catA, { scheduledAt: AT_ONE, mat: 2, redId: ids.a1, blueId: ids.a2 })
+    // Entirely different people, so only the mat can be what clashes.
+    const res = await matchIn(ids.catB, { scheduledAt: AT_ONE_TEN, mat: 2, redId: ids.b1, blueId: ids.b2 })
+
+    expect(res.status).toBe(409)
+    expect(res.payload.details.clashes).toEqual([
+      expect.objectContaining({ role: 'mat', mat: 2, uid: null }),
+    ])
+  })
+
+  it('allows the same slot on a different mat', async () => {
+    // Two mats running at 13:00 is exactly what a multi-mat hall does.
+    await matchIn(ids.catA, { scheduledAt: AT_ONE, mat: 1, redId: ids.a1, blueId: ids.a2 })
+    const res = await matchIn(ids.catB, { scheduledAt: AT_ONE, mat: 2, redId: ids.b1, blueId: ids.b2 })
+    expect(res.status).toBe(201)
+  })
+
+  it('does not hold a mat for a bout with no mat given', async () => {
+    await matchIn(ids.catA, { scheduledAt: AT_ONE, redId: ids.a1, blueId: ids.a2 })
+    const res = await matchIn(ids.catB, { scheduledAt: AT_ONE, redId: ids.b1, blueId: ids.b2 })
+    expect(res.status).toBe(201)
+  })
+
+  it('refuses moving a bout onto a mat that is taken', async () => {
+    await matchIn(ids.catA, { scheduledAt: AT_ONE, mat: 1, redId: ids.a1, blueId: ids.a2 })
+    const { payload } = await matchIn(ids.catB, { scheduledAt: AT_ONE, mat: 2, redId: ids.b1, blueId: ids.b2 })
+    const res = await call('PATCH', `/matches/${payload.match.id}`, {
+      token: tokens.referee,
+      body: { mat: 1 },
+    })
+    expect(res.status).toBe(409)
+  })
+})

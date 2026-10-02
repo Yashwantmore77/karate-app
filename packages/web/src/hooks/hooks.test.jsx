@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useMatchClock } from './useMatchClock'
-import { useMatchState } from './useMatchState'
+import { useMatchRecord } from './useMatchRecord'
 import { useServerNow } from './useServerNow'
 import { makeClock, startClock } from '@kumite/shared/clock.js'
-import { matchStateRepo } from '../data/repo'
+import * as fake from '../test/fakeDomain'
+
+vi.mock('../data/domain', () => import('../test/fakeDomain'))
 
 describe('useServerNow', () => {
   it('returns wall clock time when there is no offset', () => {
@@ -54,51 +56,59 @@ describe('useMatchClock', () => {
   })
 })
 
-describe('useMatchState', () => {
-  beforeEach(() => localStorage.clear())
-  afterEach(() => localStorage.clear())
 
-  const initial = () => ({ scores: { ao: 0, aka: 0 } })
-
-  it('seeds state for a match that has none', async () => {
-    const { result } = renderHook(() => useMatchState('m1', initial))
-    await waitFor(() => expect(result.current[0]).toMatchObject({ scores: { ao: 0, aka: 0 } }))
+describe('useMatchRecord', () => {
+  // A judge opens a bout from a link, knowing only its id. This used to be
+  // answered from the browser's own storage, which is empty on any device
+  // talking to the API — so in production every judge got "Match not found".
+  beforeEach(() => {
+    fake.reset()
+    fake.seed({
+      tournaments: [{ id: 't1', name: 'Spring Cup', date: '2099-05-15' }],
+      categories: [{ id: 'cat-1', tournamentId: 't1', name: 'U14 Boys' }],
+      competitors: [
+        { id: 'c1', categoryId: 'cat-1', name: 'Aarav', bib: '101' },
+        { id: 'c2', categoryId: 'cat-1', name: 'Rohan', bib: '102' },
+      ],
+      matches: [{ id: 'm1', categoryId: 'cat-1', redId: 'c1', blueId: 'c2', status: 'open' }],
+    })
   })
 
-  it('persists a dispatched change through the repo', async () => {
-    const { result } = renderHook(() => useMatchState('m1', initial))
-    await waitFor(() => expect(result.current[0]).not.toBeNull())
-
-    act(() => {
-      result.current[1]((s) => ({ ...s, scores: { ...s.scores, ao: 3 } }))
-    })
-
-    await waitFor(() => expect(result.current[0].scores.ao).toBe(3))
-    const stored = await matchStateRepo.get('m1')
-    expect(stored.scores.ao).toBe(3)
+  it('starts out loading, with nothing to show yet', () => {
+    const { result } = renderHook(() => useMatchRecord('m1'))
+    expect(result.current).toMatchObject({ loading: true, match: null })
   })
 
-  it('picks up a change made by another window', async () => {
-    const { result } = renderHook(() => useMatchState('m1', initial))
-    await waitFor(() => expect(result.current[0]).not.toBeNull())
-
-    // a second controller writing to the same match
-    await act(async () => {
-      await matchStateRepo.put('m1', { scores: { ao: 0, aka: 7 } })
-    })
-
-    await waitFor(() => expect(result.current[0].scores.aka).toBe(7))
+  it('reads the bout, its category, tournament and both competitors from the API', async () => {
+    const { result } = renderHook(() => useMatchRecord('m1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.match.id).toBe('m1')
+    expect(result.current.category.name).toBe('U14 Boys')
+    expect(result.current.tournament.name).toBe('Spring Cup')
+    expect(result.current.redComp.name).toBe('Aarav')
+    expect(result.current.blueComp.name).toBe('Rohan')
   })
 
-  it('keeps two views of the same match in step', async () => {
-    const a = renderHook(() => useMatchState('m1', initial))
-    const b = renderHook(() => useMatchState('m1', initial))
-    await waitFor(() => expect(b.result.current[0]).not.toBeNull())
+  it('settles as not found for a bout that does not exist', async () => {
+    const { result } = renderHook(() => useMatchRecord('nope'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.match).toBeNull()
+  })
 
-    act(() => {
-      a.result.current[1]((s) => ({ ...s, scores: { ...s.scores, ao: 2 } }))
-    })
+  it('settles rather than spinning forever when the read fails', async () => {
+    const find = vi.spyOn(fake.matches, 'find').mockRejectedValueOnce(new Error('offline'))
+    const { result } = renderHook(() => useMatchRecord('m1'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.match).toBeNull()
+    find.mockRestore()
+  })
 
-    await waitFor(() => expect(b.result.current[0].scores.ao).toBe(2))
+  it('loads the new bout when the id changes', async () => {
+    fake.seed({ matches: [{ id: 'm2', categoryId: 'cat-1', redId: 'c2', blueId: 'c1', status: 'open' }] })
+    const { result, rerender } = renderHook(({ id }) => useMatchRecord(id), { initialProps: { id: 'm1' } })
+    await waitFor(() => expect(result.current.match?.id).toBe('m1'))
+    rerender({ id: 'm2' })
+    await waitFor(() => expect(result.current.match?.id).toBe('m2'))
+    expect(result.current.redComp.name).toBe('Rohan')
   })
 })

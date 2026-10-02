@@ -1,8 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import RefereeMatchControl from './RefereeMatchControl'
+import * as fake from '../../test/fakeDomain'
+import { resetMemoryMatches } from '../../test/memoryMatchChannel'
+import { resetDisplay } from '../../test/memoryDisplay'
+
+// The real scoring engine, in memory: the console drives the same reducer the
+// server runs, without a server.
+vi.mock('../../data/domain', () => import('../../test/fakeDomain'))
+vi.mock('../../data/channel', () => import('../../test/memoryMatchChannel'))
+vi.mock('../../data/display', () => import('../../test/memoryDisplay'))
 
 const categoryId = 'cat-kumite'
 const matchId = 'match-kumite-1'
@@ -10,19 +19,19 @@ const matchId = 'match-kumite-1'
 const seed = () => {
   const future = new Date()
   future.setFullYear(future.getFullYear() + 1)
-  localStorage.setItem('tournaments', JSON.stringify([
+  fake.seed({ tournaments: [
     { id: 't1', name: 'Summer Open', location: 'LA', date: future.toISOString().split('T')[0], template: 'kumite', status: 'active' }
-  ]))
-  localStorage.setItem('categories-t1', JSON.stringify([
+  ] })
+  fake.seed({ categories: [
     { id: categoryId, tournamentId: 't1', name: 'U18 Boys Kumite', ageGroup: 'U18', gender: 'M', division: 'Advanced' }
-  ]))
-  localStorage.setItem(`competitors-${categoryId}`, JSON.stringify([
+  ] })
+  fake.seed({ competitors: [
     { id: 'comp-1', bib: '101', name: 'Alice' },
     { id: 'comp-2', bib: '102', name: 'Bob' }
-  ]))
-  localStorage.setItem(`matches-${categoryId}`, JSON.stringify([
+  ].map((row) => ({ ...row, categoryId: categoryId })) })
+  fake.seed({ matches: [
     { id: matchId, categoryId, redId: 'comp-1', blueId: 'comp-2', status: 'open', createdAt: new Date().toISOString() }
-  ]))
+  ].map((row) => ({ ...row, categoryId: categoryId })) })
 }
 
 // The match is read asynchronously, so the console is not on screen the instant
@@ -32,7 +41,7 @@ const renderPage = async () => {
   const result = render(
     <MemoryRouter initialEntries={[`/referee/match/${matchId}`]}>
       <Routes>
-        <Route path="/referee/match/:matchId" element={<RefereeMatchControl uid="ref-uid" profile={{}} />} />
+        <Route path="/referee/match/:matchId" element={<RefereeMatchControl />} />
       </Routes>
     </MemoryRouter>
   )
@@ -42,13 +51,13 @@ const renderPage = async () => {
 
 describe('RefereeMatchControl - kumite template shows the WKF scoring console', () => {
   beforeEach(() => {
-    localStorage.clear()
+    fake.reset()
+    resetDisplay()
+    resetMemoryMatches()
     seed()
   })
 
-  afterEach(() => {
-    localStorage.clear()
-  })
+  afterEach(() => resetMemoryMatches())
 
   it('renders the Ao/Aka score panel with the configured match time', async () => {
     await renderPage()
@@ -59,9 +68,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
   })
 
   it('shows the same console whatever the tournament template says', async () => {
-    const tournaments = JSON.parse(localStorage.getItem('tournaments'))
-    tournaments[0].template = 'kata'
-    localStorage.setItem('tournaments', JSON.stringify(tournaments))
+    await fake.tournaments.update('t1', { template: 'kata' })
 
     await renderPage()
 
@@ -99,8 +106,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
 
     await user.click(screen.getByRole('button', { name: 'Close' }))
 
-    const matches = JSON.parse(localStorage.getItem(`matches-${categoryId}`))
-    const updated = matches.find((m) => m.id === matchId)
+    const updated = fake.rows('matches').find((m) => m.id === matchId)
     expect(updated.status).toBe('completed')
     expect(updated.winner).toBe('blue')
     expect(updated.avgBlue).toBe(3)

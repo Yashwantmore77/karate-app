@@ -10,15 +10,6 @@ import { currentCoords } from '../data/geolocation'
 import AppStage from '../components/AppStage'
 import { AO, AKA, CYAN } from '../theme/tokens'
 
-const testUsers = [
-  { label: 'Admin', email: 'admin@kata.local', pass: 'test123', accent: CYAN },
-  { label: 'Referee', email: 'referee@kata.local', pass: 'test123', accent: '#5B7BFF' },
-  { label: 'Judge 1', email: 'judge1@kata.local', pass: 'test123', accent: '#FF9192' },
-  { label: 'Judge 2', email: 'judge2@kata.local', pass: 'test123', accent: '#FF9192' },
-  { label: 'Judge 3', email: 'judge3@kata.local', pass: 'test123', accent: '#FF9192' },
-  { label: 'Judge 4', email: 'judge4@kata.local', pass: 'test123', accent: '#FF9192' },
-]
-
 const validationSchema = Yup.object({
   email: Yup.string().email('Invalid email').required('Email required'),
   password: Yup.string().required('Password required'),
@@ -48,6 +39,15 @@ const fieldSx = {
   '& .MuiFormHelperText-root.Mui-error': { color: '#FF9192' },
 }
 
+// A failed sign-in is not always a wrong password. Saying it was, when the API
+// is unreachable or the rate limiter has stepped in, sends people retyping a
+// password that was right all along.
+const signInFailure = (err) => {
+  if (err?.status === 401) return 'Wrong email or password'
+  if (err?.status === 429) return 'Too many attempts. Wait a few minutes, then try again.'
+  return 'Could not reach the sign-in service. Check the connection and try again.'
+}
+
 export default function Login() {
   const { user, profile, login } = useSession()
   const [busy, setBusy] = useState(false)
@@ -65,21 +65,13 @@ export default function Login() {
         // with them. Resolves to null whenever the browser will not say — denied,
         // unsupported, or too slow — and the sign-in proceeds regardless.
         const coords = await currentCoords()
-        // One login surface either way: against the real API when a server
-        // is configured, against the local mock otherwise. Either failure
-        // reads the same to someone typing the wrong password.
         await login(values.email.trim(), values.password, coords)
-      } catch {
-        formik.setFieldError('password', 'Wrong email or password')
+      } catch (err) {
+        formik.setFieldError('password', signInFailure(err))
         setBusy(false)
       }
     },
   })
-
-  const selectUser = (testUser) => {
-    formik.setValues({ email: testUser.email, password: testUser.pass })
-    formik.setErrors({})
-  }
 
   if (user && profile) {
     return <Navigate to={`/${profile.role}`} replace />
@@ -129,61 +121,6 @@ export default function Login() {
             </Typography>
           </Box>
         </Stack>
-
-        <Typography sx={{
-          fontSize: 11, letterSpacing: '2px', textTransform: 'uppercase',
-          color: 'rgba(255,255,255,0.4)', fontWeight: 700, mb: 1.5,
-        }}>
-          Sign in as
-        </Typography>
-
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
-          gap: 1,
-          mb: 3,
-        }}>
-          {testUsers.map((testUser) => {
-            const active = formik.values.email === testUser.email
-            return (
-              <Box
-                key={testUser.email}
-                role="button"
-                tabIndex={0}
-                onClick={() => selectUser(testUser)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    selectUser(testUser)
-                  }
-                }}
-                sx={{
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  textAlign: 'center',
-                  py: 1.1,
-                  borderRadius: 2,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: active ? '#fff' : 'rgba(255,255,255,0.68)',
-                  border: '1px solid',
-                  borderColor: active ? testUser.accent : 'rgba(255,255,255,0.14)',
-                  backgroundColor: active ? `${testUser.accent}24` : 'rgba(255,255,255,0.03)',
-                  boxShadow: active ? `0 0 18px ${testUser.accent}44` : 'none',
-                  transition: 'all .2s ease',
-                  '&:hover': {
-                    borderColor: testUser.accent,
-                    backgroundColor: `${testUser.accent}1c`,
-                    transform: stillness ? 'none' : 'translateY(-2px)',
-                  },
-                  '&:focus-visible': { outline: `2px solid ${CYAN}`, outlineOffset: 2 },
-                }}
-              >
-                {testUser.label}
-              </Box>
-            )
-          })}
-        </Box>
 
         <Box component="form" onSubmit={formik.handleSubmit} noValidate>
           <TextField
@@ -238,12 +175,6 @@ export default function Login() {
             {busy ? <CircularProgress size={22} sx={{ color: '#fff' }} /> : 'Sign in'}
           </Button>
         </Box>
-
-        <Typography sx={{
-          mt: 2.5, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.4)',
-        }}>
-          Pick a role above to fill the demo credentials
-        </Typography>
 
         {/* The browser's permission prompt is the only warning someone would
             otherwise get, and it arrives without saying who is asking or why. */}

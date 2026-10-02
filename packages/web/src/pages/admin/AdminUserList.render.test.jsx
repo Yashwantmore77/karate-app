@@ -7,7 +7,6 @@ import { MemoryRouter } from 'react-router-dom'
 // rather than the transport: these tests are about the screen's behaviour, and
 // the module's own contract is covered against the live API elsewhere.
 const users = vi.hoisted(() => ({
-  isAvailable: vi.fn(() => true),
   ROLES: ['admin', 'referee', 'judge'],
   list: vi.fn(),
   page: vi.fn(),
@@ -34,7 +33,6 @@ const renderPage = (uid = 'admin-1') =>
 
 beforeEach(() => {
   vi.clearAllMocks()
-  users.isAvailable.mockReturnValue(true)
   users.page.mockResolvedValue({ rows: ROSTER, total: ROSTER.length, pages: 1, page: 1 })
   users.create.mockResolvedValue({ uid: 'new-1' })
   users.update.mockResolvedValue({ uid: 'judge-1' })
@@ -146,11 +144,4 @@ describe('AdminUserList', () => {
     expect(await screen.findByText(/only an administrator can manage accounts/i)).toBeInTheDocument()
   })
 
-  it('explains itself when there is no server to manage accounts on', async () => {
-    users.isAvailable.mockReturnValue(false)
-    renderPage()
-    expect(await screen.findByText(/accounts live on the server/i)).toBeInTheDocument()
-    expect(users.page).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: /new account/i })).not.toBeInTheDocument()
-  })
 })

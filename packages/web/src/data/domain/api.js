@@ -28,6 +28,32 @@ const pageQuery = ({ page = 1, limit = 25, q = '' } = {}) => {
   return `?${params}`
 }
 
+// The server caps a page at 100 rows, and nothing stops a collection growing
+// past that. Asking for one big page used to drop the rest without a word.
+const MAX_PAGE = 100
+// A ceiling on the walk, so a server that misreports its total cannot keep
+// this looping. 500 pages of 100 is far past any one tournament.
+const MAX_PAGES = 500
+
+/**
+ * Every row of a listing, read page by page.
+ *
+ * For callers that need the whole set rather than a screenful: standings,
+ * exports, rosters behind a picker. A table should use page() instead.
+ */
+const everyRow = async (path, key) => {
+  const rows = []
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const payload = await httpGet(`${path}${pageQuery({ page, limit: MAX_PAGE })}`)
+    const batch = payload[key] || []
+    rows.push(...batch)
+    // Stop on a short or empty page as well as on the total: either means
+    // there is nothing further to read.
+    if (batch.length < MAX_PAGE || rows.length >= (payload.total ?? 0)) break
+  }
+  return rows
+}
+
 const pageOf = (payload, key) => ({
   rows: payload[key],
   total: payload.total,
@@ -38,7 +64,7 @@ const pageOf = (payload, key) => ({
 export const tournaments = {
   async list() {
     // Everything, for callers that walk the tree rather than show a table.
-    return (await httpGet(`/tournaments${pageQuery({ limit: 100 })}`)).tournaments
+    return everyRow('/tournaments', 'tournaments')
   },
   async page(options) {
     return pageOf(await httpGet(`/tournaments${pageQuery(options)}`), 'tournaments')
@@ -61,7 +87,7 @@ export const tournaments = {
 
 export const categories = {
   async list(tournamentId) {
-    return (await httpGet(`/tournaments/${tournamentId}/categories${pageQuery({ limit: 100 })}`)).categories
+    return everyRow(`/tournaments/${tournamentId}/categories`, 'categories')
   },
   async page(tournamentId, options) {
     return pageOf(await httpGet(`/tournaments/${tournamentId}/categories${pageQuery(options)}`), 'categories')
@@ -87,7 +113,7 @@ export const categories = {
 
 export const competitors = {
   async list(categoryId) {
-    return (await httpGet(`/categories/${categoryId}/competitors${pageQuery({ limit: 100 })}`)).competitors
+    return everyRow(`/categories/${categoryId}/competitors`, 'competitors')
   },
   async page(categoryId, options) {
     return pageOf(await httpGet(`/categories/${categoryId}/competitors${pageQuery(options)}`), 'competitors')
@@ -105,7 +131,7 @@ export const competitors = {
 
 export const matches = {
   async list(categoryId) {
-    return (await httpGet(`/categories/${categoryId}/matches${pageQuery({ limit: 100 })}`)).matches
+    return everyRow(`/categories/${categoryId}/matches`, 'matches')
   },
   async page(categoryId, options) {
     return pageOf(await httpGet(`/categories/${categoryId}/matches${pageQuery(options)}`), 'matches')
@@ -117,6 +143,13 @@ export const matches = {
   async find(id) {
     const res = await orNull(httpGet(`/matches/${id}`))
     return res && res.match
+  },
+  /**
+   * Draws a round robin for the category: a bout for every pair of entrants
+   * that does not have one yet. Resolves { created, skipped, total }.
+   */
+  async draw(categoryId) {
+    return httpPost(`/categories/${categoryId}/matches/draw`, {})
   },
   /**
    * Matches across the whole event, filtered and paged by the server.

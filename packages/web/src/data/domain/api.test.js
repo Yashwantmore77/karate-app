@@ -173,3 +173,56 @@ describe('api domain adapter', () => {
     expect(lastCall().headers['content-type']).toBeUndefined()
   })
 })
+
+describe('reading a whole collection', () => {
+  // Serves `total` rows in pages of whatever size was asked for, the way the
+  // server does, and records each page requested.
+  const serveRows = (key, total) => {
+    globalThis.fetch = vi.fn(async (url) => {
+      calls.push({ url, method: 'GET' })
+      const params = new URL(url).searchParams
+      const page = Number(params.get('page'))
+      const limit = Number(params.get('limit'))
+      const start = (page - 1) * limit
+      const rows = Array.from(
+        { length: Math.max(0, Math.min(limit, total - start)) },
+        (_, i) => ({ id: `r${start + i}` })
+      )
+      return { ok: true, status: 200, json: async () => ({ [key]: rows, total, page, pages: Math.ceil(total / limit) }) }
+    })
+  }
+
+  it('keeps reading past the first hundred rows', async () => {
+    // A round robin of sixteen is 120 bouts. A single page of 100 used to drop
+    // the last twenty without saying so, and the standings with them.
+    serveRows('matches', 250)
+    const rows = await matches.list('c1')
+    expect(rows).toHaveLength(250)
+    expect(new Set(rows.map((r) => r.id)).size).toBe(250)
+    expect(calls).toHaveLength(3)
+  })
+
+  it('stops after one request when everything fits on a page', async () => {
+    serveRows('competitors', 12)
+    expect(await competitors.list('c1')).toHaveLength(12)
+    expect(calls).toHaveLength(1)
+  })
+
+  it('stops on an empty collection', async () => {
+    serveRows('tournaments', 0)
+    expect(await tournaments.list()).toEqual([])
+    expect(calls).toHaveLength(1)
+  })
+
+  it('does not loop forever on a server that overstates its total', async () => {
+    // Every page comes back full while the total claims more, so only the
+    // ceiling on pages can end the walk.
+    globalThis.fetch = vi.fn(async (url) => {
+      calls.push({ url })
+      const rows = Array.from({ length: 100 }, (_, i) => ({ id: `x${calls.length}-${i}` }))
+      return { ok: true, status: 200, json: async () => ({ matches: rows, total: Number.MAX_SAFE_INTEGER }) }
+    })
+    await matches.list('c1')
+    expect(calls.length).toBeLessThanOrEqual(500)
+  })
+})

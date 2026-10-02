@@ -52,13 +52,13 @@ export default function JudgeMatchList({ uid, profile }) {
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Grid container spacing={2} sx={{ mb: 4 }}>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>Matches Live</Typography>
               <Typography variant="h4" sx={{ color: 'primary.main', fontWeight: 700, mt: 1 }}>{total}</Typography>
             </Paper>
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid size={{ xs: 6, sm: 3 }}>
             <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>Your Seat</Typography>
               <Typography variant="h4" sx={{ color: 'primary.main', fontWeight: 700, mt: 1 }}>#{profile?.seat || '?'}</Typography>

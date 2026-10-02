@@ -331,3 +331,61 @@ describe('assigning a panel to a bout that already exists', () => {
     expect(alert).toHaveTextContent(/is refereeing/i)
   })
 })
+
+describe('the mat field', () => {
+  it('sends the mat on a new bout', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const dialog = await openDialog(user)
+    await pickCompetitors(user, dialog)
+    await user.type(within(dialog).getByLabelText(/^mat$/i), '3')
+    await user.click(within(dialog).getByRole('button', { name: /create match/i }))
+
+    // A number, because the API types it strictly and the input hands back text.
+    expect(store.matches.create.mock.calls[0][1].mat).toBe(3)
+  })
+
+  it('leaves the mat out when none is given', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const dialog = await openDialog(user)
+    await pickCompetitors(user, dialog)
+    await user.click(within(dialog).getByRole('button', { name: /create match/i }))
+    expect(store.matches.create.mock.calls[0][1]).not.toHaveProperty('mat')
+  })
+
+  it('refuses a mat outside 1 to 99 before sending anything', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const dialog = await openDialog(user)
+    await pickCompetitors(user, dialog)
+    await user.type(within(dialog).getByLabelText(/^mat$/i), '120')
+    await user.click(within(dialog).getByRole('button', { name: /create match/i }))
+
+    expect(await within(dialog).findByText(/whole number from 1 to 99/i)).toBeInTheDocument()
+    expect(store.matches.create).not.toHaveBeenCalled()
+  })
+
+  it('pre-fills, and can clear, the mat of an existing bout', async () => {
+    store.matches.page.mockResolvedValue({
+      rows: [{ id: 'm-1', categoryId, redId: 'comp-1', blueId: 'comp-2', status: 'open', mat: 4 }],
+      total: 1, pages: 1, page: 1,
+    })
+    store.matches.update.mockResolvedValue({})
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('U14 Boys')
+    // Shown on the row, too.
+    expect(await screen.findByText('Mat 4')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /assign officials/i }))
+    const dialog = screen.getByRole('dialog')
+    const field = within(dialog).getByLabelText(/^mat$/i)
+    expect(field).toHaveValue(4)
+
+    await user.clear(field)
+    await user.click(within(dialog).getByRole('button', { name: /save changes/i }))
+    // null clears it; leaving it out would keep mat 4.
+    expect(store.matches.update.mock.calls[0][2].mat).toBeNull()
+  })
+})

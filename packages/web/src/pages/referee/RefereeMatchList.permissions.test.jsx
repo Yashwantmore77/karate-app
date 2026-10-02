@@ -3,12 +3,9 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
-// The other suite drives this page against real localStorage, which is the
-// no-server mode where nothing can be refused. These cover the server mode,
-// where the API has opinions about who may do what — so the data module is
-// stubbed with `isRemote` on and writes that can fail.
+// What the API refuses, and how the page shows it: the data module is stubbed
+// with writes that can fail.
 const domain = vi.hoisted(() => ({
-  isRemote: true,
   tournaments: { get: vi.fn() },
   categories: { find: vi.fn() },
   competitors: { list: vi.fn() },

@@ -10,7 +10,7 @@ import {
 } from '@kumite/shared/rules.js'
 import { initialMatchState, UNDO } from '@kumite/shared/commands.js'
 import { toMinutesSeconds, parseDuration } from '@kumite/shared/format.js'
-import { displayRepo } from '../../data/repo'
+import { displayRepo } from '../../data/display'
 import { useMatchChannel } from '../../hooks/useMatchChannel'
 import { useMatchClock } from '../../hooks/useMatchClock'
 import { useServerNow } from '../../hooks/useServerNow'

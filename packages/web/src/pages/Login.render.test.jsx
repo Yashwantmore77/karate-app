@@ -1,14 +1,21 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import Login from './Login'
 import { SessionProvider } from '../state/SessionContext'
-import { signOut, auth } from '../firebase'
 
-// With no VITE_SERVER_URL configured, SessionProvider resolves to the local
-// mock-Firebase session — so these drive the mock's own sign-in state
-// directly instead of passing user/profile as props, matching how the real
-// app is wired now.
+// The real session, with only the network edge replaced: what goes to the API
+// and what comes back.
+const session = vi.hoisted(() => ({
+  apiUrl: (path) => `http://api.test/api/v1${path}`,
+  getToken: () => null,
+  clearSession: vi.fn(),
+  loginToServer: vi.fn(),
+}))
+vi.mock('../data/session', () => session)
+vi.mock('../data/geolocation', () => ({ currentCoords: vi.fn(async () => null) }))
+
 const renderLogin = () =>
   render(
     <SessionProvider>
@@ -22,51 +29,69 @@ const renderLogin = () =>
     </SessionProvider>
   )
 
-describe('Login - route redirect behavior', () => {
-  beforeEach(() => signOut(auth))
-  afterEach(() => signOut(auth))
+const signIn = async (email = 'ref@club.test', password = 'correct horse') => {
+  const user = userEvent.setup()
+  renderLogin()
+  await user.type(await screen.findByLabelText(/email/i), email)
+  await user.type(screen.getByLabelText(/password/i), password)
+  await user.click(screen.getByRole('button', { name: /sign in/i }))
+}
 
-  it('renders the sign-in form when signed out', () => {
-    renderLogin()
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
-  })
+const failWith = (status) =>
+  session.loginToServer.mockRejectedValue(Object.assign(new Error('login failed'), { status }))
 
-  it('redirects to the role home once sign-in resolves a profile', async () => {
-    const { default: userEvent } = await import('@testing-library/user-event')
-    const user = userEvent.setup()
-    renderLogin()
-
-    await user.click(screen.getByText('Referee'))
-    await user.click(screen.getByRole('button', { name: /sign in/i }))
-
-    await waitFor(() => expect(screen.getByText('Referee Home')).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument()
-  })
-
-  it('stays on the login form while signed in but the profile has not resolved yet', async () => {
-    // Sign in via the mock directly, before render: the very first
-    // onAuthStateChanged callback sets `user` synchronously and only then
-    // awaits the Firestore-shaped roles lookup, so profile is genuinely
-    // still null the instant this renders.
-    await signInWithMock('referee@kata.local', 'test123')
-    renderLogin()
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
-  })
-
-  it('pre-fills credentials when a quick-login chip is clicked', async () => {
-    const { default: userEvent } = await import('@testing-library/user-event')
-    const user = userEvent.setup()
-    renderLogin()
-
-    await user.click(screen.getByText('Admin'))
-    expect(screen.getByDisplayValue('admin@kata.local')).toBeInTheDocument()
-  })
+beforeEach(() => {
+  vi.clearAllMocks()
 })
 
-// A thin wrapper so the "profile not resolved yet" test reads its intent
-// clearly: it signs in through the same mock Login itself uses, without
-// waiting for the async roles lookup that follows.
-async function signInWithMock(email, password) {
-  const { signInWithEmailAndPassword } = await import('../firebase')
-  await signInWithEmailAndPassword(auth, email, password)
-}
+describe('Login', () => {
+  it('renders the sign-in form when signed out', async () => {
+    renderLogin()
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
+  })
+
+  it('offers no ready-made credentials', async () => {
+    // It used to list every seeded account with its password as one-click
+    // buttons — admin included — on the live site.
+    renderLogin()
+    await screen.findByRole('button', { name: /sign in/i })
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
+    expect(screen.queryByText(/demo credentials/i)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/test123|kata\.local/)
+  })
+
+  it('signs in against the API and goes to the role home', async () => {
+    session.loginToServer.mockResolvedValue({ uid: 'u1', email: 'ref@club.test', role: 'referee' })
+    await signIn('  ref@club.test  ')
+
+    await waitFor(() => expect(screen.getByText('Referee Home')).toBeInTheDocument())
+    // Trimmed, because a stray space from a paste is not part of an address.
+    expect(session.loginToServer).toHaveBeenCalledWith('ref@club.test', 'correct horse', null)
+  })
+
+  it('says the password is wrong only when the API says so', async () => {
+    failWith(401)
+    await signIn()
+    expect(await screen.findByText('Wrong email or password')).toBeInTheDocument()
+  })
+
+  it('tells someone rate-limited to wait, not that their password is wrong', async () => {
+    failWith(429)
+    await signIn()
+    expect(await screen.findByText(/too many attempts/i)).toBeInTheDocument()
+  })
+
+  it('tells someone the service is unreachable, not that their password is wrong', async () => {
+    session.loginToServer.mockRejectedValue(new TypeError('Failed to fetch'))
+    await signIn()
+    expect(await screen.findByText(/could not reach the sign-in service/i)).toBeInTheDocument()
+    expect(screen.queryByText('Wrong email or password')).not.toBeInTheDocument()
+  })
+
+  it('stays on the form after a failure, ready to try again', async () => {
+    failWith(401)
+    await signIn()
+    await screen.findByText('Wrong email or password')
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled()
+  })
+})
