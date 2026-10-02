@@ -70,6 +70,14 @@ describe('AppNav', () => {
     expect(screen.queryByRole('button', { name: 'Tournaments' })).not.toBeInTheDocument()
   })
 
+  it('gives an admin the match screens, and marks them while there', () => {
+    // An admin schedules, draws and deletes bouts on the referee screens, so
+    // the menu has to lead there, and show where they are once inside.
+    renderNav({ role: 'admin', at: '/referee/category/c1' })
+    expect(navButton('Matches')).toHaveAttribute('aria-current', 'page')
+    expect(navButton('Tournaments')).not.toHaveAttribute('aria-current')
+  })
+
   it('marks the item matching the URL as the current page', () => {
     renderNav({ role: 'admin', at: '/admin/accounts' })
     expect(navButton('Accounts')).toHaveAttribute('aria-current', 'page')

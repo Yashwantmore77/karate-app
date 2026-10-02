@@ -54,7 +54,7 @@ export default function RefereeCategoryList({ uid }) {
       <PageBar>
         <Toolbar>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">Referee Dashboard</Typography>
+            <Typography variant="h6">Matches</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
               {selectedTournament ? selectedTournament.name : 'Select a tournament'}
             </Typography>

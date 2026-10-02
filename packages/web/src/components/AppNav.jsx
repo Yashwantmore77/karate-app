@@ -13,12 +13,15 @@ import { CYAN, TEXT } from '../theme/tokens'
 const MENUS = {
   admin: [
     { label: 'Tournaments', to: '/admin' },
+    // The referee screens, which an admin may also use: scheduling, panels,
+    // the draw, and deleting a bout.
+    { label: 'Matches', to: '/referee' },
     { label: 'Accounts', to: '/admin/accounts' },
     { label: 'Sign-ins', to: '/admin/sign-ins' },
     { label: 'Scoreboard', to: '/display' },
   ],
   referee: [
-    { label: 'Categories', to: '/referee' },
+    { label: 'Matches', to: '/referee' },
     { label: 'Scoreboard', to: '/display' },
   ],
   judge: [
