@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import { Container, Box, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, AlertTitle, Paper, IconButton, Chip, Divider, FormHelperText, TextField, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
-import { ArrowBack, Add, Visibility, Delete, FileDownload, Groups } from '@mui/icons-material'
+import { ArrowBack, Add, Visibility, Delete, FileDownload, Groups, Shuffle } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
@@ -52,6 +52,18 @@ const MESSAGES = {
 }
 const messageFor = (err) => MESSAGES[err?.code] || 'Could not save that. Try again.'
 
+const drawMessage = (err) => {
+  if (err?.code === 'too_many_for_round_robin') {
+    const { count, max } = err.details || {}
+    return `A round robin is limited to ${max ?? 32} competitors, and this category has ${count ?? 'more'}. Split it into pools.`
+  }
+  if (err?.code === 'not_enough_competitors') return 'Enter at least two competitors before drawing.'
+  return messageFor(err)
+}
+
+/** How many bouts a full round robin of `n` entrants is. */
+const roundRobinSize = (n) => (n * (n - 1)) / 2
+
 export default function RefereeMatchList({ uid, profile }) {
   const navigate = useNavigate()
   const { categoryId } = useParams()
@@ -69,6 +81,10 @@ export default function RefereeMatchList({ uid, profile }) {
   // the draw is made, and who is officiating is settled later.
   const [editingMatch, setEditingMatch] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [drawConfirm, setDrawConfirm] = useState(false)
+  // What the last draw did, or why it could not. Kept apart from `error`,
+  // which belongs to the dialog and to deletes.
+  const [notice, setNotice] = useState(null)
   const [error, setError] = useState(null)
   // Kept apart from `error`: a clash is a list of people, not one sentence,
   // and the referee needs to see every name to decide what to move.
@@ -260,6 +276,24 @@ export default function RefereeMatchList({ uid, profile }) {
     setDeleteConfirm(null)
   }
 
+  const handleDraw = async () => {
+    setDrawConfirm(false)
+    try {
+      const { created, skipped } = await matchStore.draw(categoryId)
+      setNotice(created === 0
+        ? { severity: 'info', text: 'Every pair already has a bout. Nothing new to draw.' }
+        : {
+            severity: 'success',
+            text: `Drew ${created} bout${created === 1 ? '' : 's'}`
+              + (skipped ? `, skipping ${skipped} already made.` : '.')
+              + ' Set their times, mats and panels from each row.',
+          })
+      await Promise.all([reset(), loadAllMatches()])
+    } catch (err) {
+      setNotice({ severity: 'error', text: drawMessage(err) })
+    }
+  }
+
   const handleExportResults = () => {
     downloadCSV(
       `${category?.name || 'category'}-results.csv`,
@@ -300,6 +334,12 @@ export default function RefereeMatchList({ uid, profile }) {
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>
         )}
 
+        {notice && (
+          <Alert severity={notice.severity} sx={{ mb: 2 }} onClose={() => setNotice(null)}>
+            {notice.text}
+          </Alert>
+        )}
+
         {tournamentExpired && (
           <Alert severity="error" sx={{ mb: 2 }}>
             Tournament expired on {new Date(tournament.date).toLocaleDateString()}. You can view matches but cannot create new ones.
@@ -319,9 +359,18 @@ export default function RefereeMatchList({ uid, profile }) {
               Export Results
             </Button>
             <Button
+              variant="outlined"
+              startIcon={<Shuffle />}
+              onClick={() => setDrawConfirm(true)}
+              disabled={competitors.length < 2 || tournamentExpired}
+              title={competitors.length < 2 ? 'Need at least 2 competitors' : 'Create a bout for every pair'}
+            >
+              Draw Round Robin
+            </Button>
+            <Button
               variant="contained"
               startIcon={<Add />}
-              onClick={() => { setError(null); setOpenModal(true) }}
+              onClick={() => openFor(null)}
               disabled={competitors.length < 2 || tournamentExpired}
               title={
                 tournamentExpired
@@ -340,7 +389,7 @@ export default function RefereeMatchList({ uid, profile }) {
           <Alert severity="info">
             {competitors.length < 2
               ? `Need at least 2 competitors to create a match (${competitors.length}/2)`
-              : 'No matches yet • Click "New Match" to get started'}
+              : 'No matches yet • Draw a round robin, or add bouts one at a time with "New Match"'}
           </Alert>
         ) : (
           <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', mb: 4 }}>
@@ -618,6 +667,24 @@ export default function RefereeMatchList({ uid, profile }) {
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={closeDialog}>Cancel</Button>
           <Button variant="contained" onClick={formik.handleSubmit}>{editingMatch ? 'Save Changes' : 'Create Match'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={drawConfirm} onClose={() => setDrawConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Draw a round robin?</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 1 }}>
+            Every pair of the {competitors.length} competitors gets a bout:{' '}
+            <strong>{roundRobinSize(competitors.length)} in all</strong>. Pairs that already
+            have one are skipped, so drawing again only adds what is missing.
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            The bouts are created without a time, mat or panel. Set those from each row afterwards.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDrawConfirm(false)}>Cancel</Button>
+          <Button onClick={handleDraw} variant="contained">Draw</Button>
         </DialogActions>
       </Dialog>
 

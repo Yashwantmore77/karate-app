@@ -7,6 +7,22 @@ import { isMongoConfigured, getDb } from '../db/mongo.js'
 
 const nowIso = () => new Date().toISOString()
 
+/**
+ * Stamps a batch with creation times one millisecond apart.
+ *
+ * Pages are sorted by createdAt. Rows written in the same instant would share
+ * one, fall back to their random ids, and lose the order they were given in
+ * — which for a drawn round robin is the order a mat works through them.
+ */
+const stampBatch = (docs) => {
+  const start = Date.now()
+  return docs.map((doc, i) => ({
+    ...doc,
+    id: doc.id ?? randomUUID(),
+    createdAt: new Date(start + i).toISOString(),
+  }))
+}
+
 const matchesFilter = (row, filter) =>
   Object.entries(filter).every(([field, value]) => row[field] === value)
 
@@ -70,6 +86,11 @@ function memoryCollection(name) {
       const row = { ...doc, id: doc.id ?? randomUUID(), createdAt: nowIso() }
       rows.set(row.id, row)
       return row
+    },
+    async insertMany(docs) {
+      const batch = stampBatch(docs)
+      for (const row of batch) rows.set(row.id, row)
+      return batch
     },
     async update(id, patch) {
       const current = rows.get(id)
@@ -164,6 +185,12 @@ function mongoCollection(name) {
       const row = { ...doc, id: doc.id ?? randomUUID(), createdAt: nowIso() }
       await (await collection()).insertOne({ ...row })
       return row
+    },
+    async insertMany(docs) {
+      const batch = stampBatch(docs)
+      // Copies go to the driver, which adds _id to whatever it is handed.
+      if (batch.length) await (await collection()).insertMany(batch.map((row) => ({ ...row })))
+      return batch
     },
     async update(id, patch) {
       const result = await (await collection()).findOneAndUpdate(

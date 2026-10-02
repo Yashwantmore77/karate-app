@@ -4,11 +4,18 @@ import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { badRequest, conflict } from '../lib/errors.js'
 import { slotMinutesFor, endOfSlot, clashingPeople } from '../lib/schedule.js'
+import { roundRobinPairs, pairKey } from '../lib/draw.js'
+import { validate } from '../lib/validate.js'
 import { findUser } from '../auth/users.js'
 
 // Used when a tournament predates the setting, so an older record still gets a
 // sensible panel size instead of no limit at all.
 const DEFAULT_JUDGE_COUNT = 4
+
+// The largest field a round robin is drawn for. Thirty-two entrants is 496
+// bouts; a category bigger than that wants pools or a bracket, not everyone
+// against everyone, and drawing it anyway would bury the mat.
+export const MAX_ROUND_ROBIN = 32
 
 const MATCH_SCHEMA = {
   redId: { type: 'string', max: 60, nullable: true },
@@ -219,6 +226,57 @@ export function matchRoutes(stores) {
       categoryId: req.params.categoryId,
     })
     res.status(201).json({ match })
+  })
+
+  /**
+   * Draws a round robin: a bout for every pair of entrants that lacks one.
+   *
+   * Safe to press twice. A pair that already has a bout — made by hand or by an
+   * earlier draw, in either colour order — is skipped, so drawing again after a
+   * late entry creates only that entrant's bouts.
+   *
+   * The new bouts have no time, mat or panel. Scheduling them is a separate
+   * decision, and leaving them unscheduled means a draw can never clash.
+   */
+  nested.post('/:categoryId/matches/draw', requireRole('referee'), async (req, res) => {
+    // Nothing to configure yet. A body is still checked, so a mistyped option
+    // is refused rather than quietly ignored.
+    validate(req.body ?? {}, {})
+    const { categoryId } = req.params
+    await loadOrFail(categories, categoryId)
+
+    // In the order they were entered, so the same field always draws the same
+    // way rather than in whatever order the store returns.
+    const entrants = (await competitors.list({ categoryId }))
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)) || a.id.localeCompare(b.id))
+
+    if (entrants.length < 2) throw badRequest('not_enough_competitors')
+    if (entrants.length > MAX_ROUND_ROBIN) {
+      throw badRequest('too_many_for_round_robin', { max: MAX_ROUND_ROBIN, count: entrants.length })
+    }
+
+    const drawn = new Set(
+      (await matches.list({ categoryId }))
+        .filter((m) => m.redId && m.blueId)
+        .map((m) => pairKey(m.redId, m.blueId))
+    )
+
+    const pairs = roundRobinPairs(entrants.map((c) => c.id))
+    const fresh = pairs.filter(([red, blue]) => !drawn.has(pairKey(red, blue)))
+
+    // One write for the lot: a bout at a time would be a hundred round trips
+    // and a hundred change notices to every connected screen.
+    if (fresh.length > 0) {
+      await matches.insertMany(fresh.map(([redId, blueId]) => ({
+        redId, blueId, status: 'open', categoryId,
+      })))
+    }
+
+    res.status(201).json({
+      created: fresh.length,
+      skipped: pairs.length - fresh.length,
+      total: pairs.length,
+    })
   })
 
   /**

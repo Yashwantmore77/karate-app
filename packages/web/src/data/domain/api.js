@@ -145,6 +145,13 @@ export const matches = {
     return res && res.match
   },
   /**
+   * Draws a round robin for the category: a bout for every pair of entrants
+   * that does not have one yet. Resolves { created, skipped, total }.
+   */
+  async draw(categoryId) {
+    return httpPost(`/categories/${categoryId}/matches/draw`, {})
+  },
+  /**
    * Matches across the whole event, filtered and paged by the server.
    *
    * `mine` asks for the caller's own assignments; it is a flag rather than an
