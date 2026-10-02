@@ -2,7 +2,8 @@ import { Router } from 'express'
 import { requireAuth, requireRole } from '../auth/middleware.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
-import { badRequest } from '../lib/errors.js'
+import { badRequest, conflict } from '../lib/errors.js'
+import { slotMinutesFor, endOfSlot, clashingPeople } from '../lib/schedule.js'
 import { findUser } from '../auth/users.js'
 
 // Used when a tournament predates the setting, so an older record still gets a
@@ -19,6 +20,13 @@ const MATCH_SCHEMA = {
   avgRed: { type: 'number', min: 0, max: 10, nullable: true },
   avgBlue: { type: 'number', min: 0, max: 10, nullable: true },
   mat: { type: 'integer', min: 1, max: 99, nullable: true },
+  // When the bout is called. Optional, because a schedule is built after the
+  // draw and a bout with no time yet is still a real bout.
+  //
+  // Its matching end is not here: `endsAt` is derived from the tournament’s
+  // slot length and owned by the server, like createdAt. A client that could
+  // set it could grant itself a zero-length bout and clash with nothing.
+  scheduledAt: { type: 'timestamp', nullable: true },
   // Who is officiating. Both stay optional: a bout can be listed before anyone
   // has been put on it, and an unassigned match is still a real match.
   refereeId: { type: 'string', max: 60, nullable: true },
@@ -100,6 +108,75 @@ export function matchRoutes(stores) {
     if (judgeIds.length > limit) throw badRequest('too_many_judges')
   }
 
+  // A write only has to be checked for clashes if it changes when the bout is
+  // or who is on it. Without this, recording a winner on a bout that was always
+  // double-booked would fail at the one moment the referee cannot do anything
+  // about it.
+  const SCHEDULE_FIELDS = ['scheduledAt', 'redId', 'blueId', 'refereeId', 'judgeIds', 'status']
+
+  /**
+   * Refuses a write that would need someone who is already busy.
+   *
+   * Competitors are checked alongside officials, because the rule is about a
+   * person being in one place: a fighter cannot be called to two mats any more
+   * than a referee can.
+   */
+  const assertNobodyDoubleBooked = async (subject, matchId) => {
+    const others = await matches.overlapping({
+      startsAt: subject.scheduledAt,
+      endsAt: subject.endsAt,
+      excludeId: matchId,
+      // A finished bout releases the people on it. The rule exists to stop
+      // someone being needed in two places at once, and nobody is needed at a
+      // bout that is already over.
+      excludeStatus: ['completed'],
+    })
+
+    const clashes = []
+    for (const other of others) {
+      for (const person of clashingPeople(subject, other)) {
+        clashes.push({
+          ...person,
+          matchId: other.id,
+          scheduledAt: other.scheduledAt,
+          mat: other.mat ?? null,
+        })
+      }
+    }
+
+    // 409 rather than 400: the request is well formed, and what makes it fail is
+    // the state of the rest of the schedule. The payload names who clashes and
+    // where, so the caller can show it instead of guessing.
+    if (clashes.length > 0) throw conflict('schedule_conflict', { clashes })
+  }
+
+  /**
+   * Works out the window a write puts a match in, and returns the server-owned
+   * fields to store with it.
+   *
+   * `endsAt` is derived here rather than accepted from the client so it can
+   * never disagree with `scheduledAt`, and is stored rather than recomputed on
+   * read so a clash is one range query instead of a slot lookup per candidate.
+   */
+  const resolveSchedule = async (patch, categoryId, existing, matchId) => {
+    const next = { ...existing, ...patch }
+
+    if (!next.scheduledAt) {
+      // Clearing the time gives up the window with it; leaving it alone on an
+      // unscheduled bout writes nothing.
+      return 'scheduledAt' in patch ? { endsAt: null } : {}
+    }
+
+    const category = await categories.get(categoryId)
+    const tournament = category ? await tournaments.get(category.tournamentId) : null
+    const endsAt = endOfSlot(next.scheduledAt, slotMinutesFor(tournament))
+
+    if (SCHEDULE_FIELDS.some((field) => field in patch)) {
+      await assertNobodyDoubleBooked({ ...next, endsAt }, matchId)
+    }
+    return { endsAt }
+  }
+
   nested.use(requireAuth)
   flat.use(requireAuth)
 
@@ -124,7 +201,12 @@ export function matchRoutes(stores) {
     await loadOrFail(categories, req.params.categoryId)
     await assertCompetitorsInCategory(fields, req.params.categoryId)
     await assertPeopleMakeSense(fields, req.params.categoryId)
-    const match = await matches.insert({ ...fields, categoryId: req.params.categoryId })
+    const schedule = await resolveSchedule(fields, req.params.categoryId, {}, null)
+    const match = await matches.insert({
+      ...fields,
+      ...schedule,
+      categoryId: req.params.categoryId,
+    })
     res.status(201).json({ match })
   })
 
@@ -194,7 +276,8 @@ export function matchRoutes(stores) {
     const existing = await loadOrFail(matches, req.params.id)
     await assertCompetitorsInCategory(patch, existing.categoryId)
     await assertPeopleMakeSense(patch, existing.categoryId, existing)
-    res.json({ match: await matches.update(req.params.id, patch) })
+    const schedule = await resolveSchedule(patch, existing.categoryId, existing, req.params.id)
+    res.json({ match: await matches.update(req.params.id, { ...patch, ...schedule }) })
   })
 
   flat.delete('/:id', requireRole('admin'), async (req, res) => {

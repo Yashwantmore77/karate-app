@@ -14,11 +14,30 @@ import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
 
+// The server applies these when a body leaves them out; the form shows the
+// same numbers so a new tournament is not a surprise.
+const DEFAULT_JUDGE_COUNT = 4
+const DEFAULT_SLOT_MINUTES = 15
+
 const validationSchema = Yup.object({
   name: Yup.string().required('Tournament name required').min(3, 'Name too short'),
   location: Yup.string().required('Location required'),
   date: Yup.date().nullable().required('Date required'),
   template: Yup.string().required('Template required'),
+  // Bounded the same way the API bounds them, so the form refuses what the
+  // server would refuse rather than failing after a round trip.
+  judgeCount: Yup.number()
+    .typeError('Judges must be a number')
+    .integer('Whole judges only')
+    .min(1, 'At least one judge')
+    .max(8, 'At most eight judges')
+    .required('Panel size required'),
+  slotMinutes: Yup.number()
+    .typeError('Slot length must be a number')
+    .integer('Whole minutes only')
+    .min(1, 'At least one minute')
+    .max(240, 'At most four hours')
+    .required('Slot length required'),
 })
 
 export default function AdminTournamentList({ uid }) {
@@ -38,7 +57,9 @@ export default function AdminTournamentList({ uid }) {
       name: editingTournament?.name || '',
       location: editingTournament?.location || '',
       date: editingTournament?.date ? dayjs(editingTournament.date) : null,
-      template: editingTournament?.template || 'kata'
+      template: editingTournament?.template || 'kata',
+      judgeCount: editingTournament?.judgeCount ?? DEFAULT_JUDGE_COUNT,
+      slotMinutes: editingTournament?.slotMinutes ?? DEFAULT_SLOT_MINUTES,
     },
     enableReinitialize: true,
     validationSchema,
@@ -52,6 +73,10 @@ export default function AdminTournamentList({ uid }) {
         location: values.location,
         date: formatDate(values.date),
         template: values.template,
+        // Sent as numbers: the API types these strictly, and a text input
+        // hands back a string.
+        judgeCount: Number(values.judgeCount),
+        slotMinutes: Number(values.slotMinutes),
       }
       if (editingId) {
         await tournamentStore.update(editingId, fields)
@@ -272,6 +297,40 @@ export default function AdminTournamentList({ uid }) {
               </Select>
               {formik.errors.template && <FormHelperText>{formik.errors.template}</FormHelperText>}
             </FormControl>
+
+            {/* These two decide what "at the same time" means here: the slot
+                length is the window a bout holds everyone on it for, which is
+                what the double-booking check measures. */}
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  name="judgeCount"
+                  label="Judges on a panel"
+                  value={formik.values.judgeCount}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  error={!!formik.errors.judgeCount}
+                  helperText={formik.errors.judgeCount || 'Usually 4'}
+                  inputProps={{ min: 1, max: 8 }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  name="slotMinutes"
+                  label="Slot length (minutes)"
+                  value={formik.values.slotMinutes}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  error={!!formik.errors.slotMinutes}
+                  helperText={formik.errors.slotMinutes || 'How long a bout holds its people'}
+                  inputProps={{ min: 1, max: 240 }}
+                />
+              </Grid>
+            </Grid>
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>

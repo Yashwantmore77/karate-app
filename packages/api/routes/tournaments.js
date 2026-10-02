@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireAuth, requireRole } from '../auth/middleware.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
+import { DEFAULT_SLOT_MINUTES, SLOT_MIN_MINUTES, SLOT_MAX_MINUTES } from '../lib/schedule.js'
 
 const TOURNAMENT_SCHEMA = {
   name: { type: 'string', required: true, min: 3, max: 120 },
@@ -14,6 +15,18 @@ const TOURNAMENT_SCHEMA = {
   // How many judges sit on a panel here. Four is the usual WKF panel, but
   // smaller events run three or two, so it is the tournament's to decide.
   judgeCount: { type: 'integer', min: 1, max: 8, default: 4 },
+  // How long one bout occupies its mat, and therefore everyone on it. This is
+  // what makes two matches "at the same time" a question with an answer, so
+  // the clash check has something to measure.
+  //
+  // A match stores the window it was given, so changing this moves later
+  // bouts without disturbing ones already on the schedule.
+  slotMinutes: {
+    type: 'integer',
+    min: SLOT_MIN_MINUTES,
+    max: SLOT_MAX_MINUTES,
+    default: DEFAULT_SLOT_MINUTES,
+  },
 }
 
 export function tournamentRoutes(stores) {

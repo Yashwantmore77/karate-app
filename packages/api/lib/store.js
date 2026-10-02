@@ -52,6 +52,17 @@ function memoryCollection(name) {
       // needs it to know how many pages there are.
       return { rows: found.slice(start, start + limit), total: found.length }
     },
+    async overlapping({ startsAt, endsAt, excludeId = null, excludeStatus = [] }) {
+      return [...rows.values()].filter((row) => (
+        row.id !== excludeId
+        && !excludeStatus.includes(row.status)
+        // An unscheduled bout occupies nobody: it has no window to clash with.
+        && typeof row.scheduledAt === 'string'
+        && typeof row.endsAt === 'string'
+        && row.scheduledAt < endsAt
+        && row.endsAt > startsAt
+      ))
+    },
     async get(id) {
       return rows.get(id) ?? null
     },
@@ -133,6 +144,18 @@ function mongoCollection(name) {
         col.countDocuments(query),
       ])
       return { rows, total }
+    },
+    async overlapping({ startsAt, endsAt, excludeId = null, excludeStatus = [] }) {
+      // $type pins these to strings before comparing. Mongo orders null ahead
+      // of every string, so a bare $lt would match every unscheduled bout and
+      // report the whole collection as clashing.
+      const query = {
+        scheduledAt: { $type: 'string', $lt: endsAt },
+        endsAt: { $type: 'string', $gt: startsAt },
+      }
+      if (excludeId) query.id = { $ne: excludeId }
+      if (excludeStatus.length) query.status = { $nin: excludeStatus }
+      return (await collection()).find(query, withoutInternalId).toArray()
     },
     async get(id) {
       return (await collection()).findOne({ id }, withoutInternalId)
