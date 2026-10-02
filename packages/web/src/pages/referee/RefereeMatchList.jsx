@@ -80,6 +80,19 @@ export default function RefereeMatchList({ uid, profile }) {
     { deps: [categoryId] }
   )
 
+  // Every bout in the category, for the standings and the export. Kept apart
+  // from the table rows: those are one page of a search, and a standings table
+  // built from them changed whenever someone paged or typed in the search box.
+  const [allMatches, setAllMatches] = useState([])
+  const loadAllMatches = useCallback(async () => {
+    try {
+      setAllMatches(await matchStore.list(categoryId))
+    } catch {
+      // The table reports its own load failure; standings just stay as they were.
+    }
+  }, [categoryId])
+  useEffect(() => { loadAllMatches() }, [loadAllMatches])
+
   // Who can be put on a bout. Empty in local mode, where there is no server
   // holding accounts, so the pickers simply offer nothing.
   const [referees, setReferees] = useState([])
@@ -149,7 +162,7 @@ export default function RefereeMatchList({ uid, profile }) {
       setError(null)
       setClashes([])
       // An edit stays where it is; a new bout belongs on the first page.
-      await (editingMatch ? refresh() : reset())
+      await Promise.all([editingMatch ? refresh() : reset(), loadAllMatches()])
       formik.resetForm()
       setEditingMatch(null)
       setOpenModal(false)
@@ -230,7 +243,7 @@ export default function RefereeMatchList({ uid, profile }) {
     try {
       await matchStore.remove(categoryId, matchId)
       setError(null)
-      await refresh()
+      await Promise.all([refresh(), loadAllMatches()])
     } catch (err) {
       setError(messageFor(err))
     }
@@ -250,7 +263,8 @@ export default function RefereeMatchList({ uid, profile }) {
         { label: 'Red Avg Score', value: (m) => m.avgRed ?? '' },
         { label: 'Blue Avg Score', value: (m) => m.avgBlue ?? '' },
       ],
-      matches
+      // The whole category, not the page on screen.
+      allMatches
     )
   }
 
@@ -426,7 +440,7 @@ export default function RefereeMatchList({ uid, profile }) {
         )}
 
         <Typography variant="h6" sx={{ mb: 2 }}>Standings</Typography>
-        <StandingsTable competitors={competitors} matches={matches} />
+        <StandingsTable competitors={competitors} matches={allMatches} />
       </Container>
 
       <Dialog open={openModal} onClose={closeDialog} maxWidth="sm" fullWidth>
