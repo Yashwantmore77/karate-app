@@ -4,6 +4,14 @@ import { badRequest } from './errors.js'
 // missing `max` can never become an unbounded write.
 const DEFAULT_MAX_STRING = 500
 
+// A timestamp must name its own timezone, as either Z or an offset.
+//
+// Without one, Date.parse reads it in whatever zone the server happens to run
+// in. The API runs in UTC and the events do not, so a bare "13:00" would be
+// stored hours away from the time whoever typed it meant.
+const ISO_INSTANT =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/
+
 const isPlainObject = (value) =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
@@ -32,6 +40,19 @@ function coerce(field, raw, rule) {
       if (rule.min !== undefined && raw < rule.min) reject()
       if (rule.max !== undefined && raw > rule.max) reject()
       return raw
+    }
+    case 'timestamp': {
+      // An instant on the clock, normalized to UTC.
+      //
+      // Normalizing is not tidiness: the clash query compares these as strings,
+      // and that is only chronological while every one of them is written the
+      // same way. A date with no time of day is rejected, because a slot with no
+      // time cannot clash with anything.
+      if (typeof raw !== 'string') reject()
+      if (!ISO_INSTANT.test(raw)) reject()
+      const ms = Date.parse(raw)
+      if (!Number.isFinite(ms)) reject()
+      return new Date(ms).toISOString()
     }
     case 'boolean': {
       if (typeof raw !== 'boolean') reject()

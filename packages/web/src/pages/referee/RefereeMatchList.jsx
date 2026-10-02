@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, Paper, IconButton, Chip, Divider, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
-import { ArrowBack, Add, Visibility, Delete, FileDownload } from '@mui/icons-material'
+import { Container, Box, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, AlertTitle, Paper, IconButton, Chip, Divider, FormHelperText, TextField, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
+import { ArrowBack, Add, Visibility, Delete, FileDownload, Groups } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
@@ -16,12 +16,14 @@ import {
   isRemote,
 } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
+import { localInputToIso, isoToLocalInput, formatSlotTime, describeClashes } from '../../utils/scheduleTime'
 import { downloadCSV } from '../../utils/csvExport'
 import StandingsTable from '../../components/StandingsTable'
 import * as users from '../../data/users'
 
 // Used until a tournament says otherwise; matches the server's own default.
 const DEFAULT_JUDGE_COUNT = 4
+const DEFAULT_SLOT_MINUTES = 15
 
 const validationSchema = Yup.object({
   redId: Yup.string().required('Select red competitor'),
@@ -42,6 +44,10 @@ const MESSAGES = {
   referee_also_judge: 'The referee cannot also sit on the judging panel.',
   too_many_judges: 'That is more judges than this tournament seats.',
   same_competitor: 'A bout needs two different competitors.',
+  invalid_scheduledAt: 'That is not a valid date and time.',
+  // A clash is reported on its own, with the detail the server sent, so this
+  // is only the headline above it.
+  schedule_conflict: 'Somebody on this bout is already busy at that time.',
 }
 const messageFor = (err) => MESSAGES[err?.code] || 'Could not save that. Try again.'
 
@@ -57,8 +63,15 @@ export default function RefereeMatchList({ uid, profile }) {
   const [tournament, setTournament] = useState(null)
   const [competitors, setCompetitors] = useState([])
   const [openModal, setOpenModal] = useState(false)
+  // The match being edited, or null when the dialog is creating one. The
+  // panel has to be changeable after the fact: bouts are listed as soon as
+  // the draw is made, and who is officiating is settled later.
+  const [editingMatch, setEditingMatch] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [error, setError] = useState(null)
+  // Kept apart from `error`: a clash is a list of people, not one sentence,
+  // and the referee needs to see every name to decide what to move.
+  const [clashes, setClashes] = useState([])
 
   const {
     rows: matches, total, page, limit, search, setSearch, setPage, refresh, reset,
@@ -72,9 +85,19 @@ export default function RefereeMatchList({ uid, profile }) {
   const [referees, setReferees] = useState([])
   const [judges, setJudges] = useState([])
   const judgeLimit = tournament?.judgeCount ?? DEFAULT_JUDGE_COUNT
+  const slotMinutes = tournament?.slotMinutes ?? DEFAULT_SLOT_MINUTES
 
   const formik = useFormik({
-    initialValues: { redId: '', blueId: '', refereeId: '', judgeIds: [] },
+    initialValues: {
+      redId: editingMatch?.redId || '',
+      blueId: editingMatch?.blueId || '',
+      refereeId: editingMatch?.refereeId || '',
+      judgeIds: editingMatch?.judgeIds || [],
+      scheduledAt: isoToLocalInput(editingMatch?.scheduledAt),
+    },
+    // So opening the dialog on a different match reloads the fields rather
+    // than showing the one opened before it.
+    enableReinitialize: true,
     validationSchema,
     validateOnChange: false,
     validateOnBlur: false,
@@ -83,25 +106,52 @@ export default function RefereeMatchList({ uid, profile }) {
         formik.setFieldError('blueId', 'Competitors must be different')
         return
       }
+
+      // A time that will not parse is caught here rather than sent, so the
+      // field can say so next to itself.
+      const scheduledIso = values.scheduledAt ? localInputToIso(values.scheduledAt) : null
+      if (values.scheduledAt && !scheduledIso) {
+        formik.setFieldError('scheduledAt', 'That is not a valid date and time')
+        return
+      }
       try {
-        await matchStore.create(categoryId, {
-          redId: values.redId,
-          blueId: values.blueId,
-          status: 'open',
-          // Omitted rather than sent empty: the schema rejects an unknown
-          // shape, and "no referee" is the absence of the field.
-          ...(values.refereeId ? { refereeId: values.refereeId } : {}),
-          ...(values.judgeIds.length ? { judgeIds: values.judgeIds } : {}),
-        })
+        if (editingMatch) {
+          // A patch sends null to clear, where a create simply omits: the two
+          // mean different things to the API, and clearing a panel has to be
+          // possible once one has been set.
+          await matchStore.update(categoryId, editingMatch.id, {
+            redId: values.redId,
+            blueId: values.blueId,
+            refereeId: values.refereeId || null,
+            judgeIds: values.judgeIds,
+            scheduledAt: scheduledIso,
+          })
+        } else {
+          await matchStore.create(categoryId, {
+            redId: values.redId,
+            blueId: values.blueId,
+            status: 'open',
+            // Omitted rather than sent empty: the schema rejects an unknown
+            // shape, and "no referee" is the absence of the field.
+            ...(values.refereeId ? { refereeId: values.refereeId } : {}),
+            ...(values.judgeIds.length ? { judgeIds: values.judgeIds } : {}),
+            // The input gives naive wall-clock text; the API wants an instant.
+            ...(scheduledIso ? { scheduledAt: scheduledIso } : {}),
+          })
+        }
       } catch (err) {
         // Kept in the dialog rather than behind it: the selections are still
         // on screen, and closing over a failure would look like it worked.
         setError(messageFor(err))
+        setClashes(describeClashes(err?.details?.clashes, nameFor))
         return
       }
       setError(null)
-      await reset()
+      setClashes([])
+      // An edit stays where it is; a new bout belongs on the first page.
+      await (editingMatch ? refresh() : reset())
       formik.resetForm()
+      setEditingMatch(null)
       setOpenModal(false)
     }
   })
@@ -140,6 +190,36 @@ export default function RefereeMatchList({ uid, profile }) {
   }, [])
 
   const getCompetitor = (id) => competitors.find(c => c.id === id)
+
+  /** Opens the dialog on a bout, or on nothing to create one. */
+  const openFor = (match) => {
+    setEditingMatch(match)
+    setError(null)
+    setClashes([])
+    setOpenModal(true)
+  }
+
+  const closeDialog = () => {
+    setOpenModal(false)
+    setEditingMatch(null)
+    setError(null)
+    setClashes([])
+    formik.resetForm()
+  }
+
+  /**
+   * A uid as something readable, across all three rosters.
+   *
+   * A clash can name a fighter or an official, and the server reports only the
+   * uid, so every roster this screen already holds is searched before giving
+   * up and showing the id itself.
+   */
+  const nameFor = (id) => (
+    getCompetitor(id)?.name
+    || referees.find((r) => r.uid === id)?.email
+    || judges.find((j) => j.uid === id)?.email
+    || null
+  )
 
   const handleDeleteMatch = async (matchId) => {
     for (let seat = 1; seat <= JUDGE_COUNT; seat++) {
@@ -246,6 +326,8 @@ export default function RefereeMatchList({ uid, profile }) {
                   <TableCell sx={{ fontWeight: 600 }}>Red</TableCell>
                   <TableCell align="center" sx={{ fontWeight: 600 }}>vs</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Blue</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Time</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Panel</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 600 }}>Actions</TableCell>
                 </TableRow>
@@ -272,6 +354,30 @@ export default function RefereeMatchList({ uid, profile }) {
                         </Box>
                       </TableCell>
                       <TableCell>
+                        <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {formatSlotTime(m.scheduledAt)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {/* Shown as counts rather than names: a panel of four
+                            emails is wider than the rest of the row put
+                            together, and the dialog lists them in full. */}
+                        <Stack direction="row" spacing={0.5}>
+                          <Chip
+                            size="small"
+                            variant={m.refereeId ? 'filled' : 'outlined'}
+                            color={m.refereeId ? 'primary' : 'default'}
+                            label={m.refereeId ? 'Referee' : 'No referee'}
+                          />
+                          <Chip
+                            size="small"
+                            variant={m.judgeIds?.length ? 'filled' : 'outlined'}
+                            color={m.judgeIds?.length === judgeLimit ? 'success' : 'default'}
+                            label={`${m.judgeIds?.length || 0}/${judgeLimit} judges`}
+                          />
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
                         <Chip
                           label={m.status}
                           size="small"
@@ -287,6 +393,17 @@ export default function RefereeMatchList({ uid, profile }) {
                           sx={{ mr: 1 }}
                         >
                           <Visibility fontSize="small" />
+                        </IconButton>
+                        {/* The panel and the time are set here rather than only
+                            at creation: both are normally decided after the
+                            draw has already produced the bout. */}
+                        <IconButton
+                          size="small"
+                          onClick={() => openFor(m)}
+                          title="Assign officials & time"
+                          sx={{ mr: 1 }}
+                        >
+                          <Groups fontSize="small" />
                         </IconButton>
                         {canDelete && (
                           <IconButton
@@ -312,11 +429,20 @@ export default function RefereeMatchList({ uid, profile }) {
         <StandingsTable competitors={competitors} matches={matches} />
       </Container>
 
-      <Dialog open={openModal} onClose={() => { setOpenModal(false); setError(null); formik.resetForm() }} maxWidth="sm" fullWidth>
-        <DialogTitle>Create Match</DialogTitle>
+      <Dialog open={openModal} onClose={closeDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingMatch ? 'Assign Officials & Time' : 'Create Match'}</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+              {clashes.length > 0 ? <AlertTitle>{error}</AlertTitle> : error}
+              {/* Every clash is listed, not just the first: moving one person
+                  does no good if a second is also double-booked. */}
+              {clashes.length > 0 && (
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  {clashes.map((line) => <li key={line}>{line}</li>)}
+                </Box>
+              )}
+            </Alert>
           )}
 
           <Box sx={{ mb: 2, p: 2, bgcolor: 'info.main', borderRadius: 1, color: 'white' }}>
@@ -366,10 +492,31 @@ export default function RefereeMatchList({ uid, profile }) {
               {formik.errors.blueId && <FormHelperText>{formik.errors.blueId}</FormHelperText>}
             </FormControl>
 
+            {/* Optional, like the panel: the draw is made before the timetable
+                is, and a bout with no time yet blocks nobody. Giving it one is
+                what brings it into the clash check. */}
+            <TextField
+              fullWidth
+              margin="normal"
+              type="datetime-local"
+              name="scheduledAt"
+              label="Scheduled time (optional)"
+              value={formik.values.scheduledAt}
+              onChange={formik.handleChange}
+              error={!!formik.errors.scheduledAt}
+              helperText={
+                formik.errors.scheduledAt
+                || `Holds everyone on this bout for ${slotMinutes} minutes.`
+              }
+              InputLabelProps={{ shrink: true }}
+            />
+
             {/* Officials are optional: a bout is often listed before the panel
                 for it is settled, and the server accepts it either way. */}
             <Divider sx={{ my: 2 }}>
-              <Typography variant="caption" color="text.secondary">Officials (optional)</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {editingMatch ? 'Officials' : 'Officials (optional)'}
+              </Typography>
             </Divider>
 
             <FormControl fullWidth margin="normal">
@@ -425,8 +572,8 @@ export default function RefereeMatchList({ uid, profile }) {
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => { setOpenModal(false); formik.resetForm() }}>Cancel</Button>
-          <Button variant="contained" onClick={formik.handleSubmit}>Create Match</Button>
+          <Button onClick={closeDialog}>Cancel</Button>
+          <Button variant="contained" onClick={formik.handleSubmit}>{editingMatch ? 'Save Changes' : 'Create Match'}</Button>
         </DialogActions>
       </Dialog>
 
