@@ -124,5 +124,6 @@ scoring engine (`packages/web/src/test/memoryMatchChannel.js`).
   document, so with two mats live the last referee to publish wins.
 - **Assignment is not enforced live.** The schedule refuses double-booking, but
   nothing yet stops an unassigned referee from opening and running a bout.
-- **Seeded accounts use a known password.** Change them on any deployment that
-  anyone else can reach.
+- **Seeded accounts use a known password**, and the login page offers them as
+  one-click sign-ins. Change the passwords on any deployment that anyone else
+  can reach; the one-click buttons stop working once you do.
