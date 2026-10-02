@@ -112,10 +112,10 @@ export function matchRoutes(stores) {
   // or who is on it. Without this, recording a winner on a bout that was always
   // double-booked would fail at the one moment the referee cannot do anything
   // about it.
-  const SCHEDULE_FIELDS = ['scheduledAt', 'redId', 'blueId', 'refereeId', 'judgeIds', 'status']
+  const SCHEDULE_FIELDS = ['scheduledAt', 'mat', 'redId', 'blueId', 'refereeId', 'judgeIds', 'status']
 
   /**
-   * Refuses a write that would need someone who is already busy.
+   * Refuses a write that would need someone, or a mat, that is already busy.
    *
    * Competitors are checked alongside officials, because the rule is about a
    * person being in one place: a fighter cannot be called to two mats any more
@@ -134,6 +134,17 @@ export function matchRoutes(stores) {
 
     const clashes = []
     for (const other of others) {
+      // A mat is held the same way a person is: one bout on it at a time.
+      if (subject.mat && other.mat === subject.mat) {
+        clashes.push({
+          uid: null,
+          role: 'mat',
+          otherRole: 'mat',
+          matchId: other.id,
+          scheduledAt: other.scheduledAt,
+          mat: other.mat,
+        })
+      }
       for (const person of clashingPeople(subject, other)) {
         clashes.push({
           ...person,

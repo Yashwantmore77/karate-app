@@ -45,9 +45,10 @@ const MESSAGES = {
   too_many_judges: 'That is more judges than this tournament seats.',
   same_competitor: 'A bout needs two different competitors.',
   invalid_scheduledAt: 'That is not a valid date and time.',
+  invalid_mat: 'A mat is a whole number from 1 to 99.',
   // A clash is reported on its own, with the detail the server sent, so this
   // is only the headline above it.
-  schedule_conflict: 'Somebody on this bout is already busy at that time.',
+  schedule_conflict: 'Somebody on this bout, or the mat, is already busy at that time.',
 }
 const messageFor = (err) => MESSAGES[err?.code] || 'Could not save that. Try again.'
 
@@ -107,6 +108,7 @@ export default function RefereeMatchList({ uid, profile }) {
       refereeId: editingMatch?.refereeId || '',
       judgeIds: editingMatch?.judgeIds || [],
       scheduledAt: isoToLocalInput(editingMatch?.scheduledAt),
+      mat: editingMatch?.mat ?? '',
     },
     // So opening the dialog on a different match reloads the fields rather
     // than showing the one opened before it.
@@ -127,6 +129,12 @@ export default function RefereeMatchList({ uid, profile }) {
         formik.setFieldError('scheduledAt', 'That is not a valid date and time')
         return
       }
+
+      const mat = values.mat === '' ? null : Number(values.mat)
+      if (mat !== null && !(Number.isInteger(mat) && mat >= 1 && mat <= 99)) {
+        formik.setFieldError('mat', 'A mat is a whole number from 1 to 99')
+        return
+      }
       try {
         if (editingMatch) {
           // A patch sends null to clear, where a create simply omits: the two
@@ -138,6 +146,7 @@ export default function RefereeMatchList({ uid, profile }) {
             refereeId: values.refereeId || null,
             judgeIds: values.judgeIds,
             scheduledAt: scheduledIso,
+            mat,
           })
         } else {
           await matchStore.create(categoryId, {
@@ -150,6 +159,7 @@ export default function RefereeMatchList({ uid, profile }) {
             ...(values.judgeIds.length ? { judgeIds: values.judgeIds } : {}),
             // The input gives naive wall-clock text; the API wants an instant.
             ...(scheduledIso ? { scheduledAt: scheduledIso } : {}),
+            ...(mat !== null ? { mat } : {}),
           })
         }
       } catch (err) {
@@ -371,6 +381,9 @@ export default function RefereeMatchList({ uid, profile }) {
                         <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
                           {formatSlotTime(m.scheduledAt)}
                         </Typography>
+                        {m.mat && (
+                          <Typography variant="caption" color="text.secondary">Mat {m.mat}</Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         {/* Shown as counts rather than names: a panel of four
@@ -509,21 +522,38 @@ export default function RefereeMatchList({ uid, profile }) {
             {/* Optional, like the panel: the draw is made before the timetable
                 is, and a bout with no time yet blocks nobody. Giving it one is
                 what brings it into the clash check. */}
-            <TextField
-              fullWidth
-              margin="normal"
-              type="datetime-local"
-              name="scheduledAt"
-              label="Scheduled time (optional)"
-              value={formik.values.scheduledAt}
-              onChange={formik.handleChange}
-              error={!!formik.errors.scheduledAt}
-              helperText={
-                formik.errors.scheduledAt
-                || `Holds everyone on this bout for ${slotMinutes} minutes.`
-              }
-              InputLabelProps={{ shrink: true }}
-            />
+            <Stack direction="row" spacing={2} alignItems="flex-start">
+              <TextField
+                fullWidth
+                margin="normal"
+                type="datetime-local"
+                name="scheduledAt"
+                label="Scheduled time (optional)"
+                value={formik.values.scheduledAt}
+                onChange={formik.handleChange}
+                error={!!formik.errors.scheduledAt}
+                helperText={
+                  formik.errors.scheduledAt
+                  || `Holds everyone on this bout for ${slotMinutes} minutes.`
+                }
+                InputLabelProps={{ shrink: true }}
+              />
+              {/* Which mat the bout is fought on. Two bouts can share a time
+                  on different mats, but not on the same one. */}
+              <TextField
+                margin="normal"
+                type="number"
+                name="mat"
+                label="Mat"
+                value={formik.values.mat}
+                onChange={formik.handleChange}
+                error={!!formik.errors.mat}
+                helperText={formik.errors.mat || ' '}
+                inputProps={{ min: 1, max: 99 }}
+                InputLabelProps={{ shrink: true }}
+                sx={{ width: 110, flexShrink: 0 }}
+              />
+            </Stack>
 
             {/* Officials are optional: a bout is often listed before the panel
                 for it is settled, and the server accepts it either way. */}

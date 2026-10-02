@@ -108,3 +108,14 @@ describe('describeClashes', () => {
     expect(line).toContain('ref-uid-001')
   })
 })
+
+describe('describeClashes for a mat', () => {
+  it('names the mat rather than a person', () => {
+    const [line] = describeClashes([{
+      uid: null, role: 'mat', otherRole: 'mat', matchId: 'm1',
+      scheduledAt: new Date(2026, 4, 15, 13, 0).toISOString(), mat: 3,
+    }], () => 'should not be asked')
+    expect(line).toMatch(/^Mat 3 already has a bout at /)
+    expect(line).not.toContain('null')
+  })
+})
