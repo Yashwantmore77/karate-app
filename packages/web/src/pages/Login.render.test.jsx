@@ -50,14 +50,31 @@ describe('Login', () => {
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 
-  it('offers no ready-made credentials', async () => {
-    // It used to list every seeded account with its password as one-click
-    // buttons — admin included — on the live site.
+  it('offers a one-click sign-in for each seeded account', async () => {
     renderLogin()
     await screen.findByRole('button', { name: /sign in/i })
-    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
-    expect(screen.queryByText(/demo credentials/i)).not.toBeInTheDocument()
-    expect(document.body.textContent).not.toMatch(/test123|kata\.local/)
+    for (const label of ['Admin', 'Referee', 'Judge 1', 'Judge 2', 'Judge 3', 'Judge 4']) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
+    }
+  })
+
+  it('fills the form when a role is picked', async () => {
+    const user = userEvent.setup()
+    renderLogin()
+    await user.click(await screen.findByRole('button', { name: 'Admin' }))
+    expect(screen.getByLabelText(/email/i)).toHaveValue('admin@kata.local')
+    expect(screen.getByLabelText(/password/i)).toHaveValue('test123')
+  })
+
+  it('signs in as the picked account', async () => {
+    session.loginToServer.mockResolvedValue({ uid: 'r1', email: 'referee@kata.local', role: 'referee' })
+    const user = userEvent.setup()
+    renderLogin()
+    await user.click(await screen.findByRole('button', { name: 'Referee' }))
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() => expect(screen.getByText('Referee Home')).toBeInTheDocument())
+    expect(session.loginToServer).toHaveBeenCalledWith('referee@kata.local', 'test123', null)
   })
 
   it('signs in against the API and goes to the role home', async () => {
