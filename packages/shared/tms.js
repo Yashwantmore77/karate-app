@@ -386,10 +386,14 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     get: (tournamentId, id) => inTournament('teams', tournamentId, id),
     async create(actor, tournamentId, doc) {
       const tournament = await tournamentOf(tournamentId)
+      const { termsAccepted, ...fields } = doc
       if (isCoach(actor)) {
         assertCoachMayWrite(actor, tournament)
         if (actor.teamId) throw rule('team_already_registered')
+        // PRD point 2: a coach accepts the tournament's terms to register.
+        if (String(tournament.terms || '').trim() && termsAccepted !== true) throw invalid('terms_not_accepted')
       } else if (tournament.entriesLocked) throw rule('entries_locked')
+      doc = termsAccepted === true ? { ...fields, termsAcceptedAt: iso() } : fields
       if (!doc.name) throw invalid('name_required')
       const existing = await stores.teams.list({ tournamentId })
       if (existing.some((t) => t.name.trim().toLowerCase() === doc.name.trim().toLowerCase())) throw rule('team_exists')

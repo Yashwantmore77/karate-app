@@ -6,7 +6,7 @@ import {
 } from '@mui/material'
 import { KeyboardArrowUp, KeyboardArrowDown, Undo as UndoIcon, Gavel } from '@mui/icons-material'
 import {
-  evaluateOutcome, PENALTY_LADDER, PENALTY_CATEGORIES, DEFAULT_RULES
+  evaluateOutcome, PENALTY_LADDER, PENALTY_CATEGORIES, DEFAULT_RULES, POINTS
 } from '@kumite/shared/rules.js'
 import { initialMatchState, UNDO } from '@kumite/shared/commands.js'
 import { toMinutesSeconds, parseDuration } from '@kumite/shared/format.js'
@@ -87,6 +87,7 @@ export default function KumiteConsole({
   const serverNow = useServerNow()
 
   const view = state || initialMatchState()
+  const points = view.rules?.points || rules?.points || POINTS
   const mainClock = useMatchClock(view.clock)
   const koClock = useMatchClock(view.koActive ? view.koClock : null)
 
@@ -262,11 +263,21 @@ export default function KumiteConsole({
             variant="contained"
             disabled={disabled}
             onClick={() => send('SCORE', { side, type: p.key })}
+            aria-label={p.label}
             sx={{ bgcolor: control, color: WKF.ink, fontWeight: 700, '&:hover': { bgcolor: control, filter: 'brightness(0.92)' } }}
           >
-            {p.label}
+            {/* PRD point 16: the value this tournament gives the score. */}
+            {p.label} (+{points[p.key]})
           </Button>
         ))}
+        <Button
+          variant="outlined"
+          disabled={disabled}
+          onClick={guarded(`Timeout for ${side === 'ao' ? 'Ao' : 'Aka'}`, () => send('TIMEOUT', { side }))}
+          sx={{ ...utilityButtonSx, fontWeight: 700 }}
+        >
+          Timeout{view.timeouts?.[side] ? ` (${view.timeouts[side]})` : ''}
+        </Button>
         <Button
           variant="contained"
           disabled={disabled}

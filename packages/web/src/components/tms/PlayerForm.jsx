@@ -13,7 +13,7 @@ const valueOf = (value, key) => (BUILT_IN_KEYS.has(key) ? value[key] : value.ext
  * Renders a tournament's registration form (sections 11-12) from its field
  * list, so the admin's form builder and the coach's screen show the same thing.
  */
-export default function PlayerForm({ fields, value, onChange, errors = [], teams = null, disabled = false, onUpload = null, onOpenFile = null }) {
+export default function PlayerForm({ fields, value, onChange, errors = [], teams = null, disabled = false, onUpload = null, onOpenFile = null, coach = false }) {
   const [uploading, setUploading] = useState(null)
   const [uploadError, setUploadError] = useState({})
   const set = (key, v) => {
@@ -35,13 +35,23 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
       {fields.filter((f) => f.visible !== false).map((field) => {
         const v = valueOf(value, field.key)
         const err = errorFor(field.key)
-        const label = `${field.label}${field.required ? ' *' : ''}`
-        const common = { fullWidth: true, label, disabled, error: !!err, helperText: err }
+        // PRD point 4: the system's Player ID is shown, never typed, and a
+        // read-only field is the organisers' to fill in.
+        if (field.generated) {
+          return (
+            <Grid key={field.key} size={{ xs: 12, sm: 6 }}>
+              <TextField fullWidth disabled label={field.label} value={v || 'Given when the player is saved'} />
+            </Grid>
+          )
+        }
+        const off = disabled || (coach && field.readOnly)
+        const label = `${field.label}${field.required && !(coach && field.readOnly) ? ' *' : ''}${coach && field.readOnly ? ' (filled by organisers)' : ''}`
+        const common = { fullWidth: true, label, disabled: off, error: !!err, helperText: err }
         let input
         if (field.key === 'events' || (field.type === 'checkbox' && field.options?.length)) {
           const list = Array.isArray(v) ? v : []
           input = (
-            <FormControl error={!!err} disabled={disabled}>
+            <FormControl error={!!err} disabled={off}>
               <FormLabel>{label}</FormLabel>
               <FormGroup row>
                 {(field.options || []).map((opt) => (
@@ -54,10 +64,10 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
             </FormControl>
           )
         } else if (field.type === 'checkbox') {
-          input = <FormControlLabel disabled={disabled} label={label} control={<Checkbox checked={!!v} onChange={(e) => set(field.key, e.target.checked)} />} />
+          input = <FormControlLabel disabled={off} label={label} control={<Checkbox checked={!!v} onChange={(e) => set(field.key, e.target.checked)} />} />
         } else if (field.type === 'radio') {
           input = (
-            <FormControl error={!!err} disabled={disabled}>
+            <FormControl error={!!err} disabled={off}>
               <FormLabel>{label}</FormLabel>
               <RadioGroup row value={v ?? ''} onChange={(e) => set(field.key, e.target.value)}>
                 {(field.options || []).map((opt) => (
@@ -80,10 +90,10 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
           // The player keeps the stored file's id.
           const fileErr = uploadError[field.key] || err
           input = (
-            <FormControl error={!!fileErr} disabled={disabled}>
+            <FormControl error={!!fileErr} disabled={off}>
               <FormLabel>{label}</FormLabel>
               <Stack direction="row" spacing={1} sx={{ mt: 0.5, alignItems: 'center' }}>
-                <Button variant="outlined" component="label" size="small" disabled={disabled || !onUpload || uploading === field.key}>
+                <Button variant="outlined" component="label" size="small" disabled={off || !onUpload || uploading === field.key}>
                   {uploading === field.key ? 'Uploading…' : v ? 'Replace file' : 'Upload file'}
                   <input hidden type="file" accept={ACCEPT} onChange={async (e) => {
                     const file = e.target.files?.[0]

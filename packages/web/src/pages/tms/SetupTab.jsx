@@ -5,7 +5,9 @@ import {
 } from '@mui/material'
 import { ArrowUpward, ArrowDownward, Delete, Add, ContentCopy } from '@mui/icons-material'
 import { formFields, FIELD_TYPES } from '@kumite/shared/registration.js'
-import { settingsOf } from '@kumite/shared/tms.js'
+import { settingsOf, POOL_SYSTEMS, KATA_METHODS } from '@kumite/shared/tms.js'
+import { POOL_MODES } from '@kumite/shared/pools.js'
+import { KATA_METHOD_LABEL } from '@kumite/shared/kata.js'
 import { tms } from '../../data/tms'
 import { readFileBase64 } from '../../components/tms/download'
 import { checkFile } from '@kumite/shared/files.js'
@@ -29,7 +31,15 @@ const NUMBER_SETTINGS = [
   ['matchDurationSec', 'Match duration (seconds)'], ['pointGap', 'Winning point gap'],
 ]
 
-const pick = (t) => Object.fromEntries([...DETAIL_FIELDS.map(([k]) => k), ...DATE_FIELDS.map(([k]) => k), 'masterAgeDate', 'type', 'date']
+const KATA_SETTINGS = [
+  ['kataJudges', 'Kata judges on a panel', '3 to 7'], ['kataQualifiers', 'Kata qualifiers per round', 'Into the next round'],
+  ['kataRounds', 'Kata rounds', 'The last one is the final'],
+]
+export const POINT_LABEL = { yuko: 'Yuko', wazaAri: 'Waza-ari', ippon: 'Ippon' }
+export const POOL_MODE_LABEL = { max: 'Even pools (17 → 6 + 6 + 5)', overflow: 'Fewest pools (17 → 9 + 8)' }
+export const POOL_SYSTEM_LABEL = { round_robin: 'Round robin in pools, then knockout', knockout: 'Straight knockout' }
+
+const pick = (t) => Object.fromEntries([...DETAIL_FIELDS.map(([k]) => k), ...DATE_FIELDS.map(([k]) => k), 'masterAgeDate', 'type', 'date', 'rules', 'terms']
   .map((k) => [k, t[k] ?? '']))
 
 /** Sections 5, 11, 14 and the configurable rules of section 29/34. */
@@ -63,6 +73,11 @@ export default function SetupTab({ tournament, reload, action }) {
     out.weighInAutoMove = !!settings.weighInAutoMove
     out.emailNotifications = settings.emailNotifications !== false
     out.fees = Object.fromEntries(Object.entries(settings.fees).map(([k, v]) => [k, Number(v) || 0]))
+    out.points = Object.fromEntries(Object.entries(settings.points).map(([k, v]) => [k, Number(v)]))
+    for (const [k] of KATA_SETTINGS) out[k] = Number(settings[k])
+    for (const k of ['poolMode', 'poolSystem', 'kataMode', 'kataMethod']) out[k] = settings[k]
+    out.ruleset = String(settings.ruleset || 'WKF')
+    out.officialsSeeAssignedOnly = !!settings.officialsSeeAssignedOnly
     action.run(() => tms.updateSettings(tid, out), 'Settings saved').then(reload)
   }
 
@@ -111,6 +126,14 @@ export default function SetupTab({ tournament, reload, action }) {
                 onChange={(e) => setDetails({ ...details, [k]: e.target.value })} />
             </Grid>
           ))}
+          {/* PRD point 2: shown on the public page; coaches accept the terms when registering. */}
+          {[['rules', 'Tournament rules'], ['terms', 'Terms & conditions']].map(([k, label]) => (
+            <Grid key={k} size={{ xs: 12, md: 6 }}>
+              <TextField fullWidth multiline minRows={4} maxRows={14} label={label} value={details[k] || ''}
+                helperText={k === 'terms' ? 'Coaches must accept these before registering players' : 'Shown on the public tournament page'}
+                onChange={(e) => setDetails({ ...details, [k]: e.target.value })} />
+            </Grid>
+          ))}
         </Grid>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, alignItems: { sm: 'center' } }}>
           <Button size="large" variant="contained" onClick={saveDetails} disabled={action.busy}>Save details</Button>
@@ -147,6 +170,51 @@ export default function SetupTab({ tournament, reload, action }) {
           ))}
           <Grid size={{ xs: 12 }}>
             <Typography variant="body2" color="text.secondary">Tie-breakers, in order: {settings.tieBreakers.join(' → ')}</Typography>
+          </Grid>
+          {/* PRD point 16: what each score is worth on the console. */}
+          {Object.keys(POINT_LABEL).map((k) => (
+            <Grid key={k} size={{ xs: 4, md: 2 }}>
+              <TextField fullWidth type="number" label={`${POINT_LABEL[k]} points`} value={settings.points[k]}
+                slotProps={{ htmlInput: { min: 1, max: 10 } }}
+                onChange={(e) => setSettings({ ...settings, points: { ...settings.points, [k]: e.target.value } })} />
+            </Grid>
+          ))}
+          <Grid size={{ xs: 12, md: 2 }}>
+            <TextField fullWidth label="Ruleset" value={settings.ruleset || ''} helperText="e.g. WKF, KAI" onChange={(e) => setSettings({ ...settings, ruleset: e.target.value })} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <TextField select fullWidth label="Splitting entries into pools" value={settings.poolMode} onChange={(e) => setSettings({ ...settings, poolMode: e.target.value })}>
+              {POOL_MODES.map((m) => <MenuItem key={m} value={m}>{POOL_MODE_LABEL[m] || m}</MenuItem>)}
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <TextField select fullWidth label="Competition system" value={settings.poolSystem} onChange={(e) => setSettings({ ...settings, poolSystem: e.target.value })}>
+              {POOL_SYSTEMS.map((m) => <MenuItem key={m} value={m}>{POOL_SYSTEM_LABEL[m] || m}</MenuItem>)}
+            </TextField>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <TextField select fullWidth label="Kata is decided by" value={settings.kataMode} onChange={(e) => setSettings({ ...settings, kataMode: e.target.value })}>
+              <MenuItem value="panel">A judging panel scoring each performance</MenuItem>
+              <MenuItem value="bouts">Head-to-head bouts (flags)</MenuItem>
+            </TextField>
+          </Grid>
+          {settings.kataMode === 'panel' && (
+            <>
+              {KATA_SETTINGS.map(([k, label, help]) => (
+                <Grid key={k} size={{ xs: 12, sm: 4, md: 2 }}>
+                  <TextField fullWidth type="number" label={label} helperText={help} value={settings[k]} onChange={(e) => setSettings({ ...settings, [k]: e.target.value })} />
+                </Grid>
+              ))}
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField select fullWidth label="Kata score calculation" value={settings.kataMethod} onChange={(e) => setSettings({ ...settings, kataMethod: e.target.value })}>
+                  {KATA_METHODS.map((m) => <MenuItem key={m} value={m}>{KATA_METHOD_LABEL[m]}</MenuItem>)}
+                </TextField>
+              </Grid>
+            </>
+          )}
+          <Grid size={{ xs: 12 }}>
+            <FormControlLabel control={<Switch checked={!!settings.officialsSeeAssignedOnly} onChange={(e) => setSettings({ ...settings, officialsSeeAssignedOnly: e.target.checked })} />}
+              label="Referees and judges see only the matches they are assigned to" />
           </Grid>
           {Object.keys(settings.fees).map((k) => (
             <Grid key={k} size={{ xs: 6, md: 3 }}>
@@ -198,13 +266,13 @@ export default function SetupTab({ tournament, reload, action }) {
 
       <Paper sx={{ p: 2 }}>
         <Typography variant="h3" gutterBottom>Registration form</Typography>
-        <Alert severity="info" sx={{ mb: 2 }}>Name, DOB, gender, event and weight drive categorisation: they can be renamed but not removed or hidden.</Alert>
+        <Alert severity="info" sx={{ mb: 2 }}>Name, DOB, gender, event and weight drive categorisation: they can be renamed but not removed or hidden. Player ID is given by the system. Read-only fields are shown to coaches but filled in by the organisers.</Alert>
         <TableContainer sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Order</TableCell><TableCell>Label</TableCell><TableCell>Type</TableCell><TableCell>Options (comma separated)</TableCell>
-                <TableCell>Required</TableCell><TableCell>Shown</TableCell><TableCell />
+                <TableCell>Required</TableCell><TableCell>Shown</TableCell><TableCell>Coach can edit</TableCell><TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -227,6 +295,14 @@ export default function SetupTab({ tournament, reload, action }) {
                   </TableCell>
                   <TableCell><Checkbox checked={!!f.required} disabled={f.system} onChange={(e) => patchField(i, { required: e.target.checked })} /></TableCell>
                   <TableCell><Checkbox checked={f.visible !== false} disabled={f.system} onChange={(e) => patchField(i, { visible: e.target.checked })} /></TableCell>
+                  <TableCell>
+                    {/* PRD point 4: read-only fields are shown to coaches and filled by the organisers. */}
+                    <TextField select size="small" value={f.readOnly ? 'readonly' : 'editable'} disabled={f.system || f.generated}
+                      onChange={(e) => patchField(i, { readOnly: e.target.value === 'readonly' })}>
+                      <MenuItem value="editable">Editable</MenuItem>
+                      <MenuItem value="readonly">Read-only</MenuItem>
+                    </TextField>
+                  </TableCell>
                   <TableCell>
                     {!f.system && <IconButton size="small" aria-label="Remove field" onClick={() => setFields((fs) => fs.filter((_, j) => j !== i))}><Delete fontSize="small" /></IconButton>}
                   </TableCell>

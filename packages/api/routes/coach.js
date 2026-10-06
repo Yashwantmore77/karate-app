@@ -34,7 +34,7 @@ export function coachRoutes(tms) {
 
   // Registering the team re-issues the session with the team in it.
   router.post('/team', async (req, res) => {
-    const team = await tms.teams.create(withMeta(req), t(req), validate(req.body, TEAM))
+    const team = await tms.teams.create(withMeta(req), t(req), validate(req.body, { ...TEAM, termsAccepted: { type: 'boolean' } }))
     res.status(201).json({ team, token: signCoachToken({ linkId: req.user.linkId, tournamentId: t(req), teamId: team.id }) })
   })
   router.patch('/team', async (req, res) => {

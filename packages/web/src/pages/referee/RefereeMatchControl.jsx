@@ -14,10 +14,12 @@ import { tms } from '../../data/tms'
 // A bout from a PRD draw, or any tournament with its own rules configured,
 // is scored under those rules (PRD section 29); older matches keep the
 // console's defaults.
-export function matchRules(tournament, match) {
-  if (!tournament || !(tournament.settings || match?.stage)) return null
-  const s = settingsOf(tournament)
-  return { durationMs: s.matchDurationSec * 1000, pointGap: s.pointGap }
+export function matchRules(tournament, match, category = null) {
+  if (!tournament || !(tournament.settings || match?.stage || category?.rules)) return null
+  // A category's own rules (PRD point 3), written when its bouts were made,
+  // win over the tournament's.
+  const s = { ...settingsOf(tournament), ...(category?.rules || {}) }
+  return { durationMs: s.matchDurationSec * 1000, pointGap: s.pointGap, points: s.points }
 }
 
 /**
@@ -87,7 +89,7 @@ export default function RefereeMatchControl() {
         tournamentExpired={tournamentExpired}
         onBack={() => navigate(-1)}
         onFinalize={updateMatchRecord}
-        rules={matchRules(tournament, match)}
+        rules={matchRules(tournament, match, category)}
         displayInfo={displayInfo}
       />
     </Box>

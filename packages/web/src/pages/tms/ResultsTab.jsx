@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Stack, Paper, Typography, Button, Grid, Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Alert, TextField, MenuItem, Box } from '@mui/material'
+import {
+  Stack, Paper, Typography, Button, Grid, Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Alert, TextField, MenuItem, Box,
+  Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Chip,
+} from '@mui/material'
+import { Delete, Add } from '@mui/icons-material'
 import { tms } from '../../data/tms'
 import StatusBadge from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import Bracket from '../../components/tms/Bracket'
+import KataRoundTable from '../../components/tms/KataRoundTable'
 
 export const MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' }
 
@@ -72,9 +77,23 @@ export default function ResultsTab({ tournament, reload, version, action }) {
   const [tally, setTally] = useState([])
   const [by, setBy] = useState('club')
   const [confirm, setConfirm] = useState(null)
+  const [override, setOverride] = useState(null) // { d, medals: [{ playerId, medal }], reason }
+  const [divisions, setDivisions] = useState([])
+  const [players, setPlayers] = useState([])
 
   const load = () => Promise.all([tms.results(tid), tms.tally(tid, by)]).then(([r, t]) => { setResults(r); setTally(t) })
   useEffect(() => { load() }, [tid, version, by])
+  useEffect(() => { Promise.all([tms.divisions(tid), tms.players.list(tid)]).then(([d, p]) => { setDivisions(d); setPlayers(p) }).catch(() => {}) }, [tid, version])
+  const entrants = (key) => {
+    const ids = divisions.find((d) => d.key === key)?.playerIds || []
+    return players.filter((p) => ids.includes(p.id))
+  }
+  const openOverride = (d) => setOverride({ d, reason: '', medals: d.medals.map((m) => ({ playerId: m.id, medal: m.medal })) })
+  const saveOverride = (clear = false) => {
+    const o = override
+    setOverride(null)
+    action.run(() => tms.overrideMedals(tid, o.d.key, clear ? null : o.medals.filter((m) => m.playerId), o.reason.trim()), clear ? 'Medals back to the calculated result' : 'Medals set by hand').then(load)
+  }
 
   return (
     <Stack spacing={3}>
@@ -100,6 +119,8 @@ export default function ResultsTab({ tournament, reload, version, action }) {
         <Paper key={d.key} sx={{ p: 2 }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', mb: 1 }} spacing={1}>
             <Typography variant="h3">{d.label}</Typography>
+            {/* PRD point 21: medals set by hand, with a reason, in the audit log. */}
+            <Button variant="outlined" size="small" onClick={() => openOverride(d)}>Override medals</Button>
             {d.canGenerateBracket && (
               <Button variant="contained" onClick={() => setConfirm({
                 title: 'Generate the final stage?', message: `Top ${tournament.settings?.qualifiersPerPool ?? 2} from each pool go into a knockout bracket.`,
@@ -114,6 +135,16 @@ export default function ResultsTab({ tournament, reload, version, action }) {
                 <StandingsTable standings={p.standings} />
               </Grid>
             ))}
+            {d.kata?.rounds?.length > 0 && (
+              <Grid size={{ xs: 12 }}>
+                {[...d.kata.rounds].reverse().map((r) => (
+                  <Box key={r.id} sx={{ mb: 2 }}>
+                    <Typography variant="h4" sx={{ mb: 1 }}>Kata · {r.name} {r.status === 'completed' ? '' : '(in progress)'}</Typography>
+                    <KataRoundTable round={r} />
+                  </Box>
+                ))}
+              </Grid>
+            )}
             {d.bracket && (
               <Grid size={{ xs: 12 }}>
                 <Typography variant="h4" sx={{ mb: 1 }}>Final stage</Typography>
@@ -121,7 +152,7 @@ export default function ResultsTab({ tournament, reload, version, action }) {
               </Grid>
             )}
             <Grid size={{ xs: 12 }}>
-              <Typography variant="h4" sx={{ mb: 1 }}>Medals</Typography>
+              <Typography variant="h4" sx={{ mb: 1 }}>Medals {d.medalsOverridden && <Chip size="small" color="warning" label={`Set by hand: ${d.overrideReason}`} sx={{ ml: 1 }} />}</Typography>
               <MedalList medals={d.medals} />
             </Grid>
           </Grid>
@@ -137,6 +168,36 @@ export default function ResultsTab({ tournament, reload, version, action }) {
         </Stack>
         <TallyTable rows={tally} />
       </Paper>
+
+      <Dialog open={!!override} onClose={() => setOverride(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Medals for {override?.d.label}</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>Use only for a protest upheld, a withdrawal or a scoring error. The change and its reason go in the audit log.</Alert>
+          <Stack spacing={1}>
+            {override?.medals.map((m, i) => (
+              <Stack key={i} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <TextField select size="small" label="Medal" value={m.medal} sx={{ width: 130 }}
+                  onChange={(e) => setOverride({ ...override, medals: override.medals.map((x, j) => (j === i ? { ...x, medal: e.target.value } : x)) })}>
+                  {['gold', 'silver', 'bronze'].map((v) => <MenuItem key={v} value={v}>{MEDAL_ICON[v]} {v}</MenuItem>)}
+                </TextField>
+                <TextField select size="small" label="Player" value={m.playerId} sx={{ flex: 1 }}
+                  onChange={(e) => setOverride({ ...override, medals: override.medals.map((x, j) => (j === i ? { ...x, playerId: e.target.value } : x)) })}>
+                  {entrants(override.d.key).map((p) => <MenuItem key={p.id} value={p.id}>{p.name}{p.club ? ` (${p.club})` : ''}</MenuItem>)}
+                </TextField>
+                <IconButton aria-label="Remove medal" onClick={() => setOverride({ ...override, medals: override.medals.filter((_, j) => j !== i) })}><Delete fontSize="small" /></IconButton>
+              </Stack>
+            ))}
+            <Button startIcon={<Add />} sx={{ alignSelf: 'flex-start' }} disabled={(override?.medals.length || 0) >= 8}
+              onClick={() => setOverride({ ...override, medals: [...override.medals, { playerId: '', medal: 'bronze' }] })}>Add medal</Button>
+            <TextField required label="Reason" value={override?.reason || ''} onChange={(e) => setOverride({ ...override, reason: e.target.value })} />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          {override?.d.medalsOverridden && <Button color="warning" disabled={!override.reason.trim()} onClick={() => saveOverride(true)}>Use calculated medals</Button>}
+          <Button onClick={() => setOverride(null)}>Cancel</Button>
+          <Button variant="contained" disabled={!override?.reason.trim() || override.medals.some((m) => !m.playerId)} onClick={() => saveOverride(false)}>Save medals</Button>
+        </DialogActions>
+      </Dialog>
 
       <ConfirmDialog open={!!confirm} title={confirm?.title} message={confirm?.message} onClose={() => setConfirm(null)}
         onConfirm={() => { const c = confirm; setConfirm(null); c.run() }} />

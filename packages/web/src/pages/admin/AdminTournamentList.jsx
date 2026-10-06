@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -100,6 +100,16 @@ export default function AdminTournamentList({ uid }) {
     setEditingId(null)
     setOpenModal(true)
   }
+
+  // The dashboard's "New tournament" quick action lands here with ?create=1.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('create') === '1') {
+      handleOpenCreate()
+      params.delete('create')
+      window.history.replaceState(null, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
+    }
+  }, [])
 
   const handleOpenEdit = (id) => {
     setEditingId(id)

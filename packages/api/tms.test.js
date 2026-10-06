@@ -293,6 +293,17 @@ describe('gap features over HTTP', () => {
     expect(audit.some((a) => a.action === 'medals.overridden' && a.reason === 'Protest upheld')).toBe(true)
   })
 
+  it('makes coaches accept the terms and shows rules publicly', async () => {
+    const { t, link } = await setUpTournament()
+    await call('PATCH', `/tournaments/${t}`, { rules: 'WKF rules apply.', terms: 'Players compete at their own risk.' }, tokens.admin)
+    const { body } = await call('POST', `/public/register/${link.token}/session`, { password: 'dojo-pass' })
+    expect((await call('POST', '/coach/team', { name: 'XYZ' }, body.token)).body.error).toBe('terms_not_accepted')
+    const made = await call('POST', '/coach/team', { name: 'XYZ', termsAccepted: true }, body.token)
+    expect(made.status).toBe(201)
+    expect(made.body.team.termsAcceptedAt).toBeTruthy()
+    expect((await call('GET', '/public/tournaments/state-open')).body.tournament).toMatchObject({ rules: 'WKF rules apply.', terms: 'Players compete at their own risk.' })
+  })
+
   it('swaps corners before a bout starts', async () => {
     const { t, link } = await setUpTournament()
     await registerApproved(t, link, [1, 2, 3].map((i) => ({ name: `Fighter ${i}`, events: ['kumite'], weight: 30 })))

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Stack, TextField, MenuItem, Button, Dialog, DialogTitle, DialogContent, DialogActions, Grid, Typography, Box, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, Alert,
 } from '@mui/material'
-import { Schedule, EditNote, SportsMma } from '@mui/icons-material'
+import { Schedule, EditNote, SportsMma, SwapHoriz, History } from '@mui/icons-material'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { settingsOf } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
@@ -25,6 +25,29 @@ export const MatchSides = ({ m }) => {
   )
 }
 
+const SIDE = { aka: 'AKA', ao: 'AO' }
+const POINT_NAME = { yuko: 'Yuko', wazaAri: 'Waza-ari', ippon: 'Ippon' }
+
+/** One live command as a sentence: "Waza-ari to AKA — AKA 2 → 4". */
+export function describeLiveEvent(e) {
+  const p = e.payload || {}
+  const what = {
+    SCORE: `${POINT_NAME[p.type] || p.type} to ${SIDE[p.side] || p.side}`,
+    DEDUCT: `−1 from ${SIDE[p.side] || p.side}`,
+    PENALTY: `Penalty ${String(p.category || '').toUpperCase()} level ${p.level} for ${SIDE[p.side] || p.side}`,
+    SENSHU: `Senshu ${SIDE[p.side] || p.side}`,
+    TIMEOUT: `Timeout for ${SIDE[p.side] || p.side}`,
+    UNDO: 'Undo',
+    CLOCK_START: 'Clock started', CLOCK_STOP: 'Clock stopped', CLOCK_RESET: 'Clock reset', CLOCK_SET: 'Clock set', KO_TIMER: 'KO timer',
+    KIKEN: `Kiken (${SIDE[p.side] || p.side})`, SHIKKAKU: `Shikkaku (${SIDE[p.side] || p.side})`, HANTEI: `Hantei to ${SIDE[p.side] || p.side}`,
+    CLEAR_DECISION: 'Decision cleared', CLOCK_EXPIRED: 'Time up',
+  }[e.cmd] || e.cmd
+  const b = e.scoreBefore
+  const a = e.scoreAfter
+  const changed = b && a && (b.aka !== a.aka || b.ao !== a.ao)
+  return changed ? `${what} — AKA ${b.aka} → ${a.aka}, AO ${b.ao} → ${a.ao}` : what
+}
+
 /** Sections 25-28 and 37: the match queue per mat, scheduling and Rule 6 corrections. */
 export default function MatchesTab({ tournament, version, action }) {
   const navigate = useNavigate()
@@ -36,6 +59,7 @@ export default function MatchesTab({ tournament, version, action }) {
   const [schedule, setSchedule] = useState(null)
   const [correct, setCorrect] = useState(null)
   const [officials, setOfficials] = useState([])
+  const [log, setLog] = useState(null) // { m, events }
   useEffect(() => { listOfficials().then(setOfficials) }, [])
   const officialName = (uid) => officials.find((o) => o.uid === uid)?.label || uid
 
@@ -74,6 +98,8 @@ export default function MatchesTab({ tournament, version, action }) {
       {!matches.length && <Alert severity="info">No matches yet. Draw pools, lock the draw and generate matches on the Draw tab.</Alert>}
       <DataTable
         rows={rows}
+        exportName={`${tournament.slug || 'tournament'}-matches`} exportTitle={`${tournament.name} — Matches`}
+        filters={[{ key: 'categoryName', label: 'Category' }, { key: 'stage', label: 'Stage', value: (m) => (m.stage === 'knockout' ? m.roundName : 'Pool') }]}
         searchPlaceholder="Search match number, player, category"
         empty="No matches in this view."
         columns={[
@@ -82,18 +108,39 @@ export default function MatchesTab({ tournament, version, action }) {
           { key: 'scheduledAt', label: 'Time', render: (m) => (m.scheduledAt ? new Date(m.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—') },
           { key: 'categoryName', label: 'Category' },
           { key: 'round', label: 'Round', value: (m) => `${m.poolName || ''}${m.round}`, render: (m) => (m.stage === 'knockout' ? m.roundName : `Pool ${m.poolName} · R${m.round}`) },
-          { key: 'players', label: 'AKA vs AO', value: (m) => `${m.akaName} ${m.aoName}`, render: (m) => <MatchSides m={m} /> },
+          { key: 'players', label: 'AKA vs AO', value: (m) => `${m.akaName || 'TBD'} vs ${m.aoName || 'TBD'}`, render: (m) => <MatchSides m={m} />,
+            exportValue: (m) => `${m.akaName || 'TBD'} vs ${m.aoName || 'TBD'}${boutOutcome(m) ? ` (${m.avgRed ?? ''}–${m.avgBlue ?? ''})` : ''}` },
           { key: 'officials', label: 'Referee', value: (m) => officialName(m.refereeId), render: (m) => (m.refereeId ? officialName(m.refereeId) : '—') },
           { key: 'status', label: 'Status', render: (m) => <StatusBadge status={m.resultType && m.resultType !== 'COMPLETED' ? m.resultType : m.status} /> },
           { key: 'actions', label: '', sortable: false, render: (m) => (
             <Stack direction="row">
               <Tooltip title="Open scoring console"><span><IconButton size="small" aria-label="Open scoring console" disabled={!m.redId || !m.blueId} onClick={() => navigate(`/admin/match/${m.id}`)}><SportsMma fontSize="small" /></IconButton></span></Tooltip>
               <Tooltip title="Schedule"><IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, categoryId: m.categoryId, number: m.matchNumber, mat: m.mat || 1, scheduledAt: m.scheduledAt ? m.scheduledAt.slice(0, 16) : '', refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton></Tooltip>
+              {/* PRD point 15: swap AKA and AO before the bout. */}
+              <Tooltip title="Swap AKA / AO"><span><IconButton size="small" aria-label="Swap AKA and AO" disabled={!!boutOutcome(m) || ['live', 'open'].includes(m.status) || (!m.redId && !m.blueId)}
+                onClick={() => action.run(() => tms.swapCorners(tid, m.id), `${m.matchNumber}: corners swapped`).then(load)}><SwapHoriz fontSize="small" /></IconButton></span></Tooltip>
+              <Tooltip title="Live score log"><IconButton size="small" aria-label="Live score log" onClick={async () => setLog({ m, events: await tms.matchEvents(tid, m.id).catch(() => []) })}><History fontSize="small" /></IconButton></Tooltip>
               <Tooltip title={boutOutcome(m) ? 'Correct result' : 'Enter result'}><span><IconButton size="small" aria-label={boutOutcome(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '' })}><EditNote fontSize="small" /></IconButton></span></Tooltip>
             </Stack>
           ) },
         ]}
       />
+
+      <Dialog open={!!log} onClose={() => setLog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Live score log — {log?.m.matchNumber}</DialogTitle>
+        <DialogContent>
+          {!log?.events.length && <Typography color="text.secondary">Nothing was scored live on this bout.</Typography>}
+          {log?.events.map((e) => (
+            <Box key={e.id} sx={{ display: 'flex', gap: 2, py: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="body2" sx={{ minWidth: 70, color: 'text.secondary' }}>{new Date(e.at).toLocaleTimeString()}</Typography>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                {e.byEmail || e.role || 'Referee'}: {describeLiveEvent(e)}
+              </Typography>
+            </Box>
+          ))}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setLog(null)}>Close</Button></DialogActions>
+      </Dialog>
 
       <Dialog open={!!schedule} onClose={() => setSchedule(null)} maxWidth="xs" fullWidth>
         <DialogTitle>Schedule {schedule?.number}</DialogTitle>

@@ -38,7 +38,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const players = paged.rows
   const [groups, setGroups] = useState([])
   const [weights, setWeights] = useState([])
-  const [filter, setFilter] = useState({ registrationStatus: '', teamId: '', gender: '', event: '', paymentStatus: '' })
+  const [filter, setFilter] = useState({ registrationStatus: '', teamId: '', gender: '', event: '', paymentStatus: '', ageGroupId: '', weightCategoryId: '', district: '', state: '' })
+  const [places, setPlaces] = useState({ district: [], state: [] })
   const [teamEdit, setTeamEdit] = useState(null)
   const [playerEdit, setPlayerEdit] = useState(null)
   const [playerErrors, setPlayerErrors] = useState([])
@@ -54,6 +55,13 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   useEffect(() => { load() }, [tid, version, JSON.stringify(filter), JSON.stringify(pageQuery)])
   // A filter change starts again from the first page.
   useEffect(() => { setPageQuery((q) => ({ ...q, page: 0 })) }, [JSON.stringify(filter)])
+  // District and state choices come from the players registered so far.
+  useEffect(() => {
+    tms.players.list(tid).then((all) => {
+      const distinct = (key) => [...new Set(all.map((p) => p[key]).filter(Boolean))].sort()
+      setPlaces({ district: distinct('district'), state: distinct('state') })
+    }).catch(() => {})
+  }, [tid, version])
   useEffect(() => {
     if (view !== 'teams') return
     tms.players.list(tid).then((all) => setTeamCounts(all.reduce((m, p) => ({ ...m, [p.teamId]: (m[p.teamId] || 0) + 1 }), {})))
@@ -128,6 +136,20 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         <MenuItem value="">All</MenuItem>
         {teams.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
       </TextField>
+      <TextField select size="small" label="Age group" value={filter.ageGroupId} sx={{ minWidth: 150 }} onChange={(e) => setFilter({ ...filter, ageGroupId: e.target.value, weightCategoryId: '' })}>
+        <MenuItem value="">All</MenuItem>
+        {groups.map((g) => <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>)}
+      </TextField>
+      <TextField select size="small" label="Weight" value={filter.weightCategoryId} sx={{ minWidth: 130 }} onChange={(e) => setFilter({ ...filter, weightCategoryId: e.target.value })}>
+        <MenuItem value="">All</MenuItem>
+        {weights.filter((w) => !filter.ageGroupId || w.ageGroupId === filter.ageGroupId).map((w) => <MenuItem key={w.id} value={w.id}>{w.label || w.name}</MenuItem>)}
+      </TextField>
+      {['district', 'state'].map((key) => (
+        <TextField key={key} select size="small" label={key === 'district' ? 'District' : 'State'} value={filter[key]} sx={{ minWidth: 130 }} onChange={(e) => setFilter({ ...filter, [key]: e.target.value })}>
+          <MenuItem value="">All</MenuItem>
+          {places[key].map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+        </TextField>
+      ))}
     </>
   )
 
@@ -144,6 +166,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
       {view === 'teams' && (
         <DataTable
           rows={teams}
+          exportName={`${tournament.slug || 'tournament'}-teams`} exportTitle={`${tournament.name} — Teams`}
+          filters={[{ key: 'district', label: 'District' }, { key: 'state', label: 'State' }]}
           empty="No teams yet. Coaches register through the registration link, or add one here."
           toolbar={manage && <Button variant="contained" startIcon={<Add />} disabled={locked} onClick={() => setTeamEdit({})}>Add team</Button>}
           columns={[
@@ -167,6 +191,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         <DataTable
           rows={players}
           server={{ ...paged, onChange: (next) => setPageQuery((q) => ({ ...q, ...next })) }}
+          exportName={`${tournament.slug || 'tournament'}-players`} exportTitle={`${tournament.name} — Players`}
+          exportRows={() => tms.players.list(tid, clean({ ...filter, q: pageQuery.q }))}
           searchPlaceholder="Search name, player ID, team, club"
           empty="No players match."
           toolbar={(
@@ -182,6 +208,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
             { key: 'teamId', label: 'Team', value: (p) => teamName(p.teamId), render: (p) => teamName(p.teamId) },
             { key: 'gender', label: 'G' },
             { key: 'age', label: 'Age', render: (p) => p.age ?? '—' },
+            { key: 'district', label: 'District', render: (p) => p.district || '—' },
+            { key: 'state', label: 'State', render: (p) => p.state || '—' },
             { key: 'weight', label: 'Kg', render: (p) => p.weight ?? '—' },
             { key: 'entries', label: 'Category', sortable: false, value: entryLabel, render: (p) => (
               <Box>

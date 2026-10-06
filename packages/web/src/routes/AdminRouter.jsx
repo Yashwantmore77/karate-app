@@ -7,11 +7,15 @@ import AdminLoginLog from '../pages/admin/AdminLoginLog'
 import TournamentManager from '../pages/tms/TournamentManager'
 import CertificatesPrint from '../pages/tms/CertificatesPrint'
 import RefereeMatchControl from '../pages/referee/RefereeMatchControl'
+import AdminDashboard from '../pages/admin/AdminDashboard'
+import AdminOrganizations from '../pages/admin/AdminOrganizations'
 
 export default function AdminRouter({ uid, profile }) {
   return (
     <Routes>
       <Route path="/" element={<AdminTournamentList uid={uid} />} />
+      <Route path="/dashboard" element={<AdminDashboard profile={profile} />} />
+      {profile?.role === 'super_admin' && <Route path="/organizations" element={<AdminOrganizations />} />}
       <Route path="/accounts" element={<AdminUserList uid={uid} />} />
       <Route path="/sign-ins" element={<AdminLoginLog />} />
       <Route path="/tournament/:tournamentId" element={<AdminTournamentDetail uid={uid} />} />

@@ -8,6 +8,7 @@ import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import Bracket from '../../components/tms/Bracket'
+import KataRoundTable from '../../components/tms/KataRoundTable'
 import { StandingsTable, MedalList, TallyTable } from '../tms/ResultsTab'
 
 const AKA = '#FF5B5B'
@@ -28,6 +29,7 @@ export default function PublicTournament() {
   const [tab, setTab] = useState('info')
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
+  const [district, setDistrict] = useState('')
   const [by, setBy] = useState('club')
 
   useEffect(() => {
@@ -51,6 +53,10 @@ export default function PublicTournament() {
   const upcoming = data.matches.filter((m) => !['live', 'open', 'completed'].includes(m.status))
   const done = data.matches.filter((m) => m.status === 'completed')
   const inCategory = (key) => !category || key === category
+  const teamDistrict = Object.fromEntries(data.teams.map((tm) => [tm.id, tm.district]))
+  const districtOf = (p) => p.district || teamDistrict[p.teamId] || ''
+  const districts = [...new Set([...data.players.map(districtOf), ...data.teams.map((tm) => tm.district)].filter(Boolean))].sort()
+  const inDistrict = (value) => !district || value === district
 
   const MatchRow = ({ m }) => (
     <TableRow>
@@ -83,6 +89,13 @@ export default function PublicTournament() {
         <MenuItem value="">All categories</MenuItem>
         {data.categories.map((c) => <MenuItem key={c.key} value={c.key}>{c.label}</MenuItem>)}
       </TextField>
+      {/* PRD point 26: find players and teams by district. */}
+      {districts.length > 0 && (
+        <TextField select size="small" label="District" value={district} onChange={(e) => setDistrict(e.target.value)} sx={{ minWidth: 180 }}>
+          <MenuItem value="">All districts</MenuItem>
+          {districts.map((d) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+        </TextField>
+      )}
     </Stack>
   )
 
@@ -100,6 +113,7 @@ export default function PublicTournament() {
           <StatusBadge status={t.lifecycleStatus} />
           {live.length > 0 && <Chip color="error" size="small" label={`● ${live.length} live`} />}
           <Button size="small" component={RouterLink} to="/tournaments">All tournaments</Button>
+          <Button size="small" component={RouterLink} to={`/live?t=${encodeURIComponent(t.slug || t.id)}`}>Live board</Button>
         </Stack>
         <Tabs value={tab} onChange={(_e, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 3 }}>
           {SECTIONS.map((s) => <Tab key={s} value={s} label={LABEL[s]} />)}
@@ -115,6 +129,12 @@ export default function PublicTournament() {
                   <Typography key={k}><b>{k}:</b> {v}</Typography>
                 ))}
               </Paper>
+              {[['Rules', t.rules], ['Terms & conditions', t.terms]].filter(([, v]) => v).map(([k, v]) => (
+                <Paper key={k} sx={{ p: 2, mt: 2 }}>
+                  <Typography variant="h4" gutterBottom>{k}</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>{v}</Typography>
+                </Paper>
+              ))}
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
               <Paper sx={{ p: 2 }}>
@@ -139,17 +159,20 @@ export default function PublicTournament() {
         )}
 
         {tab === 'teams' && (
+          <>
+          {filters}
           <TableContainer component={Paper}>
             <Table size="small">
-              <TableHead><TableRow><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>State</TableCell><TableCell>Country</TableCell><TableCell align="right">Players</TableCell></TableRow></TableHead>
+              <TableHead><TableRow><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>District</TableCell><TableCell>State</TableCell><TableCell>Country</TableCell><TableCell align="right">Players</TableCell></TableRow></TableHead>
               <TableBody>
-                {data.teams.map((tm) => (
-                  <TableRow key={tm.id}><TableCell>{tm.name}</TableCell><TableCell>{tm.club || '—'}</TableCell><TableCell>{tm.state || '—'}</TableCell><TableCell>{tm.country || '—'}</TableCell>
+                {data.teams.filter((tm) => matchesQuery(tm.name, tm.club) && inDistrict(tm.district)).map((tm) => (
+                  <TableRow key={tm.id}><TableCell>{tm.name}</TableCell><TableCell>{tm.club || '—'}</TableCell><TableCell>{tm.district || '—'}</TableCell><TableCell>{tm.state || '—'}</TableCell><TableCell>{tm.country || '—'}</TableCell>
                     <TableCell align="right">{data.players.filter((p) => p.teamId === tm.id).length}</TableCell></TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
+          </>
         )}
 
         {tab === 'players' && (
@@ -157,10 +180,10 @@ export default function PublicTournament() {
             {filters}
             <TableContainer component={Paper}>
               <Table size="small">
-                <TableHead><TableRow><TableCell>Player</TableCell><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>State</TableCell><TableCell>Categories</TableCell></TableRow></TableHead>
+                <TableHead><TableRow><TableCell>Player</TableCell><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>District</TableCell><TableCell>State</TableCell><TableCell>Categories</TableCell></TableRow></TableHead>
                 <TableBody>
-                  {data.players.filter((p) => matchesQuery(p.name, p.id, teamName[p.teamId], p.club) && (!category || p.categories.includes(data.categories.find((c) => c.key === category)?.label))).map((p) => (
-                    <TableRow key={p.id}><TableCell>{p.name}</TableCell><TableCell>{teamName[p.teamId] || '—'}</TableCell><TableCell>{p.club || '—'}</TableCell><TableCell>{p.state || '—'}</TableCell><TableCell>{p.categories.join(', ')}</TableCell></TableRow>
+                  {data.players.filter((p) => matchesQuery(p.name, p.id, teamName[p.teamId], p.club, districtOf(p)) && inDistrict(districtOf(p)) && (!category || p.categories.includes(data.categories.find((c) => c.key === category)?.label))).map((p) => (
+                    <TableRow key={p.id}><TableCell>{p.name}</TableCell><TableCell>{teamName[p.teamId] || '—'}</TableCell><TableCell>{p.club || '—'}</TableCell><TableCell>{districtOf(p) || '—'}</TableCell><TableCell>{p.state || '—'}</TableCell><TableCell>{p.categories.join(', ')}</TableCell></TableRow>
                   ))}
                 </TableBody>
               </Table>
@@ -223,6 +246,12 @@ export default function PublicTournament() {
                 <Typography variant="h3" gutterBottom>{d.label}</Typography>
                 <MedalList medals={d.medals} />
                 {d.bracket && <Box sx={{ mt: 2 }}><Bracket rounds={d.bracket.rounds} /></Box>}
+                {[...(d.kata?.rounds || [])].reverse().map((r) => (
+                  <Box key={r.name} sx={{ mt: 2 }}>
+                    <Typography variant="h4" sx={{ mb: 1 }}>Kata · {r.name}</Typography>
+                    <KataRoundTable round={r} />
+                  </Box>
+                ))}
                 {d.pools.map((p) => (
                   <Box key={p.pool} sx={{ mt: 2 }}>
                     <Typography variant="h4" sx={{ mb: 1 }}>Pool {p.pool}</Typography>

@@ -37,3 +37,27 @@ export function openStoredFile(file) {
   window.open(url, '_blank', 'noopener')
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
+
+const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+/**
+ * A list as a PDF: a plain, print-ready table in a new window, saved with the
+ * browser's "Save as PDF". Nothing leaves the device.
+ */
+export function printTable(title, rows) {
+  const [head = [], ...body] = rows
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style>body{font:12px system-ui,sans-serif;margin:24px;color:#111}h1{font-size:18px;margin:0 0 4px}p{color:#555;margin:0 0 12px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:4px 6px;text-align:left;vertical-align:top}th{background:#eee}
+tr:nth-child(even) td{background:#fafafa}@page{size:A4 landscape;margin:12mm}</style></head><body>
+<h1>${escapeHtml(title)}</h1><p>${body.length} rows · ${escapeHtml(new Date().toLocaleString())}</p>
+<table><thead><tr>${head.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+<script>window.onload=()=>{window.print()}</script></body></html>`
+  const win = window.open('', '_blank')
+  if (!win) return false
+  win.document.open()
+  win.document.write(html)
+  win.document.close()
+  return true
+}

@@ -15,6 +15,7 @@ import RegisterPortal from './pages/public/RegisterPortal'
 import PasswordReset from './pages/account/PasswordReset'
 import MyAccount from './pages/account/MyAccount'
 import DisplayScoreboard from './pages/DisplayScoreboard'
+import LiveBoard from './pages/public/LiveBoard'
 import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
 import { ConnectionProvider } from './state/ConnectionContext'
@@ -190,6 +191,8 @@ function AppShell() {
 
             {/* Public: a hall screen, no sign-in */}
             <Route path="/display" element={<DisplayScoreboard />} />
+            {/* PRD point 22: the hall board — every mat, what is next, brackets. */}
+            <Route path="/live" element={<LiveBoard />} />
 
             {/* Public website and the coach registration link (PRD 14, 39, 54) */}
             <Route path="/tournaments" element={<PublicTournamentList />} />
@@ -253,6 +256,30 @@ function AppShell() {
                     <Navigate to="/no-role" replace />
                   ) : (
                     <RequireRole role="registration_officer" profile={profile}><StaffRouter uid={user.uid} profile={profile} /></RequireRole>
+                  )}
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/announcer/*"
+              element={
+                <RequireAuth user={user}>
+                  {!profile ? (
+                    <Navigate to="/no-role" replace />
+                  ) : (
+                    <RequireRole role="announcer" profile={profile}><StaffRouter uid={user.uid} profile={profile} /></RequireRole>
+                  )}
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/viewer/*"
+              element={
+                <RequireAuth user={user}>
+                  {!profile ? (
+                    <Navigate to="/no-role" replace />
+                  ) : (
+                    <RequireRole role="viewer" profile={profile}><StaffRouter uid={user.uid} profile={profile} /></RequireRole>
                   )}
                 </RequireAuth>
               }

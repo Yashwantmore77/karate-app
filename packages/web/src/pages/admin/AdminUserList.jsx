@@ -12,6 +12,8 @@ import { ArrowBack, Edit, Delete, Add } from '@mui/icons-material'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
 import PageBar from '../../components/PageBar'
+import * as organizations from '../../data/organizations'
+import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 import * as users from '../../data/users'
 import { tournaments as tournamentStore } from '../../data/domain'
 
@@ -64,6 +66,11 @@ export default function AdminUserList({ uid }) {
   const [allTournaments, setAllTournaments] = useState([])
   useEffect(() => { tournamentStore.list().then(setAllTournaments).catch(() => {}) }, [])
   const tournamentName = (id) => allTournaments.find((t) => t.id === id)?.name || id
+  // PRD point 33: a super admin places accounts in organisations. Anyone else
+  // is refused the list, and their accounts join their own organisation.
+  const [orgs, setOrgs] = useState([])
+  useEffect(() => { organizations.list().then(setOrgs).catch(() => setOrgs([])) }, [])
+  const orgName = (id) => orgs.find((o) => o.id === id)?.name || '—'
 
   const formik = useFormik({
     initialValues: {
@@ -72,6 +79,7 @@ export default function AdminUserList({ uid }) {
       role: editing?.role || 'judge',
       seat: editing?.seat ?? '',
       tournamentIds: editing?.tournamentIds || [],
+      organizationId: editing?.organizationId || '',
     },
     enableReinitialize: true,
     validationSchema: schemaFor(!!editingId),
@@ -85,6 +93,7 @@ export default function AdminUserList({ uid }) {
       // Sent only when changed, so saving an account never rewrites its access.
       if (JSON.stringify(values.tournamentIds) !== JSON.stringify(editing?.tournamentIds || [])) fields.tournamentIds = values.tournamentIds
       if (values.password) fields.password = values.password
+      if (orgs.length && values.organizationId !== (editing?.organizationId || '')) fields.organizationId = values.organizationId || null
 
       try {
         if (editingId) {
@@ -164,6 +173,7 @@ export default function AdminUserList({ uid }) {
                     <TableCell>Role</TableCell>
                     <TableCell>Seat</TableCell>
                     <TableCell>Tournaments</TableCell>
+                    {orgs.length > 0 && <TableCell>Organisation</TableCell>}
                     <TableCell>2FA</TableCell>
                     <TableCell align="right">Actions</TableCell>
                   </TableRow>
@@ -177,6 +187,7 @@ export default function AdminUserList({ uid }) {
                       </TableCell>
                       <TableCell>{account.seat ?? '—'}</TableCell>
                       <TableCell>{account.tournamentIds?.length ? account.tournamentIds.map(tournamentName).join(', ') : 'All'}</TableCell>
+                      {orgs.length > 0 && <TableCell>{account.organizationId ? orgName(account.organizationId) : 'None (all)'}</TableCell>}
                       <TableCell>{account.twoFactorEnabled ? '✓ On' : 'Off'}</TableCell>
                       <TableCell align="right">
                         <IconButton
@@ -233,7 +244,7 @@ export default function AdminUserList({ uid }) {
                 onChange={formik.handleChange}
               >
                 {users.ROLES.map((role) => (
-                  <MenuItem key={role} value={role}>{role}</MenuItem>
+                  <MenuItem key={role} value={role}>{ROLE_LABEL[role] || role}</MenuItem>
                 ))}
               </Select>
               {formik.errors.role && <FormHelperText>{formik.errors.role}</FormHelperText>}
@@ -254,6 +265,14 @@ export default function AdminUserList({ uid }) {
             >
               {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
             </TextField>
+            {orgs.length > 0 && (
+              <TextField select fullWidth margin="normal" label="Organisation" value={formik.values.organizationId}
+                onChange={(e) => formik.setFieldValue('organizationId', e.target.value)}
+                helperText="An account in an organisation sees only that organisation's tournaments.">
+                <MenuItem value="">None — sees every tournament</MenuItem>
+                {orgs.map((o) => <MenuItem key={o.id} value={o.id}>{o.name}</MenuItem>)}
+              </TextField>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={closeModal}>Cancel</Button>

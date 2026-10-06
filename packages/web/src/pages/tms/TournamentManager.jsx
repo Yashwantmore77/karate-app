@@ -14,6 +14,8 @@ import RegistrationsTab from './RegistrationsTab'
 import WeighInTab from './WeighInTab'
 import DrawTab from './DrawTab'
 import MatchesTab from './MatchesTab'
+import KataTab from './KataTab'
+import CallTab from './CallTab'
 import ResultsTab from './ResultsTab'
 import CertificatesTab from './CertificatesTab'
 import ReportsTab from './ReportsTab'
@@ -29,6 +31,8 @@ export const TABS = [
   { key: 'weighin', label: 'Weigh-in', perm: P.WEIGHIN_RECORD, Component: WeighInTab },
   { key: 'draw', label: 'Draw / Pools', perm: P.POOL_MANAGE, Component: DrawTab },
   { key: 'matches', label: 'Matches', perm: P.MATCH_GENERATE, Component: MatchesTab },
+  { key: 'kata', label: 'Kata panel', perm: P.MATCH_GENERATE, Component: KataTab },
+  { key: 'call', label: 'Call matches', perm: P.MATCH_CALL, Component: CallTab },
   { key: 'results', label: 'Results', perm: P.RESULT_MANAGE, Component: ResultsTab },
   { key: 'certificates', label: 'Certificates', perm: P.CERTIFICATE_GENERATE, Component: CertificatesTab },
   { key: 'reports', label: 'Reports', perm: P.REPORT_EXPORT, Component: ReportsTab },

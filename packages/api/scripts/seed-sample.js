@@ -209,6 +209,23 @@ export async function seedSample(stores, { reset = false, log = console.log } = 
       }
     }
   }
+  // Kata is judged by a panel: one category's rounds scored to the final, so
+  // the kata results, live board and certificates have something to show.
+  const [kata] = await tms.kataDivisions(tid)
+  if (kata) {
+    for (let guard = 0; guard < 5; guard += 1) {
+      const round = await tms.createKataRound(admin, tid, kata.key, { seed: 2027 }).catch(() => null)
+      if (!round) break
+      for (const playerId of round.performerIds) {
+        const base = 7 + random() * 1.5
+        for (let seat = 1; seat <= round.judges; seat += 1) {
+          await tms.submitKataScore(admin, tid, round.id, { playerId, seat, score: Math.round((base + random() * 0.6) * 10) / 10 })
+        }
+      }
+      await tms.completeKataRound(admin, tid, round.id)
+      if (round.name === 'Final') break
+    }
+  }
   await tms.publishResults(admin, tid, true)
   const { certificates } = await tms.generateCertificates(admin, tid)
 

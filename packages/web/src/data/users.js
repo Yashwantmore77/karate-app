@@ -2,7 +2,7 @@ import { httpGet, httpPost, httpPatch, httpDelete } from './http'
 
 /** Accounts. Administered here; there is no self-service signup. */
 
-export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer']
+export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer', 'announcer', 'viewer']
 
 export const list = async () => (await httpGet('/users?limit=100')).users
 

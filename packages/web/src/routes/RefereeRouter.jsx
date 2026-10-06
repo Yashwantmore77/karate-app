@@ -6,7 +6,7 @@ import RefereeMatchControl from '../pages/referee/RefereeMatchControl'
 export default function RefereeRouter({ uid, profile }) {
   return (
     <Routes>
-      <Route path="/" element={<RefereeCategoryList uid={uid} />} />
+      <Route path="/" element={<RefereeCategoryList uid={uid} profile={profile} />} />
       <Route path="/category/:categoryId" element={<RefereeMatchList uid={uid} profile={profile} />} />
       <Route path="/match/:matchId" element={<RefereeMatchControl uid={uid} profile={profile} />} />
       <Route path="*" element={<Navigate to="/" />} />

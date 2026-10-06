@@ -3,6 +3,7 @@ import { useParams, Link as RouterLink } from 'react-router-dom'
 import {
   Container, Paper, Typography, TextField, Button, Stack, Alert, Grid, Box, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, List, ListItem, ListItemText, CircularProgress,
+  FormControlLabel, Checkbox,
 } from '@mui/material'
 import { Add, Edit, Delete } from '@mui/icons-material'
 import { tms, describeError } from '../../data/tms'
@@ -37,6 +38,7 @@ export default function RegisterPortal() {
   const [password, setPassword] = useState('')
   const [me, setMe] = useState(null)
   const [team, setTeam] = useState({})
+  const [accepted, setAccepted] = useState(false)
   const [view, setView] = useState('players')
   const [edit, setEdit] = useState(null)
   const [errors, setErrors] = useState([])
@@ -110,8 +112,26 @@ export default function RegisterPortal() {
               </Grid>
             ))}
           </Grid>
-          <Button size="large" variant="contained" sx={{ mt: 2 }} disabled={!canWrite || !team.name?.trim() || action.busy} onClick={async () => {
-            const doc = Object.fromEntries(Object.entries(team).filter(([, v]) => v))
+          {/* PRD point 2: the tournament's rules and terms, accepted before registering. */}
+          {(info.tournament.rules || info.tournament.terms) && (
+            <Box sx={{ mt: 3 }}>
+              {info.tournament.rules && (
+                <>
+                  <Typography variant="h4" gutterBottom>Tournament rules</Typography>
+                  <Paper variant="outlined" sx={{ p: 2, mb: 2, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap' }}><Typography variant="body2">{info.tournament.rules}</Typography></Paper>
+                </>
+              )}
+              {info.tournament.terms && (
+                <>
+                  <Typography variant="h4" gutterBottom>Terms &amp; conditions</Typography>
+                  <Paper variant="outlined" sx={{ p: 2, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap' }}><Typography variant="body2">{info.tournament.terms}</Typography></Paper>
+                  <FormControlLabel sx={{ mt: 1 }} control={<Checkbox checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />} label="I have read and accept the terms and conditions" />
+                </>
+              )}
+            </Box>
+          )}
+          <Button size="large" variant="contained" sx={{ mt: 2 }} disabled={!canWrite || !team.name?.trim() || action.busy || (!!info.tournament.terms && !accepted)} onClick={async () => {
+            const doc = { ...Object.fromEntries(Object.entries(team).filter(([, v]) => v)), ...(info.tournament.terms ? { termsAccepted: accepted } : {}) }
             const out = await action.run(() => tms.coach.createTeam(session, doc), 'Team registered')
             if (out) keep(out.session)
           }}>Register team</Button>
@@ -200,7 +220,7 @@ export default function RegisterPortal() {
 
       <Dialog open={!!edit} onClose={() => setEdit(null)} maxWidth="md" fullWidth>
         <DialogTitle>{edit?.id ? `Edit ${edit.name}` : 'Add player'}</DialogTitle>
-        <DialogContent><Box sx={{ mt: 1 }}>{edit && <PlayerForm fields={fields} value={edit} onChange={setEdit} errors={errors} disabled={!canWrite}
+        <DialogContent><Box sx={{ mt: 1 }}>{edit && <PlayerForm coach fields={fields} value={edit} onChange={setEdit} errors={errors} disabled={!canWrite}
           onUpload={(file) => tms.coach.uploadFile(session, file)}
           onOpenFile={(id) => action.run(() => tms.coach.readFile(session, id).then(openStoredFile))} />}</Box></DialogContent>
         <DialogActions>

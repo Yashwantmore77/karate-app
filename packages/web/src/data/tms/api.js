@@ -61,6 +61,17 @@ export const tms = {
   movePlayer: async (tid, body) => (await send('POST', `${T(tid)}/pools/move`, body)).pools,
   matches: async (tid, filter) => (await get(`${T(tid)}/matches${qs(filter)}`)).matches,
   generateMatches: (tid, opts = {}) => send('POST', `${T(tid)}/matches/generate`, opts),
+  swapCorners: async (tid, mid, reason) => (await send('POST', `${T(tid)}/matches/${mid}/swap-corners`, { reason: reason || null })).match,
+  callMatch: async (tid, mid, mat) => (await send('POST', `${T(tid)}/matches/${mid}/call`, { mat: mat ?? null })).match,
+  matchEvents: async (tid, mid) => (await get(`${T(tid)}/matches/${mid}/events`)).events,
+  overrideMedals: (tid, divisionKey, medals, reason) => send('POST', `${T(tid)}/results/medals/override`, { divisionKey, medals, reason }),
+  kata: {
+    divisions: async (tid) => (await get(`${T(tid)}/kata/divisions`)).divisions,
+    createRound: async (tid, divisionKey) => (await send('POST', `${T(tid)}/kata/rounds`, { divisionKey })).round,
+    round: async (tid, id) => (await get(`${T(tid)}/kata/rounds/${id}`)).round,
+    score: (tid, id, body) => send('POST', `${T(tid)}/kata/rounds/${id}/scores`, body),
+    complete: async (tid, id) => (await send('POST', `${T(tid)}/kata/rounds/${id}/complete`, {})).round,
+  },
   correctResult: async (tid, mid, body, reason) => (await send('POST', `${T(tid)}/matches/${mid}/correct`, { ...body, reason: reason || null })).match,
   results: async (tid) => (await get(`${T(tid)}/results`)).results,
   generateBracket: async (tid, divisionKey) => (await send('POST', `${T(tid)}/brackets/generate`, { divisionKey })).bracket,
@@ -104,7 +115,7 @@ export const tms = {
   publicFileUrl: (id) => apiUrl(`/public/files/${id}`),
 
   public: {
-    list: async () => (await get('/public/tournaments', { anonymous: true })).tournaments,
+    list: async (org) => (await get(`/public/tournaments${qs({ org })}`, { anonymous: true })).tournaments,
     view: (idOrSlug) => get(`/public/tournaments/${encodeURIComponent(idOrSlug)}`, { anonymous: true }),
     linkInfo: (token) => get(`/public/register/${encodeURIComponent(token)}`, { anonymous: true }),
     async openLink(token, password) {
