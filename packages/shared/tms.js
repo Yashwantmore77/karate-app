@@ -29,6 +29,7 @@ import {
 } from './registration.js'
 import { hashSecret, verifySecret, randomToken } from './secret.js'
 import { checkFile, base64Size, safeFileName, FILE_PURPOSES } from './files.js'
+import { paginate, pageOptions } from './paging.js'
 
 const R = REGISTRATION_STATUS
 const T = TOURNAMENT_STATUS
@@ -366,6 +367,31 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     ])
     const teamsById = new Map(teamRows.map((t) => [t.id, t]))
     return rows.filter((p) => matchesFilter(p, filter, { teamsById })).sort(byName)
+  }
+
+  /** A page of players (section 62), with the same filters as listPlayers. */
+  async function pagePlayers(tournamentId, filter = {}, options = {}) {
+    return paginate(await listPlayers(tournamentId, filter), { sort: 'name', ...options })
+  }
+
+  /**
+   * A page of the audit trail, newest first. Paged in the store itself, so a
+   * long tournament's thousands of records are never all read for one screen;
+   * a text search falls back to reading them.
+   */
+  async function pageAudit(tournamentId, { q, ...options } = {}) {
+    const { page, pageSize } = pageOptions(options)
+    if (q) {
+      const needle = String(q).toLowerCase()
+      const all = (await audit.forTournament(tournamentId)).filter((a) =>
+        [a.action, a.actorId, a.actorRole, a.entity, a.entityId, a.reason].join(' ').toLowerCase().includes(needle))
+      return paginate(all, { page, pageSize })
+    }
+    const [rows, total] = await Promise.all([
+      stores.auditLog.list({ tournamentId }, { sort: { at: -1 }, skip: page * pageSize, limit: pageSize }),
+      stores.auditLog.count({ tournamentId }),
+    ])
+    return { rows, total, page, pageSize }
   }
 
   async function nextPlayerNumber(tournamentId) {
@@ -1353,7 +1379,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // configuration
     ageGroups, weightCategories,
     // registration
-    teams, listPlayers, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
+    teams, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
     setRegistrationStatus, recordPayment, recordWeighIn,
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer,

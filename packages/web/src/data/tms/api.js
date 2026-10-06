@@ -40,6 +40,10 @@ export const tms = {
   teams: crud('teams', 'team'),
   players: {
     list: async (tid, filter) => (await get(`${T(tid)}/players${qs(filter)}`)).players,
+    async page(tid, filter = {}, { page = 0, pageSize = 25, sort, dir } = {}) {
+      const res = await get(`${T(tid)}/players${qs({ ...filter, page, pageSize, sort, dir })}`)
+      return { rows: res.players, total: res.total, page: res.page, pageSize: res.pageSize }
+    },
     create: async (tid, doc) => (await send('POST', `${T(tid)}/players`, doc)).player,
     update: async (tid, id, patch) => (await send('PATCH', `${T(tid)}/players/${id}`, patch)).player,
     remove: (tid, id) => send('DELETE', `${T(tid)}/players/${id}`),
@@ -73,6 +77,10 @@ export const tms = {
   notifications: async (tid) => (await get(`${T(tid)}/notifications`)).notifications,
   markRead: (tid) => send('POST', `${T(tid)}/notifications/read`, {}),
   audit: async (tid) => (await get(`${T(tid)}/audit`)).audit,
+  async auditPage(tid, { page = 0, pageSize = 25, q } = {}) {
+    const res = await get(`${T(tid)}/audit${qs({ page, pageSize, q })}`)
+    return { rows: res.audit, total: res.total, page: res.page, pageSize: res.pageSize }
+  },
   uploadFile: async (tid, file) => (await send('POST', `${T(tid)}/files`, file)).file,
   weighInReminder: (tid) => send('POST', `${T(tid)}/weigh-in/reminders`, {}),
   async reportData(tid) {

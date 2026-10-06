@@ -428,3 +428,26 @@ describe('file uploads (sections 12, 17, 49)', () => {
       .rejects.toMatchObject({ code: 'invalid_player' })
   })
 })
+
+describe('server-side paging (section 62)', () => {
+  it('pages players and the audit log with totals', async () => {
+    const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
+    const tms = createTms(stores)
+    const t = await stores.tournaments.insert({ name: 'T', masterAgeDate: '2027-01-01' })
+    const team = await tms.teams.create(admin, t.id, { name: 'A' })
+    for (let i = 0; i < 25; i += 1) {
+      await tms.createPlayer(admin, t.id, { teamId: team.id, name: `Player ${String(i).padStart(2, '0')}`, dob: '2014-01-01', gender: 'M', events: ['kata'] })
+    }
+    const second = await tms.pagePlayers(t.id, {}, { page: 1, pageSize: 10 })
+    expect(second).toMatchObject({ total: 25, page: 1, pageSize: 10 })
+    expect(second.rows.map((p) => p.name)[0]).toBe('Player 10')
+    const desc = await tms.pagePlayers(t.id, {}, { page: 0, pageSize: 3, sort: 'name', dir: 'desc' })
+    expect(desc.rows[0].name).toBe('Player 24')
+    expect((await tms.pagePlayers(t.id, { q: 'player 2' }, { pageSize: 500 })).pageSize).toBe(200)
+
+    const audit = await tms.pageAudit(t.id, { page: 0, pageSize: 5 })
+    expect(audit.total).toBe(26)
+    expect(audit.rows).toHaveLength(5)
+    expect((await tms.pageAudit(t.id, { q: 'team.changed', pageSize: 5 })).total).toBe(1)
+  })
+})

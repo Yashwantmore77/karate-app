@@ -23,7 +23,15 @@ const write = (name, rows) => localStorage.setItem(keyOf(name), JSON.stringify(r
 /** The store contract over one localStorage key. */
 function collection(name) {
   return {
-    async list(filter = {}) { return read(name).filter((r) => matches(r, filter)) },
+    async list(filter = {}, { sort, skip = 0, limit } = {}) {
+      let out = read(name).filter((r) => matches(r, filter))
+      if (sort) {
+        const [[field, dir]] = Object.entries(sort)
+        out.sort((a, b) => String(a[field] ?? '').localeCompare(String(b[field] ?? '')) * (dir < 0 ? -1 : 1))
+      }
+      return limit ? out.slice(skip, skip + limit) : out.slice(skip)
+    },
+    async count(filter = {}) { return read(name).filter((r) => matches(r, filter)).length },
     async get(id) { return read(name).find((r) => r.id === id) || null },
     async insert(doc) {
       const row = { ...doc, id: doc.id || newId(name.slice(0, 4)), createdAt: new Date().toISOString() }
@@ -184,6 +192,7 @@ export const tms = {
   },
   players: {
     list: (tid, filter) => s.listPlayers(tid, filter),
+    page: (tid, filter, opts) => s.pagePlayers(tid, filter, opts),
     create: (tid, doc) => s.createPlayer(me(), tid, doc),
     update: (tid, id, patch) => s.updatePlayer(me(), tid, id, patch),
     remove: (tid, id) => s.removePlayer(me(), tid, id),
@@ -216,6 +225,7 @@ export const tms = {
   notifications: (tid) => s.listNotifications(tid, 'admin'),
   markRead: (tid) => s.markNotificationsRead(tid, 'admin'),
   audit: (tid) => s.auditTrail(tid),
+  auditPage: (tid, opts) => s.pageAudit(tid, opts),
   uploadFile: (tid, file) => s.uploadFile(me(), tid, file),
   weighInReminder: (tid) => s.sendWeighInReminder(me(), tid),
   reportData: (tid) => loadReportData(s, tid),

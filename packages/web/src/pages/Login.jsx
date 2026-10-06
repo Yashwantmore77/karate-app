@@ -109,7 +109,7 @@ export default function Login() {
         border: '1px solid rgba(255,255,255,0.14)',
         boxShadow: '0 30px 80px rgba(0,0,0,0.55)',
       }}>
-        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+        <Stack direction="row" spacing={2} sx={{ mb: 3, alignItems: 'center' }}>
           <Box sx={{ position: 'relative', width: 52, height: 52, flexShrink: 0 }}>
             <Box
               component="svg"

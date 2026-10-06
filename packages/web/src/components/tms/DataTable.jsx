@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Table, TableHead, TableBody, TableRow, TableCell, TableContainer, TableSortLabel, TablePagination,
   Paper, Typography, Box, TextField, InputAdornment,
@@ -14,13 +14,28 @@ const text = (v) => (v == null ? '' : String(v)).toLowerCase()
 export default function DataTable({
   columns, rows, rowKey = (r) => r.id, searchable = true, searchPlaceholder = 'Search', empty = 'Nothing here yet.',
   pageSize = 25, dense = true, toolbar = null, onRowClick = null,
+  // Server paging (PRD section 62): { total, page, pageSize, onChange }. The
+  // rows given are already the page; search and sort are sent to the server.
+  server = null,
 }) {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
   const [page, setPage] = useState(0)
   const [perPage, setPerPage] = useState(pageSize)
 
+  // Typing searches after a pause, not on every key.
+  const onServerChange = useRef(server?.onChange)
+  onServerChange.current = server?.onChange
+  const firstQuery = useRef(true)
+  useEffect(() => {
+    if (!server) return undefined
+    if (firstQuery.current) { firstQuery.current = false; return undefined }
+    const id = setTimeout(() => onServerChange.current?.({ page: 0, q: query }), 300)
+    return () => clearTimeout(id)
+  }, [query, !!server])
+
   const filtered = useMemo(() => {
+    if (server) return rows
     const q = query.trim().toLowerCase()
     let out = q ? rows.filter((r) => columns.some((c) => text(c.value ? c.value(r) : r[c.key]).includes(q))) : rows
     if (sort.key) {
@@ -33,9 +48,12 @@ export default function DataTable({
       })
     }
     return out
-  }, [rows, columns, query, sort])
+  }, [rows, columns, query, sort, server])
 
-  const shown = filtered.slice(page * perPage, page * perPage + perPage)
+  const shown = server ? rows : filtered.slice(page * perPage, page * perPage + perPage)
+  const total = server ? server.total : filtered.length
+  const currentPage = server ? server.page : page
+  const currentSize = server ? server.pageSize : perPage
 
   return (
     <Paper sx={{ overflow: 'hidden' }}>
@@ -58,7 +76,11 @@ export default function DataTable({
                 <TableCell key={c.key} align={c.align} sx={{ whiteSpace: 'nowrap', ...(c.width ? { width: c.width } : {}) }}>
                   {c.sortable === false ? c.label : (
                     <TableSortLabel active={sort.key === c.key} direction={sort.key === c.key ? sort.dir : 'asc'}
-                      onClick={() => setSort((s) => ({ key: c.key, dir: s.key === c.key && s.dir === 'asc' ? 'desc' : 'asc' }))}>
+                      onClick={() => {
+                        const next = { key: c.key, dir: sort.key === c.key && sort.dir === 'asc' ? 'desc' : 'asc' }
+                        setSort(next)
+                        server?.onChange({ page: 0, sort: c.sortKey || c.key, dir: next.dir })
+                      }}>
                       {c.label}
                     </TableSortLabel>
                   )}
@@ -84,10 +106,13 @@ export default function DataTable({
           </TableBody>
         </Table>
       </TableContainer>
-      {filtered.length > perPage && (
-        <TablePagination component="div" count={filtered.length} page={page} rowsPerPage={perPage}
-          rowsPerPageOptions={[25, 50, 100]} onPageChange={(_e, p) => setPage(p)}
-          onRowsPerPageChange={(e) => { setPerPage(Number(e.target.value)); setPage(0) }} />
+      {total > currentSize && (
+        <TablePagination component="div" count={total} page={currentPage} rowsPerPage={currentSize}
+          rowsPerPageOptions={[25, 50, 100]}
+          onPageChange={(_e, p) => (server ? server.onChange({ page: p }) : setPage(p))}
+          onRowsPerPageChange={(e) => (server
+            ? server.onChange({ page: 0, pageSize: Number(e.target.value) })
+            : (setPerPage(Number(e.target.value)), setPage(0)))} />
       )}
     </Paper>
   )

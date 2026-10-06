@@ -60,7 +60,7 @@ export default function PublicTournament() {
       <TableCell sx={{ fontWeight: m.winner === 'red' ? 700 : 400 }}><Box component="span" sx={{ color: AKA }}>■</Box> {m.aka || 'TBD'}</TableCell>
       <TableCell align="center">{m.status === 'completed' ? `${m.akaScore ?? 0} – ${m.aoScore ?? 0}` : 'vs'}</TableCell>
       <TableCell sx={{ fontWeight: m.winner === 'blue' ? 700 : 400 }}><Box component="span" sx={{ color: AO }}>■</Box> {m.ao || 'TBD'}</TableCell>
-      <TableCell><StatusBadge status={m.status} /></TableCell>
+      <TableCell><StatusBadge status={m.resultType && m.resultType !== 'COMPLETED' ? m.resultType : m.status} /></TableCell>
     </TableRow>
   )
 

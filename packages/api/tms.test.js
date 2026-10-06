@@ -64,6 +64,9 @@ describe('PRD tournament management over HTTP', () => {
     }
     const me = (await call('GET', '/coach/me', undefined, coach)).body
     expect(me.players).toHaveLength(10)
+    const paged = (await call('GET', `/tournaments/${t}/players?page=1&pageSize=4&sort=name`, undefined, tokens.admin)).body
+    expect(paged).toMatchObject({ total: 10, page: 1, pageSize: 4 })
+    expect(paged.players.map((p) => p.name)).toEqual(['Player 4', 'Player 5', 'Player 6', 'Player 7'])
     expect(me.players[0]).toMatchObject({ age: 12, registrationStatus: 'SUBMITTED' })
 
     // a registration officer approves; a referee may not

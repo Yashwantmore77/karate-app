@@ -31,7 +31,11 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const fields = useMemo(() => formFields(tournament), [tournament])
   const [view, setView] = useState('players')
   const [teams, setTeams] = useState([])
-  const [players, setPlayers] = useState([])
+  // One page of players at a time, paged on the server (section 62).
+  const [paged, setPaged] = useState({ rows: [], total: 0, page: 0, pageSize: 25 })
+  const [pageQuery, setPageQuery] = useState({ page: 0, pageSize: 25, q: '', sort: 'name', dir: 'asc' })
+  const [teamCounts, setTeamCounts] = useState({})
+  const players = paged.rows
   const [groups, setGroups] = useState([])
   const [weights, setWeights] = useState([])
   const [filter, setFilter] = useState({ registrationStatus: '', teamId: '', gender: '', event: '', paymentStatus: '' })
@@ -45,9 +49,15 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const locked = !!tournament.entriesLocked
 
   const load = () => Promise.all([
-    tms.teams.list(tid), tms.players.list(tid, clean(filter)), tms.ageGroups.list(tid), tms.weightCategories.list(tid),
-  ]).then(([t, p, g, w]) => { setTeams(t); setPlayers(p); setGroups(g); setWeights(w) })
-  useEffect(() => { load() }, [tid, version, JSON.stringify(filter)])
+    tms.teams.list(tid), tms.players.page(tid, clean({ ...filter, q: pageQuery.q }), pageQuery), tms.ageGroups.list(tid), tms.weightCategories.list(tid),
+  ]).then(([t, p, g, w]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w) })
+  useEffect(() => { load() }, [tid, version, JSON.stringify(filter), JSON.stringify(pageQuery)])
+  // A filter change starts again from the first page.
+  useEffect(() => { setPageQuery((q) => ({ ...q, page: 0 })) }, [JSON.stringify(filter)])
+  useEffect(() => {
+    if (view !== 'teams') return
+    tms.players.list(tid).then((all) => setTeamCounts(all.reduce((m, p) => ({ ...m, [p.teamId]: (m[p.teamId] || 0) + 1 }), {})))
+  }, [view, tid, version])
 
   const teamName = (id) => teams.find((t) => t.id === id)?.name || '—'
   const entryLabel = (p) => Object.entries(p.entries || {}).map(([event, e]) => {
@@ -84,8 +94,12 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
     }
   }
 
-  const approveAll = () => {
-    const pending = players.filter((p) => ['SUBMITTED', 'PENDING_VERIFICATION'].includes(p.registrationStatus))
+  const approveAll = async () => {
+    const pending = [
+      ...(await tms.players.list(tid, { registrationStatus: 'SUBMITTED' })),
+      ...(await tms.players.list(tid, { registrationStatus: 'PENDING_VERIFICATION' })),
+    ]
+    if (!pending.length) return action.notify({ severity: 'info', text: 'No registrations are waiting for approval.' })
     setConfirm({
       title: `Approve ${pending.length} pending players?`,
       message: 'Each approval is recorded in the audit log.',
@@ -120,7 +134,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   return (
     <Stack spacing={2}>
       <ToggleButtonGroup exclusive value={view} onChange={(_e, v) => v && setView(v)} size="small">
-        <ToggleButton value="players">Players ({players.length})</ToggleButton>
+        <ToggleButton value="players">Players ({paged.total})</ToggleButton>
         <ToggleButton value="teams">Teams ({teams.length})</ToggleButton>
         {manage && <ToggleButton value="bulk">Bulk upload</ToggleButton>}
       </ToggleButtonGroup>
@@ -135,7 +149,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
           columns={[
             { key: 'name', label: 'Team' }, { key: 'club', label: 'Club' }, { key: 'code', label: 'Code' }, { key: 'coachName', label: 'Coach' },
             { key: 'mobile', label: 'Mobile' }, { key: 'state', label: 'State' },
-            { key: 'players', label: 'Players', value: (t) => players.filter((p) => p.teamId === t.id).length, render: (t) => players.filter((p) => p.teamId === t.id).length },
+            { key: 'players', label: 'Players', value: (t) => teamCounts[t.id] || 0, render: (t) => teamCounts[t.id] || 0 },
             { key: 'actions', label: '', sortable: false, render: (t) => manage && (
               <Stack direction="row">
                 <IconButton size="small" aria-label="Edit team" onClick={() => setTeamEdit(t)}><Edit fontSize="small" /></IconButton>
@@ -152,12 +166,13 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
       {view === 'players' && (
         <DataTable
           rows={players}
+          server={{ ...paged, onChange: (next) => setPageQuery((q) => ({ ...q, ...next })) }}
           searchPlaceholder="Search name, player ID, team, club"
           empty="No players match."
           toolbar={(
             <>
               {filters}
-              {manage && <Button variant="outlined" onClick={approveAll} disabled={!players.some((p) => ['SUBMITTED', 'PENDING_VERIFICATION'].includes(p.registrationStatus))}>Approve all pending</Button>}
+              {manage && <Button variant="outlined" onClick={approveAll}>Approve all pending</Button>}
               {can(role, P.PLAYER_EDIT) && <Button variant="contained" startIcon={<Add />} disabled={locked || !teams.length} onClick={() => { setPlayerErrors([]); setPlayerEdit({ ...blank(fields), teamId: teams[0]?.id }) }}>Add player</Button>}
             </>
           )}
@@ -168,7 +183,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
             { key: 'gender', label: 'G' },
             { key: 'age', label: 'Age', render: (p) => p.age ?? '—' },
             { key: 'weight', label: 'Kg', render: (p) => p.weight ?? '—' },
-            { key: 'entries', label: 'Category', value: entryLabel, render: (p) => (
+            { key: 'entries', label: 'Category', sortable: false, value: entryLabel, render: (p) => (
               <Box>
                 <Typography variant="body2">{entryLabel(p) || '—'}</Typography>
                 {p.categoryIssues?.length > 0 && <Typography variant="body2" color="warning.main">{p.categoryIssues[0].message}</Typography>}
@@ -180,7 +195,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
                 {p.rejectionReason && <Typography variant="body2" color="text.secondary">{p.rejectionReason}</Typography>}
               </Box>
             ) },
-            { key: 'payment', label: 'Payment', value: (p) => p.payment?.status, render: (p) => <StatusBadge status={p.payment?.status || 'PENDING'} label={`${humanize(p.payment?.status || 'PENDING')}${p.payment?.amount ? ` · ₹${p.payment.amount}` : ''}`} /> },
+            { key: 'payment', label: 'Payment', sortKey: 'payment.status', value: (p) => p.payment?.status, render: (p) => <StatusBadge status={p.payment?.status || 'PENDING'} label={`${humanize(p.payment?.status || 'PENDING')}${p.payment?.amount ? ` · ₹${p.payment.amount}` : ''}`} /> },
             { key: 'actions', label: '', sortable: false, render: (p) => (
               <Stack direction="row" sx={{ flexWrap: 'nowrap' }}>
                 {manage && ['SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus) && (

@@ -7,7 +7,15 @@ let counter = 0
 export function memoryCollection() {
   const rows = new Map()
   return {
-    async list(filter = {}) { return [...rows.values()].filter((r) => matches(r, filter)).map((r) => ({ ...r })) },
+    async list(filter = {}, { sort, skip = 0, limit } = {}) {
+      let out = [...rows.values()].filter((r) => matches(r, filter)).map((r) => ({ ...r }))
+      if (sort) {
+        const [[field, dir]] = Object.entries(sort)
+        out.sort((a, b) => String(a[field] ?? '').localeCompare(String(b[field] ?? '')) * (dir < 0 ? -1 : 1))
+      }
+      return limit ? out.slice(skip, skip + limit) : out.slice(skip)
+    },
+    async count(filter = {}) { return [...rows.values()].filter((r) => matches(r, filter)).length },
     async get(id) { const r = rows.get(id); return r ? { ...r } : null },
     async insert(doc) {
       counter += 1

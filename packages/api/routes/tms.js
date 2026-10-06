@@ -171,6 +171,12 @@ export function tmsRoutes(tms, stores) {
     for (const key of ['q', 'teamId', 'gender', 'event', 'registrationStatus', 'paymentStatus', 'weighInStatus', 'ageGroupId', 'weightCategoryId', 'club', 'district', 'state', 'country']) {
       if (typeof req.query[key] === 'string' && req.query[key]) filter[key] = req.query[key].slice(0, 120)
     }
+    // With ?page, one page and the total (section 62); without, the whole list
+    // as before, for exports and the draw screens.
+    if (req.query.page !== undefined) {
+      const { rows, total, page, pageSize } = await tms.pagePlayers(tid(req), filter, req.query)
+      return res.json({ players: rows, total, page, pageSize })
+    }
     res.json({ players: await tms.listPlayers(tid(req), filter) })
   })
   router.post('/:tid/players', requirePermission(P.PLAYER_EDIT), async (req, res) => {
@@ -362,7 +368,14 @@ export function tmsRoutes(tms, stores) {
     await tms.markNotificationsRead(tid(req), 'admin')
     res.status(204).end()
   })
-  router.get('/:tid/audit', requirePermission(P.AUDIT_VIEW), async (req, res) => res.json({ audit: await tms.auditTrail(tid(req)) }))
+  router.get('/:tid/audit', requirePermission(P.AUDIT_VIEW), async (req, res) => {
+    if (req.query.page !== undefined) {
+      const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 120) : undefined
+      const { rows, total, page, pageSize } = await tms.pageAudit(tid(req), { ...req.query, q })
+      return res.json({ audit: rows, total, page, pageSize })
+    }
+    res.json({ audit: await tms.auditTrail(tid(req)) })
+  })
 
   return router
 }
