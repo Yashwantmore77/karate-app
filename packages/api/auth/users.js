@@ -9,7 +9,7 @@ const KEY_LEN = 64
 const COLLECTION = 'users'
 // PRD section 3. Coaches are not accounts: they arrive through a registration
 // link (see signCoachToken), and the public needs no sign-in at all.
-export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer']
+export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer', 'announcer', 'viewer']
 
 // Deliberately loose: the point is to catch a transposed field, not to arbitrate
 // what a valid address is. Anything stricter rejects real addresses.
@@ -26,6 +26,9 @@ const USER_SCHEMA = {
   // PRD section 4: the tournaments this account may work. Empty or absent
   // means all of them, which is how every existing account behaves.
   tournamentIds: { type: 'array', items: { type: 'string', max: 80 }, maxItems: 200, unique: true, nullable: true },
+  // PRD point 33 (SaaS): the organisation this account belongs to. Absent
+  // means none, which is how every existing account behaves.
+  organizationId: { type: 'string', max: 80, nullable: true },
 }
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
@@ -62,6 +65,8 @@ const SEED = [
   // which stay as they were; sign in with the address.
   { uid: 'registrar-uid', email: 'registrar@kata.local', role: 'registration_officer', password: 'test123' },
   { uid: 'weighin-uid', email: 'weighin@kata.local', role: 'weighin_officer', password: 'test123' },
+  { uid: 'announcer-uid', email: 'announcer@kata.local', role: 'announcer', password: 'test123' },
+  { uid: 'viewer-uid', email: 'viewer@kata.local', role: 'viewer', password: 'test123' },
 ]
 
 // --- in-memory store (no MONGODB_URI) --------------------------------------
@@ -92,7 +97,7 @@ async function listMemoryUsers() {
 }
 
 async function createMemoryUser(input) {
-  const { email, password, role, seat, tournamentIds } = validate(input, USER_SCHEMA)
+  const { email, password, role, seat, tournamentIds, organizationId } = validate(input, USER_SCHEMA)
   const users = await loadMemoryUsers()
   if (users.has(email)) throw conflict('email_taken')
   const user = {
@@ -101,6 +106,7 @@ async function createMemoryUser(input) {
     role,
     ...(seat !== null && seat !== undefined ? { seat } : {}),
     ...(tournamentIds?.length ? { tournamentIds } : {}),
+    ...(organizationId ? { organizationId } : {}),
     passwordHash: await hashPassword(password),
   }
   users.set(email, user)
@@ -121,6 +127,10 @@ async function updateMemoryUser(uid, patch) {
     else next.seat = fields.seat
   }
   if (fields.tournamentIds !== undefined) next.tournamentIds = fields.tournamentIds || []
+  if (fields.organizationId !== undefined) {
+    if (fields.organizationId) next.organizationId = fields.organizationId
+    else delete next.organizationId
+  }
   if (fields.password) next.passwordHash = await hashPassword(fields.password)
 
   if (next.email !== existing.email && users.has(next.email)) throw conflict('email_taken')
@@ -176,7 +186,7 @@ async function listMongoUsers() {
 }
 
 async function createMongoUser(input) {
-  const { email, password, role, seat, tournamentIds } = validate(input, USER_SCHEMA)
+  const { email, password, role, seat, tournamentIds, organizationId } = validate(input, USER_SCHEMA)
   const collection = await usersCollection()
   const doc = {
     uid: randomUUID(),
@@ -184,6 +194,7 @@ async function createMongoUser(input) {
     role,
     ...(seat !== null && seat !== undefined ? { seat } : {}),
     ...(tournamentIds?.length ? { tournamentIds } : {}),
+    ...(organizationId ? { organizationId } : {}),
     passwordHash: await hashPassword(password),
   }
   try {
@@ -212,6 +223,10 @@ async function updateMongoUser(uid, patch) {
     else $set.seat = fields.seat
   }
   if (fields.tournamentIds !== undefined) $set.tournamentIds = fields.tournamentIds || []
+  if (fields.organizationId !== undefined) {
+    if (fields.organizationId) $set.organizationId = fields.organizationId
+    else $unset.organizationId = ''
+  }
   if (fields.password) $set.passwordHash = await hashPassword(fields.password)
 
   try {
@@ -305,8 +320,9 @@ export async function findUser(uid) {
  * the officials at one venue — and a Mongo-side skip/limit would buy nothing
  * while splitting the search rules across two implementations.
  */
-export async function listUsers({ q = '', page = 1, limit = 25 } = {}) {
-  const users = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
+export async function listUsers({ q = '', page = 1, limit = 25, organizationId = null } = {}) {
+  const all = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
+  const users = organizationId ? all.filter((u) => u.organizationId === organizationId) : all
   const needle = q.trim().toLowerCase()
 
   const found = needle

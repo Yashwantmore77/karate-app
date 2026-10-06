@@ -24,7 +24,7 @@ import {
   bracketMedals, poolMedals, medalTally, boutOutcome,
 } from './results.js'
 import {
-  formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, playerIdentity,
+  formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, playerIdentity, withoutReadOnly,
   publicPlayer, publicTeam,
 } from './registration.js'
 import { hashSecret, verifySecret, randomToken } from './secret.js'
@@ -42,6 +42,8 @@ export const DEFAULT_SETTINGS = {
   matchDurationSec: 180,
   pointGap: 8,
   weighInAutoMove: true,
+  // PRD point 20: referees and judges see only the bouts they are put on.
+  officialsSeeAssignedOnly: false,
   emailNotifications: true,
   // PRD point 12: how uneven entries are split (see pools.js POOL_MODES).
   poolMode: 'max',
@@ -487,7 +489,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     assertCoachMayWrite(actor, tournament, teamId)
     await inTournament('teams', tournamentId, teamId).catch(() => { throw invalid('invalid_teamId') })
 
-    const { player, errors } = validatePlayer(input, formFields(tournament))
+    const fields = formFields(tournament)
+    const { player, errors } = validatePlayer(isCoach(actor) ? withoutReadOnly(input, fields) : input, fields)
     if (errors.length) throw invalid('invalid_player', { errors })
     const existing = await stores.players.list({ tournamentId })
     if (existing.some((p) => playerIdentity(p) === playerIdentity(player))) throw rule('duplicate_player')
@@ -515,8 +518,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     assertCoachMayWrite(actor, cfg.tournament, before.teamId)
     if (isCoach(actor) && 'teamId' in input && input.teamId !== before.teamId) throw denied('not_your_team')
 
-    const merged = { ...before, ...input, extra: { ...(before.extra || {}), ...(input.extra || {}) } }
-    const { player, errors } = validatePlayer(merged, formFields(cfg.tournament))
+    const fields = formFields(cfg.tournament)
+    const sent = isCoach(actor) ? withoutReadOnly(input, fields, before) : input
+    const merged = { ...before, ...sent, extra: { ...(before.extra || {}), ...(sent.extra || {}) } }
+    const { player, errors } = validatePlayer(merged, fields)
     if (errors.length) throw invalid('invalid_player', { errors })
     const patch = { ...player }
     if (input.teamId && !isCoach(actor)) {
@@ -997,6 +1002,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const num = (m) => Number(String(m.matchNumber || '').replace(/\D/g, '')) || 0
     return out
       .filter((m) => (!filter.status || m.status === filter.status) && (!filter.mat || m.mat === Number(filter.mat)) && (!filter.divisionKey || m.divisionKey === filter.divisionKey))
+      // PRD point 20: an official sees the bouts they are on.
+      .filter((m) => !filter.officialId || m.refereeId === filter.officialId || (m.judgeIds || []).includes(filter.officialId))
       .sort((a, b) => num(a) - num(b))
   }
 
@@ -1025,6 +1032,20 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return after
   }
 
+  /**
+   * The announcer calls a bout to its mat (PRD point 20): the hall screen
+   * and the mat's referee see it called, and the call is recorded.
+   */
+  async function callMatch(actor, tournamentId, matchId, { mat = null } = {}) {
+    const { match } = await findBridgedMatch(tournamentId, matchId)
+    if (boutOutcome(match) || match.status === 'cancelled') throw rule('match_finished')
+    const patch = { calledAt: iso(), calledBy: actor?.uid || null, calls: (match.calls || 0) + 1 }
+    if (mat != null) patch.mat = mat
+    const after = await stores.matches.update(matchId, patch)
+    await record(actor, { tournamentId, action: A.MATCH_CALLED, entity: 'match', entityId: matchId, after: { mat: after.mat ?? null, call: patch.calls } })
+    return after
+  }
+
   /** PRD point 15: put the players in the other corners, before the bout is fought. */
   async function swapCorners(actor, tournamentId, matchId, reason = null) {
     const { match } = await findBridgedMatch(tournamentId, matchId)
@@ -1034,6 +1055,46 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const after = await stores.matches.update(matchId, patch)
     await record(actor, { tournamentId, action: A.MATCH_SCHEDULED, entity: 'match', entityId: matchId, before: { redId: match.redId, blueId: match.blueId }, after: { redId: patch.redId, blueId: patch.blueId }, reason: reason || 'Corners swapped' })
     return after
+  }
+
+  // --- live scoring log (PRD point 33) ----------------------------------------
+
+  const QUIET_COMMANDS = new Set(['FIELD_NUMBER', 'SCOREBOARD', 'CLOCK_ADJUST', 'RULES'])
+  const scoreText = (st) => `AKA ${st?.match?.scores?.aka ?? 0} – AO ${st?.match?.scores?.ao ?? 0}`
+  const penaltyTotal = (st, side) => Object.values(st?.match?.penalties?.[side] || {}).reduce((a, b) => a + b, 0)
+
+  /**
+   * Every command a referee sends to a live bout, kept as the bout's event
+   * log. A score that goes down (an undo, a deduction) or a penalty taken
+   * back is a correction, and also goes in the tournament's audit log:
+   * "Referee changed score AKA 2 → 3".
+   */
+  async function recordLiveEvent(actor, matchId, { seq, cmd, payload = null, before, after, at = null }) {
+    if (QUIET_COMMANDS.has(cmd)) return null
+    const match = await stores.matches.get(matchId)
+    if (!match) return null
+    const category = match.categoryId ? await stores.categories.get(match.categoryId) : null
+    const tournamentId = category?.tournamentId || match.tournamentId || null
+    const row = await stores.matchEvents.insert({
+      tournamentId, matchId, seq, cmd, payload: payload && typeof payload === 'object' ? payload : null,
+      by: actor?.uid || null, byEmail: actor?.email || null, role: actor?.role || null,
+      scoreBefore: before?.match?.scores || null, scoreAfter: after?.match?.scores || null,
+      at: at ? new Date(at).toISOString() : iso(),
+    })
+    const lowered = ['ao', 'aka'].some((side) => (after?.match?.scores?.[side] ?? 0) < (before?.match?.scores?.[side] ?? 0)
+      || penaltyTotal(after, side) < penaltyTotal(before, side))
+    if (tournamentId && (lowered || cmd === 'UNDO' || cmd === 'CLEAR_DECISION')) {
+      await record(actor, {
+        tournamentId, action: A.LIVE_SCORE_CORRECTED, entity: 'match', entityId: matchId,
+        before: { score: scoreText(before) }, after: { score: scoreText(after) },
+        reason: `${cmd === 'UNDO' ? 'Undo' : cmd === 'CLEAR_DECISION' ? 'Decision cleared' : cmd} during bout ${match.matchNumber || ''}`.trim(),
+      })
+    }
+    return row
+  }
+
+  async function liveEvents(tournamentId, matchId) {
+    return (await stores.matchEvents.list({ tournamentId, matchId })).sort((a, b) => a.seq - b.seq)
   }
 
   // --- kata panel (PRD point 19, sections 32-33) -----------------------------
@@ -1490,7 +1551,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   // --- public (Rule 8) ----------------------------------------------------------
 
   function publicTournament(t) {
-    const keep = ['id', 'name', 'slug', 'description', 'logoUrl', 'type', 'template', 'organizer', 'association', 'venue', 'location', 'city', 'district', 'state', 'country', 'startDate', 'endDate', 'date', 'lifecycleStatus', 'resultsPublished']
+    const keep = ['id', 'name', 'slug', 'description', 'rules', 'terms', 'logoUrl', 'type', 'template', 'organizer', 'association', 'venue', 'location', 'city', 'district', 'state', 'country', 'startDate', 'endDate', 'date', 'lifecycleStatus', 'resultsPublished']
     const out = {}
     for (const k of keep) if (t[k] !== undefined) out[k] = t[k]
     out.lifecycleStatus = lifecycleOf(t)
@@ -1504,8 +1565,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return t
   }
 
-  async function publicList() {
-    return (await stores.tournaments.list()).filter((t) => lifecycleOf(t) !== T.DRAFT).map(publicTournament)
+  /** Published tournaments; `org` (a slug) narrows to one organisation's. */
+  async function publicList({ org = null } = {}) {
+    const organizations = stores.organizations ? await stores.organizations.list({}) : []
+    const byId = new Map(organizations.map((o) => [o.id, o]))
+    const only = org ? organizations.find((o) => o.slug === org) : null
+    if (org && !only) return []
+    return (await stores.tournaments.list())
+      .filter((t) => lifecycleOf(t) !== T.DRAFT && (!only || t.organizationId === only.id))
+      .map((t) => ({ ...publicTournament(t), organization: byId.get(t.organizationId) ? { name: byId.get(t.organizationId).name, slug: byId.get(t.organizationId).slug } : null }))
   }
 
   async function publicView(idOrSlug) {
@@ -1534,7 +1602,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       matches: matchRows.map((m) => ({
         id: m.id, matchNumber: m.matchNumber, mat: m.mat, scheduledAt: m.scheduledAt || null, category: m.categoryName, divisionKey: m.divisionKey,
         pool: m.poolName, round: m.round, stage: m.stage, roundName: m.roundName || null, status: m.status, resultType: m.resultType,
-        aka: m.akaName, ao: m.aoName, winner: m.winner || null, akaScore: m.avgRed ?? null, aoScore: m.avgBlue ?? null,
+        aka: m.akaName, ao: m.aoName, winner: m.winner || null, akaScore: m.avgRed ?? null, aoScore: m.avgBlue ?? null, calledAt: m.calledAt || null,
       })),
       results: res.map((d) => ({
         key: d.key, label: d.label, event: d.event,
@@ -1657,7 +1725,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer,
     // matches and results
-    generateMatches, listMatches, correctResult, swapCorners, overrideMedals,
+    generateMatches, listMatches, correctResult, swapCorners, callMatch, overrideMedals, recordLiveEvent, liveEvents,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf, results, generateBracket, bracketView, syncBracket,
     publishResults, listMedals, tally, generateCertificates, listCertificates,
     // links and coaches

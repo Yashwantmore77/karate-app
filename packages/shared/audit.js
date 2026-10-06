@@ -38,6 +38,7 @@ export const AUDIT_ACTIONS = {
   KATA_SCORE_CHANGED: 'kata.score_changed',
   MEDALS_OVERRIDDEN: 'medals.overridden',
   LIVE_SCORE_CORRECTED: 'match.live_score_corrected',
+  MATCH_CALLED: 'match.called',
 }
 
 /** Only the fields that actually differ, so a record says what changed. */

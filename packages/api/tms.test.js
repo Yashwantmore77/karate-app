@@ -235,3 +235,74 @@ describe('PRD tournament management over HTTP', () => {
     expect(readOutbox()).toHaveLength(before)
   })
 })
+
+describe('gap features over HTTP', () => {
+  const registerApproved = async (t, link, players) => {
+    const coach = await openCoach(link)
+    for (const p of players) expect((await call('POST', '/coach/players', { dob: '2014-06-15', gender: 'M', ...p }, coach)).status).toBe(201)
+    const { body } = await call('GET', `/tournaments/${t}/players`, undefined, tokens.admin)
+    for (const p of body.players) await call('POST', `/tournaments/${t}/players/${p.id}/registration`, { action: 'approve' }, tokens.admin)
+    await call('POST', `/tournaments/${t}/categorize`, {}, tokens.admin)
+    return body.players
+  }
+
+  it('saves point values and category settings, and rejects bad ones', async () => {
+    const { t, ageGroup } = await setUpTournament()
+    expect((await call('PATCH', `/tournaments/${t}/settings`, { points: { yuko: 1, wazaAri: 2, ippon: 4 }, poolMode: 'overflow' }, tokens.admin)).body.tournament.settings).toMatchObject({ points: { ippon: 4 }, poolMode: 'overflow' })
+    expect((await call('PATCH', `/tournaments/${t}/settings`, { points: { yuko: 0, wazaAri: 2, ippon: 3 } }, tokens.admin)).status).toBe(400)
+    expect((await call('PATCH', `/tournaments/${t}/age-groups/${ageGroup.id}`, { settings: { poolSize: 4, poolSystem: 'knockout' } }, tokens.admin)).body.ageGroup.settings).toEqual({ poolSize: 4, poolSystem: 'knockout' })
+    expect((await call('PATCH', `/tournaments/${t}/age-groups/${ageGroup.id}`, { settings: { poolSystem: 'swiss' } }, tokens.admin)).status).toBe(400)
+  })
+
+  it('runs a kata panel: judges score from their own seats, the admin completes, medals follow', async () => {
+    const { t, link } = await setUpTournament()
+    await call('PATCH', `/tournaments/${t}/settings`, { kataJudges: 3, kataRounds: 1 }, tokens.admin)
+    await registerApproved(t, link, [1, 2, 3, 4].map((i) => ({ name: `Kata ${i}`, events: ['kata'], weight: 30 })))
+    const judges = await Promise.all([1, 2, 3].map((n) => login(`judge${n}@kata.local`)))
+
+    const { body: { divisions } } = await call('GET', `/tournaments/${t}/kata/divisions`, undefined, judges[0])
+    expect(divisions).toHaveLength(1)
+    expect((await call('POST', `/tournaments/${t}/kata/rounds`, { divisionKey: divisions[0].key }, tokens.admin)).body.error).toBe('entries_not_locked')
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    expect((await call('POST', `/tournaments/${t}/kata/rounds`, { divisionKey: divisions[0].key }, judges[0])).status).toBe(403)
+    const { body: { round } } = await call('POST', `/tournaments/${t}/kata/rounds`, { divisionKey: divisions[0].key, seed: 3 }, tokens.admin)
+    expect(round).toMatchObject({ name: 'Final', judges: 3 })
+
+    for (const [i, playerId] of round.performerIds.entries()) {
+      for (const [seat, token] of judges.entries()) {
+        // a judge naming another seat is ignored: they score from their own
+        const res = await call('POST', `/tournaments/${t}/kata/rounds/${round.id}/scores`, { playerId, score: 7 + i * 0.5 + seat * 0.1, seat: 3 }, token)
+        expect(res.status).toBe(200)
+      }
+    }
+    expect((await call('POST', `/tournaments/${t}/kata/rounds/${round.id}/scores`, { playerId: round.performerIds[0], score: 4.2 }, judges[0])).body.error).toBe('invalid_score')
+    const done = (await call('POST', `/tournaments/${t}/kata/rounds/${round.id}/complete`, {}, tokens.admin)).body.round
+    expect(done.rows[0]).toMatchObject({ rank: 1, playerId: round.performerIds[3], final: 8.6 })
+
+    const results = (await call('GET', `/tournaments/${t}/results`, undefined, tokens.admin)).body.results
+    expect(results[0].medals.map((m) => m.medal)).toEqual(['gold', 'silver', 'bronze', 'bronze'])
+
+    // a manual override needs a reason, and is audited
+    const key = divisions[0].key
+    expect((await call('POST', `/tournaments/${t}/results/medals/override`, { divisionKey: key, medals: [] }, tokens.admin)).status).toBe(400)
+    const medals = [{ playerId: round.performerIds[0], medal: 'gold' }]
+    expect((await call('POST', `/tournaments/${t}/results/medals/override`, { divisionKey: key, medals, reason: 'Protest upheld' }, tokens.admin)).body).toEqual({ overridden: true })
+    const after = (await call('GET', `/tournaments/${t}/results`, undefined, tokens.admin)).body.results[0]
+    expect(after).toMatchObject({ medalsOverridden: true, overrideReason: 'Protest upheld' })
+    const audit = (await call('GET', `/tournaments/${t}/audit`, undefined, tokens.admin)).body.audit
+    expect(audit.some((a) => a.action === 'medals.overridden' && a.reason === 'Protest upheld')).toBe(true)
+  })
+
+  it('swaps corners before a bout starts', async () => {
+    const { t, link } = await setUpTournament()
+    await registerApproved(t, link, [1, 2, 3].map((i) => ({ name: `Fighter ${i}`, events: ['kumite'], weight: 30 })))
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/pools/generate`, { seed: 1 }, tokens.admin)
+    await call('POST', `/tournaments/${t}/locks/draw`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
+    const [m] = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
+    expect((await call('POST', `/tournaments/${t}/matches/${m.id}/swap-corners`, {}, tokens.referee)).status).toBe(403)
+    const swapped = (await call('POST', `/tournaments/${t}/matches/${m.id}/swap-corners`, { reason: 'Coach request' }, tokens.admin)).body.match
+    expect([swapped.redId, swapped.blueId]).toEqual([m.blueId, m.redId])
+  })
+})

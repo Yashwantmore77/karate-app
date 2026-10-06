@@ -72,7 +72,7 @@ async function removeSample(stores, tms) {
 
 async function ensureOfficers() {
   const made = []
-  for (const [email, role] of [['registrar@kata.local', 'registration_officer'], ['weighin@kata.local', 'weighin_officer']]) {
+  for (const [email, role] of [['registrar@kata.local', 'registration_officer'], ['weighin@kata.local', 'weighin_officer'], ['announcer@kata.local', 'announcer'], ['viewer@kata.local', 'viewer']]) {
     if (await findUserRecordByEmail(email)) continue
     await createUser({ email, password: OFFICER_PASSWORD, role })
     made.push(email)

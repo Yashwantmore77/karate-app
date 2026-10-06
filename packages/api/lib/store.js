@@ -260,6 +260,11 @@ export const INDEXES = {
   notifications: [[{ tournamentId: 1, audience: 1 }]],
   auditLog: [[{ tournamentId: 1, at: -1 }], [{ entity: 1, entityId: 1 }]],
   files: [[{ tournamentId: 1 }]],
+  kataRounds: [[{ tournamentId: 1, divisionKey: 1 }]],
+  kataScores: [[{ roundId: 1, playerId: 1, seat: 1 }]],
+  medalOverrides: [[{ tournamentId: 1, divisionKey: 1 }]],
+  matchEvents: [[{ tournamentId: 1, matchId: 1, seq: 1 }]],
+  organizations: [[{ slug: 1 }, { unique: true, sparse: true }]],
 }
 
 export async function ensureIndexes(collection, name) {

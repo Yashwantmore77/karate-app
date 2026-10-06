@@ -37,6 +37,9 @@ const TOURNAMENT_SCHEMA = {
   type: { type: 'enum', values: ['kata', 'kumite', 'kata_kumite'], nullable: true },
   slug: { type: 'string', max: 80, pattern: /^[a-z0-9-]+$/, nullable: true },
   description: { type: 'string', max: 2000, nullable: true },
+  // PRD point 2: shown on the public page and accepted at registration.
+  rules: { type: 'string', max: 20000, nullable: true, trim: false },
+  terms: { type: 'string', max: 20000, nullable: true, trim: false },
   logoUrl: { type: 'string', max: 500, nullable: true },
   organizer: { type: 'string', max: 160, nullable: true },
   association: { type: 'string', max: 160, nullable: true },
@@ -76,9 +79,9 @@ export function tournamentRoutes(stores, tms) {
     const account = await findUserRecord(req.user.uid)
     // An account limited to some tournaments (PRD section 4) pages through
     // only those; everyone else pages the store directly.
-    if (account?.tournamentIds?.length && account.role !== 'super_admin') {
+    if ((account?.tournamentIds?.length || account?.organizationId) && account.role !== 'super_admin') {
       const needle = q.toLowerCase()
-      const allowed = (await tournaments.list()).filter((t) => mayAccessTournament(account, t.id)
+      const allowed = (await tournaments.list()).filter((t) => mayAccessTournament(account, t.id, t)
         && (!needle || [t.name, t.location].some((v) => String(v ?? '').toLowerCase().includes(needle))))
       const start = (page - 1) * limit
       return res.json({ tournaments: allowed.slice(start, start + limit), ...pageMeta({ page, limit, total: allowed.length }) })
@@ -94,7 +97,14 @@ export function tournamentRoutes(stores, tms) {
   })
 
   router.post('/', requireRole('admin'), async (req, res) => {
-    res.status(201).json({ tournament: await tournaments.insert(body.forCreate(req.body)) })
+    // A tournament belongs to its creator's organisation; a super admin may
+    // name one (PRD point 33).
+    const { organizationId, ...rest } = req.body || {}
+    const account = await findUserRecord(req.user.uid)
+    const org = account?.organizationId || (req.user.role === 'super_admin' && typeof organizationId === 'string' ? organizationId.slice(0, 80) : null)
+    if (org && stores.organizations && !(await stores.organizations.get(org))) return res.status(400).json({ error: 'invalid_organizationId' })
+    const doc = body.forCreate(rest)
+    res.status(201).json({ tournament: await tournaments.insert(org ? { ...doc, organizationId: org } : doc) })
   })
 
   router.patch('/:id', requireRole('admin'), async (req, res) => {

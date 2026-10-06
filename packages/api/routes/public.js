@@ -20,7 +20,10 @@ export function publicRoutes(tms) {
     keyOf: (req) => `${req.ip || 'unknown'}|${req.params.token}`,
   })
 
-  router.get('/tournaments', async (_req, res) => res.json({ tournaments: await tms.publicList() }))
+  router.get('/tournaments', async (req, res) => {
+    const org = typeof req.query.org === 'string' && /^[a-z0-9-]{1,60}$/.test(req.query.org) ? req.query.org : null
+    res.json({ tournaments: await tms.publicList({ org }) })
+  })
 
   router.get('/tournaments/:idOrSlug', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')

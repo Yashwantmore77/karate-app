@@ -15,6 +15,8 @@ export const EVENT_CHOICES = ['kata', 'kumite']
  */
 export const DEFAULT_FIELDS = [
   { key: 'name', label: 'Player Name', type: 'text', required: true, system: true },
+  // PRD point 4: the number the system gives every player, shown, never typed.
+  { key: 'playerNumber', label: 'Player ID', type: 'text', readOnly: true, generated: true },
   { key: 'fatherName', label: 'Father Name', type: 'text' },
   { key: 'motherName', label: 'Mother Name', type: 'text' },
   { key: 'mobile', label: 'Mobile Number', type: 'phone' },
@@ -33,7 +35,9 @@ export const DEFAULT_FIELDS = [
   { key: 'belt', label: 'Belt', type: 'dropdown', options: ['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Purple', 'Brown', 'Black'] },
   { key: 'events', label: 'Event', type: 'checkbox', required: true, system: true, options: ['kata', 'kumite'] },
   { key: 'weight', label: 'Weight (kg)', type: 'number', system: true },
-].map((field, order) => ({ required: false, visible: true, system: false, builtIn: true, ...field, order }))
+  { key: 'emergencyContact', label: 'Emergency Contact', type: 'phone' },
+  { key: 'bloodGroup', label: 'Blood Group', type: 'dropdown', options: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
+].map((field, order) => ({ required: false, visible: true, system: false, readOnly: false, builtIn: true, ...field, order }))
 
 export const BUILT_IN_KEYS = new Set(DEFAULT_FIELDS.map((f) => f.key))
 
@@ -62,10 +66,14 @@ export function normalizeForm(fields) {
       visible: field.visible !== false,
       builtIn: !!builtIn,
       system: !!builtIn?.system,
+      // PRD point 4: a read-only field is shown to coaches but only the
+      // organisers fill it in (a federation number checked at the desk).
+      readOnly: !!field.readOnly,
+      ...(builtIn?.generated ? { generated: true, readOnly: true, required: false } : {}),
       order,
       ...(Array.isArray(field.options) ? { options: field.options.map(String).slice(0, 50) } : builtIn?.options ? { options: builtIn.options } : {}),
     }
-    if (next.system) Object.assign(next, { visible: true, required: builtIn.required ?? next.required, type: builtIn.type })
+    if (next.system) Object.assign(next, { visible: true, required: builtIn.required ?? next.required, type: builtIn.type, readOnly: false })
     byKey.set(key, next)
   })
   for (const field of DEFAULT_FIELDS.filter((f) => f.system)) {
@@ -114,6 +122,26 @@ export function normalizeDate(value) {
 const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && v.length === 0)
 
 /**
+ * What a coach may send: everything but the read-only fields, which keep the
+ * value the organisers gave them.
+ */
+export function withoutReadOnly(input, fields, before = null) {
+  const out = { ...input, extra: { ...(input.extra || {}) } }
+  for (const field of fields.filter((f) => f.readOnly)) {
+    if (BUILT_IN_KEYS.has(field.key)) {
+      if (before && field.key in before) out[field.key] = before[field.key]
+      else delete out[field.key]
+    } else if (before?.extra && field.key in before.extra) {
+      out.extra[field.key] = before.extra[field.key]
+    } else {
+      delete out.extra[field.key]
+      if (!BUILT_IN_KEYS.has(field.key)) delete out[field.key]
+    }
+  }
+  return out
+}
+
+/**
  * Checks one player against a form. Returns `{ player, errors }` where
  * `player` is normalised (gender as M/F, events as an array, dates ISO) and
  * `errors` is a list of { field, message }.
@@ -129,11 +157,14 @@ export function validatePlayer(input, fields = DEFAULT_FIELDS) {
 
   for (const field of fields) {
     if (field.visible === false && !field.system) continue
+    // A number the system assigns is never taken from a form.
+    if (field.generated) continue
     let value = get(field.key)
     if (typeof value === 'string') value = value.trim()
 
     if (isEmpty(value)) {
-      if (field.required) errors.push({ field: field.key, message: `${field.label} is required` })
+      // Organisers fill a read-only field later; it cannot hold up a coach.
+      if (field.required && !field.readOnly) errors.push({ field: field.key, message: `${field.label} is required` })
       continue
     }
 
@@ -233,7 +264,7 @@ export function mapHeaders(headers, fields = DEFAULT_FIELDS) {
 
 /** The template a coach downloads, matching the tournament's own form. */
 export function bulkTemplate(fields = DEFAULT_FIELDS) {
-  const keys = fields.filter((f) => f.visible !== false && f.type !== 'file')
+  const keys = fields.filter((f) => f.visible !== false && f.type !== 'file' && !f.generated)
   return toCsv([['Team', ...keys.map((f) => f.label)]])
 }
 

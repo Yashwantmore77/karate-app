@@ -1,11 +1,11 @@
 // PRD section 45: the eleven reports, as rows (header first). Shared so the
 // browser's CSV/Excel export and the server's PDF are the same report.
 
-export const REPORT_KEYS = ['registration', 'player', 'team', 'category', 'weigh-in', 'pool', 'match', 'result', 'medal', 'payment', 'attendance']
+export const REPORT_KEYS = ['registration', 'player', 'team', 'category', 'weigh-in', 'pool', 'match', 'result', 'medal', 'payment', 'attendance', 'club']
 
 export const REPORT_TITLE = {
   registration: 'Registration', player: 'Player', team: 'Team', category: 'Category', 'weigh-in': 'Weigh-in', pool: 'Pool',
-  match: 'Match', result: 'Result', medal: 'Medal', payment: 'Payment', attendance: 'Attendance',
+  match: 'Match', result: 'Result', medal: 'Medal', payment: 'Payment', attendance: 'Attendance', club: 'Club',
 }
 
 /** Everything the reports read, from the tournament service. */
@@ -49,6 +49,30 @@ export function buildReport(key, data) {
       ...p.map((x) => [x.name, team(x.teamId), !['DRAFT', 'SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(x.registrationStatus) ? 'Yes' : 'No',
         x.weighIn?.status === 'PASSED' ? 'Yes' : x.events?.includes('kumite') ? 'No' : 'n/a', data.pools.some((pool) => pool.playerIds.includes(x.id)) ? 'Yes' : 'No',
         data.matches.filter((m) => (m.akaPlayerId === x.id || m.aoPlayerId === x.id) && m.status === 'completed').length])]
+    // PRD point 27: per club, how many entered Kata, Kumite and both, and what they won.
+    case 'club': {
+      const clubOf = (x) => x.club || data.teams.find((t) => t.id === x.teamId)?.club || team(x.teamId) || '—'
+      const rows = new Map()
+      for (const x of p) {
+        const key = clubOf(x)
+        const row = rows.get(key) || { club: key, teams: new Set(), district: x.district || '', state: x.state || '', players: 0, kata: 0, kumite: 0, both: 0, gold: 0, silver: 0, bronze: 0 }
+        if (x.teamId) row.teams.add(team(x.teamId))
+        row.players += 1
+        const ev = x.events || []
+        if (ev.includes('kata')) row.kata += 1
+        if (ev.includes('kumite')) row.kumite += 1
+        if (ev.includes('kata') && ev.includes('kumite')) row.both += 1
+        rows.set(key, row)
+      }
+      for (const m of data.medals) {
+        const x = p.find((y) => y.id === (m.playerId || m.id))
+        const row = x && rows.get(clubOf(x))
+        if (row && row[m.medal] !== undefined) row[m.medal] += 1
+      }
+      return [['Club', 'Teams', 'District', 'State', 'Players', 'Kata', 'Kumite', 'Both', 'Gold', 'Silver', 'Bronze'],
+        ...[...rows.values()].sort((a, b) => b.players - a.players || a.club.localeCompare(b.club))
+          .map((r) => [r.club, [...r.teams].filter(Boolean).join(', '), r.district, r.state, r.players, r.kata, r.kumite, r.both, r.gold, r.silver, r.bronze])]
+    }
     default: return null
   }
 }

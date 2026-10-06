@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url'
 import express from 'express'
 import { Server } from 'socket.io'
 import { MatchRoom, serverNow } from './matchRoom.js'
-import { socketAuth, canControlMat } from './auth/middleware.js'
+import { socketAuth, canControlMat, setTournamentLookup } from './auth/middleware.js'
 import { createStores } from './lib/store.js'
 import { withChangeEvents } from './lib/changes.js'
 import { security } from './middleware/security.js'
@@ -20,6 +20,7 @@ import { tmsRoutes } from './routes/tms.js'
 import { publicRoutes } from './routes/public.js'
 import { coachRoutes } from './routes/coach.js'
 import { fileRoutes } from './routes/files.js'
+import { organizationRoutes } from './routes/organizations.js'
 import { emailNotifier } from './lib/emailNotifier.js'
 import { createTms } from '@kumite/shared/tms.js'
 
@@ -64,6 +65,7 @@ export function createApp() {
     announcePublic(collection)
   }
   const stores = withChangeEvents(createStores(), (collection) => emitChange(collection))
+  setTournamentLookup((id) => stores.tournaments.get(id))
 
   // The PRD's tournament management, on the same stores as everything else.
   const tms = createTms(stores, { onNotify: emailNotifier(stores) })
@@ -74,6 +76,7 @@ export function createApp() {
 
   app.use(`${API_BASE}/auth`, authRoutes())
   app.use(`${API_BASE}/users`, userRoutes())
+  app.use(`${API_BASE}/organizations`, organizationRoutes(stores))
   app.use(`${API_BASE}/officials`, officialRoutes())
   app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores, tms))
   app.use(`${API_BASE}/tournaments`, tmsRoutes(tms, stores))
@@ -185,8 +188,13 @@ export function createApp() {
       if (!room) return ack?.({ error: 'unknown_match' })
       if (!canControlMat(socket.user)) return ack?.({ error: 'forbidden' })
       try {
+        const before = room.state
         const event = room.apply(cmd, payload, socket.id)
-        if (event) broadcast(matchId, { ...event, matchId, clientEventId })
+        if (event) {
+          broadcast(matchId, { ...event, matchId, clientEventId })
+          // PRD point 33: every live change is logged, corrections audited.
+          tms.recordLiveEvent(socket.user, matchId, { seq: event.seq, cmd, payload, before, after: event.state, at: event.at }).catch(() => {})
+        }
         ack?.({ ok: true, seq: room.seq })
       } catch (err) {
         ack?.({ error: err.code || 'rejected' })

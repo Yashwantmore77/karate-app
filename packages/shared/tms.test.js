@@ -491,6 +491,44 @@ describe('gap features: scoring rules, draw options, kata panel, medal override'
       .rejects.toMatchObject({ code: 'invalid_poolMode' })
   })
 
+  it('logs live commands and audits a score that goes down', async () => {
+    const { tms, t, stores } = await setup({ kumite: 3 })
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    const [m] = await stores.matches.list({})
+    const st = (aka, ao) => ({ match: { scores: { aka, ao }, penalties: { aka: { c1: 0, c2: 0 }, ao: { c1: 0, c2: 0 } } } })
+    const referee = { uid: 'r1', role: 'referee', email: 'ref@x' }
+    await tms.recordLiveEvent(referee, m.id, { seq: 1, cmd: 'SCORE', payload: { side: 'aka', type: 'wazaAri' }, before: st(0, 0), after: st(2, 0) })
+    await tms.recordLiveEvent(referee, m.id, { seq: 2, cmd: 'SCOREBOARD', before: st(2, 0), after: st(2, 0) })
+    await tms.recordLiveEvent(referee, m.id, { seq: 3, cmd: 'UNDO', before: st(2, 0), after: st(0, 0) })
+    expect((await tms.liveEvents(t.id, m.id)).map((e) => e.cmd)).toEqual(['SCORE', 'UNDO'])
+    const audit = (await tms.auditTrail(t.id)).filter((a) => a.action === 'match.live_score_corrected')
+    expect(audit).toHaveLength(1)
+    expect(audit[0]).toMatchObject({ changes: { score: { from: 'AKA 2 – AO 0', to: 'AKA 0 – AO 0' } }, actorRole: 'referee' })
+  })
+
+  it('keeps read-only form fields out of a coach\'s hands and shows the Player ID', async () => {
+    const { tms, t, stores } = await setup({ kumite: 0 })
+    await stores.tournaments.update(t.id, { entriesLocked: false })
+    const { DEFAULT_FIELDS } = await import('./registration.js')
+    const fields = DEFAULT_FIELDS.map((f) => (f.key === 'federationId' ? { ...f, readOnly: true, required: true } : f))
+    await tms.updateForm(admin, t.id, fields)
+    const form = (await stores.tournaments.get(t.id)).registrationForm
+    expect(form.find((f) => f.key === 'playerNumber')).toMatchObject({ readOnly: true, generated: true })
+    expect(form.find((f) => f.key === 'bloodGroup')).toMatchObject({ type: 'dropdown' })
+    const team = (await tms.teams.list(t.id))[0]
+    const coach = { role: 'coach', uid: 'c', teamId: team.id, tournamentId: t.id }
+    await stores.tournaments.update(t.id, { lifecycleStatus: 'REGISTRATION_OPEN' })
+    const p = await tms.createPlayer(coach, t.id, { name: 'Ro', dob: '2014-01-01', gender: 'M', events: ['kata'], federationId: 'FAKE', bloodGroup: 'O+', emergencyContact: '+91 98765 43210' })
+    expect(p).toMatchObject({ bloodGroup: 'O+', playerNumber: expect.any(String) })
+    expect(p.federationId).toBeUndefined()
+    const set = await tms.updatePlayer(admin, t.id, p.id, { federationId: 'MH-123' })
+    expect(set.federationId).toBe('MH-123')
+    const kept = await tms.updatePlayer(coach, t.id, p.id, { federationId: 'CHANGED', name: 'Ro Two' })
+    expect(kept).toMatchObject({ federationId: 'MH-123', name: 'Ro Two' })
+  })
+
   it('runs a knockout category straight into a bracket, seeds first', async () => {
     const { tms, t, ids } = await setup({ groupSettings: { poolSystem: 'knockout' }, kumite: 6 })
     await tms.updatePlayer(admin, t.id, ids[5], { seed: 1 })

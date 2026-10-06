@@ -10,7 +10,8 @@ import { FILE_SCHEMA } from './files.js'
 import { certificatesPdf, tablePdf } from '../lib/pdf.js'
 import { REPORT_KEYS, REPORT_TITLE, loadReportData, buildReport } from '@kumite/shared/reports.js'
 import { TOURNAMENT_STATUS, REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES } from '@kumite/shared/tms.js'
+import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES, POOL_SYSTEMS, KATA_METHODS } from '@kumite/shared/tms.js'
+import { POOL_MODES } from '@kumite/shared/pools.js'
 
 // PRD section 56: everything a tournament owns, under /tournaments/:tid/...
 // Each route checks a permission from the shared table, validates its body,
@@ -27,6 +28,9 @@ const AGE_GROUP = {
   minAge: { type: 'integer', required: true, min: 0, max: 99 },
   maxAge: { type: 'integer', required: true, min: 0, max: 99 },
   active: { type: 'boolean', default: true },
+  // PRD point 3: this category's own pool size, rules and rounds. The
+  // service checks each key; anything left out inherits.
+  settings: { type: 'object', nullable: true },
 }
 
 const WEIGHT_CATEGORY = {
@@ -36,6 +40,7 @@ const WEIGHT_CATEGORY = {
   minWeight: { type: 'number', min: 0, max: 300, nullable: true },
   maxWeight: { type: 'number', min: 0, max: 300, nullable: true },
   active: { type: 'boolean', default: true },
+  settings: { type: 'object', nullable: true },
 }
 
 const TEAM = {
@@ -91,6 +96,27 @@ const TOURNAMENT_SETTINGS = {
   weighInAutoMove: { type: 'boolean' },
   emailNotifications: { type: 'boolean' },
   fees: { type: 'object' },
+  points: { type: 'object' },
+  poolMode: { type: 'enum', values: POOL_MODES },
+  poolSystem: { type: 'enum', values: POOL_SYSTEMS },
+  ruleset: { type: 'string', max: 60 },
+  kataMode: { type: 'enum', values: ['panel', 'bouts'] },
+  kataJudges: { type: 'integer', min: 3, max: 7 },
+  kataMethod: { type: 'enum', values: KATA_METHODS },
+  kataQualifiers: { type: 'integer', min: 1, max: 64 },
+  kataRounds: { type: 'integer', min: 1, max: 5 },
+  officialsSeeAssignedOnly: { type: 'boolean' },
+}
+
+/** PRD point 16: what each score is worth, 1 to 10 points apiece. */
+function pointValues(points) {
+  if (points === undefined) return undefined
+  const out = validate(points, {
+    yuko: { type: 'integer', min: 1, max: 10, required: true },
+    wazaAri: { type: 'integer', min: 1, max: 10, required: true },
+    ippon: { type: 'integer', min: 1, max: 10, required: true },
+  })
+  return out
 }
 
 // The actor is always the authenticated caller; the request adds where from.
@@ -113,6 +139,7 @@ export function tmsRoutes(tms, stores) {
 
   router.patch('/:tid/settings', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
     const settings = validate(req.body, TOURNAMENT_SETTINGS, { partial: true })
+    if (settings.points !== undefined) settings.points = pointValues(settings.points)
     res.json(reply('tournament')(await tms.updateTournament(withMeta(req), tid(req), { settings })))
   })
 
@@ -267,6 +294,11 @@ export function tmsRoutes(tms, stores) {
   router.get('/:tid/matches', async (req, res) => {
     const filter = {}
     for (const key of ['status', 'mat', 'divisionKey']) if (typeof req.query[key] === 'string') filter[key] = req.query[key]
+    // PRD point 20: `?mine=1` for anyone; a referee or judge is held to their
+    // own bouts when the tournament says so.
+    const t = await loadTournament(tid(req))
+    const official = ['referee', 'judge'].includes(req.user.role)
+    if (req.query.mine === '1' || (official && t.settings?.officialsSeeAssignedOnly)) filter.officialId = req.user.uid
     res.json({ matches: await tms.listMatches(tid(req), filter) })
   })
   router.post('/:tid/matches/generate', requirePermission(P.MATCH_GENERATE), async (req, res) => {
@@ -284,7 +316,54 @@ export function tmsRoutes(tms, stores) {
     res.json({ match: await tms.correctResult(withMeta(req), tid(req), req.params.id, result, reason) })
   })
 
+  router.post('/:tid/matches/:id/call', requirePermission(P.MATCH_CALL), async (req, res) => {
+    const { mat } = validate(req.body || {}, { mat: { type: 'integer', min: 1, max: 20, nullable: true } })
+    res.json({ match: await tms.callMatch(withMeta(req), tid(req), req.params.id, { mat }) })
+  })
+  router.get('/:tid/matches/:id/events', requirePermission(P.AUDIT_VIEW), async (req, res) => res.json({ events: await tms.liveEvents(tid(req), req.params.id) }))
+
+  // PRD point 15: put the players in the other corners before the bout.
+  router.post('/:tid/matches/:id/swap-corners', requirePermission(P.MATCH_GENERATE), async (req, res) => {
+    const { reason } = validate(req.body || {}, { reason: REASON })
+    res.json({ match: await tms.swapCorners(withMeta(req), tid(req), req.params.id, reason) })
+  })
+
+  // --- kata panel (PRD point 19, sections 32-33) ---------------------------
+
+  router.get('/:tid/kata/divisions', requirePermission(P.KATA_SCORE), async (req, res) => res.json({ divisions: await tms.kataDivisions(tid(req)) }))
+  router.post('/:tid/kata/rounds', requirePermission(P.MATCH_GENERATE), async (req, res) => {
+    const { divisionKey, seed } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, seed: { type: 'integer', min: 0, max: 2147483647, nullable: true } })
+    res.status(201).json({ round: await tms.createKataRound(withMeta(req), tid(req), divisionKey, { seed }) })
+  })
+  router.get('/:tid/kata/rounds/:id', requirePermission(P.KATA_SCORE), async (req, res) => res.json({ round: await tms.kataRoundView(tid(req), req.params.id) }))
+  router.post('/:tid/kata/rounds/:id/scores', requirePermission(P.KATA_SCORE), async (req, res) => {
+    const body = validate(req.body, {
+      playerId: { ...ID, required: true },
+      score: { type: 'number', required: true, min: 0, max: 10 },
+      seat: { type: 'integer', min: 1, max: 7, nullable: true },
+    })
+    // A judge always scores from the seat on their account, never a seat named in the body.
+    const score = await tms.submitKataScore(withMeta(req), tid(req), req.params.id, body)
+    res.json({ score, round: await tms.kataRoundView(tid(req), req.params.id) })
+  })
+  router.post('/:tid/kata/rounds/:id/complete', requirePermission(P.RESULT_MANAGE), async (req, res) => {
+    res.json({ round: await tms.completeKataRound(withMeta(req), tid(req), req.params.id) })
+  })
+
   // --- results, brackets, medals, certificates (sections 34-36, 42-44) ---
+
+  // PRD point 21: medals set by hand, always with a reason; `medals: null` clears.
+  router.post('/:tid/results/medals/override', requirePermission(P.RESULT_MANAGE), async (req, res) => {
+    const body = req.body || {}
+    const { divisionKey, reason } = validate({ divisionKey: body.divisionKey, reason: body.reason }, {
+      divisionKey: { type: 'string', required: true, max: 200 },
+      reason: { type: 'string', required: true, max: 300 },
+    })
+    const medals = body.medals === null ? null : validate({ medals: body.medals }, {
+      medals: { type: 'array', required: true, maxItems: 8, items: { type: 'object' } },
+    }).medals.map((m) => validate(m, { playerId: { ...ID, required: true }, medal: { type: 'enum', values: ['gold', 'silver', 'bronze'], required: true } }))
+    res.json(await tms.overrideMedals(withMeta(req), tid(req), divisionKey, medals, reason))
+  })
 
   router.get('/:tid/results', async (req, res) => res.json({ results: await tms.results(tid(req)) }))
   router.post('/:tid/brackets/generate', requirePermission(P.MATCH_GENERATE), async (req, res) => {

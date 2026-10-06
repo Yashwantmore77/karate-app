@@ -9,6 +9,8 @@ export const ROLE = {
   REFEREE: 'referee',
   JUDGE: 'judge', // Kata Judge
   COACH: 'coach',
+  ANNOUNCER: 'announcer',
+  VIEWER: 'viewer',
   PUBLIC: 'public',
 }
 
@@ -20,6 +22,8 @@ export const ROLE_LABEL = {
   referee: 'Referee',
   judge: 'Kata Judge',
   coach: 'Coach / Team Manager',
+  announcer: 'Announcer',
+  viewer: 'Viewer (read-only)',
   public: 'Public Viewer',
 }
 
@@ -34,6 +38,7 @@ export const PERMISSION = {
   POOL_MANAGE: 'pool.manage',
   MATCH_GENERATE: 'match.generate',
   MATCH_SCORE: 'match.score',
+  MATCH_CALL: 'match.call',
   KATA_SCORE: 'kata.score',
   RESULT_MANAGE: 'result.manage',
   RESULT_PUBLISH: 'result.publish',
@@ -59,6 +64,10 @@ export const ROLE_PERMISSIONS = {
   referee: [P.MATCH_SCORE, P.PUBLIC_VIEW],
   judge: [P.KATA_SCORE, P.PUBLIC_VIEW],
   coach: [P.TEAM_REGISTER, P.PUBLIC_VIEW],
+  // Calls the next bouts to their mats and reads out results.
+  announcer: [P.MATCH_CALL, P.PUBLIC_VIEW],
+  // Sees the tournament's lists and reports, changes nothing.
+  viewer: [P.REGISTRATION_VIEW, P.REPORT_EXPORT, P.PUBLIC_VIEW],
   public: [P.PUBLIC_VIEW],
 }
 
