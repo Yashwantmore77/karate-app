@@ -29,8 +29,10 @@ export const makeMatchState = () => ({
 
 const other = (side) => (side === 'ao' ? 'aka' : 'ao')
 
-export const awardPoint = (state, side, type) => {
-  const value = POINTS[type]
+// `points` lets a tournament set its own values (PRD point 16); the defaults
+// are yuko 1, waza-ari 2, ippon 3.
+export const awardPoint = (state, side, type, points = POINTS) => {
+  const value = points[type]
   if (!value) return state
   return {
     ...state,

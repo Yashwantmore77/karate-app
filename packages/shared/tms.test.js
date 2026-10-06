@@ -451,3 +451,133 @@ describe('server-side paging (section 62)', () => {
     expect((await tms.pageAudit(t.id, { q: 'team.changed', pageSize: 5 })).total).toBe(1)
   })
 })
+
+describe('gap features: scoring rules, draw options, kata panel, medal override', () => {
+  const setup = async ({ settings = {}, groupSettings = {}, kumite = 10, kata = 0 } = {}) => {
+    const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
+    const tms = createTms(stores)
+    const t = await stores.tournaments.insert({ name: 'Gap Cup', masterAgeDate: '2027-01-01', settings })
+    const g = await tms.ageGroups.create(admin, t.id, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13, settings: groupSettings })
+    await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-35 KG', maxWeight: 35 })
+    const team = await tms.teams.create(admin, t.id, { name: 'A' })
+    const ids = []
+    for (let i = 0; i < kumite + kata; i += 1) {
+      const p = await tms.createPlayer(admin, t.id, { teamId: team.id, name: `P${String(i).padStart(2, '0')}`, dob: '2014-03-03', gender: 'M', events: [i < kumite ? 'kumite' : 'kata'], weight: 33 })
+      await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
+      ids.push(p.id)
+    }
+    await tms.setEntriesLock(admin, t.id, true)
+    return { stores, tms, t, g, ids }
+  }
+
+  it('splits 17 as 9 + 8 in overflow mode and 6 + 6 + 5 by default', async () => {
+    const { poolSizes } = await import('./pools.js')
+    expect(poolSizes(17, 8)).toEqual([6, 6, 5])
+    expect(poolSizes(17, 8, 'overflow')).toEqual([9, 8])
+    expect(poolSizes(5, 8, 'overflow')).toEqual([5])
+    const { tms, t } = await setup({ settings: { poolMode: 'overflow' }, kumite: 17 })
+    expect((await tms.generatePools(admin, t.id, { seed: 1 })).map((p) => p.playerIds.length)).toEqual([9, 8])
+  })
+
+  it('lets a category override the tournament (pool size) and keep its rules for the console', async () => {
+    const { tms, t, stores } = await setup({ groupSettings: { poolSize: 4, matchDurationSec: 90, pointGap: 6 }, kumite: 8 })
+    const pools = await tms.generatePools(admin, t.id, { seed: 1 })
+    expect(pools.map((p) => p.playerIds.length)).toEqual([4, 4])
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    const [category] = await stores.categories.list({ tournamentId: t.id })
+    expect(category.rules).toMatchObject({ matchDurationSec: 90, pointGap: 6, points: { yuko: 1, wazaAri: 2, ippon: 3 } })
+    await expect(tms.ageGroups.update(admin, t.id, (await tms.ageGroups.list(t.id))[0].id, { settings: { poolMode: 'nonsense' } }))
+      .rejects.toMatchObject({ code: 'invalid_poolMode' })
+  })
+
+  it('runs a knockout category straight into a bracket, seeds first', async () => {
+    const { tms, t, ids } = await setup({ groupSettings: { poolSystem: 'knockout' }, kumite: 6 })
+    await tms.updatePlayer(admin, t.id, ids[5], { seed: 1 })
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.setDrawLock(admin, t.id, true)
+    const { created } = await tms.generateMatches(admin, t.id)
+    expect(created).toBe(2) // 6 entrants in an 8-bracket: two seeds get byes
+    const [res] = await tms.results(t.id)
+    expect(res.pools).toEqual([])
+    expect(res.bracket.rounds.map((r) => r.name)).toEqual(['Quarter Final', 'Semi Final', 'Final'])
+    const byes = res.bracket.rounds[0].matches.filter((m) => m.status === 'bye')
+    expect(byes.some((m) => (m.aka || m.ao).playerId === ids[5])).toBe(true)
+  })
+
+  it('swaps corners before a bout, never after', async () => {
+    const { tms, t, stores } = await setup({ kumite: 3 })
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    const [m] = await tms.listMatches(t.id)
+    const swapped = await tms.swapCorners(admin, t.id, m.id)
+    expect([swapped.redId, swapped.blueId]).toEqual([m.blueId, m.redId])
+    await stores.matches.update(m.id, { status: 'completed', winner: 'red' })
+    await expect(tms.swapCorners(admin, t.id, m.id)).rejects.toMatchObject({ code: 'match_finished' })
+  })
+
+  it('judges kata on a panel: scores, drop high/low, rounds, medals', async () => {
+    const { kataFinal, normalizeKataScore } = await import('./kata.js')
+    expect(kataFinal([8.2, 8.5, 8.3, 8.4, 8.6], 5)).toBe(8.4)
+    expect(kataFinal([8.2, 8.5], 5)).toBeNull()
+    expect(normalizeKataScore(8.25)).toBeNull()
+    expect(normalizeKataScore(4.9)).toBeNull()
+
+    const { tms, t } = await setup({ settings: { kataJudges: 3, kataQualifiers: 3, kataRounds: 2 }, kumite: 0, kata: 5 })
+    const [division] = await tms.kataDivisions(t.id)
+    expect(division).toMatchObject({ judges: 3, count: 5 })
+    await expect(tms.generatePools(admin, t.id)).resolves.toEqual([]) // kata is not drawn into pools
+    await tms.setDrawLock(admin, t.id, true)
+
+    const scoreAll = async (round, base) => {
+      const view = await tms.kataRoundView(t.id, round.id)
+      for (const [i, row] of view.rows.entries()) {
+        for (let seat = 1; seat <= 3; seat += 1) {
+          await tms.submitKataScore({ uid: `j${seat}`, role: 'judge', seat }, t.id, round.id, { playerId: row.playerId, score: base - i * 0.1 })
+        }
+      }
+      return view
+    }
+    const r1 = await tms.createKataRound(admin, t.id, division.key, { seed: 4 })
+    expect(r1).toMatchObject({ name: 'Round 1', judges: 3 })
+    await expect(tms.completeKataRound(admin, t.id, r1.id)).rejects.toMatchObject({ code: 'scores_missing' })
+    await expect(tms.submitKataScore({ uid: 'j9', role: 'judge', seat: 4 }, t.id, r1.id, { playerId: r1.performerIds[0], score: 8 }))
+      .rejects.toMatchObject({ code: 'invalid_seat' })
+    const v1 = await scoreAll(r1, 8.0)
+    await tms.completeKataRound(admin, t.id, r1.id)
+    await expect(tms.submitKataScore({ uid: 'j1', role: 'judge', seat: 1 }, t.id, r1.id, { playerId: r1.performerIds[0], score: 9 }))
+      .rejects.toMatchObject({ code: 'round_closed' })
+
+    const final = await tms.createKataRound(admin, t.id, division.key)
+    expect(final.name).toBe('Final')
+    expect(final.performerIds).toEqual(v1.rows.slice(0, 3).map((r) => r.playerId).reverse())
+    const vf = await scoreAll(final, 9.0)
+    await tms.completeKataRound(admin, t.id, final.id)
+    const [res] = await tms.results(t.id)
+    expect(res.medals.map((m) => [m.medal, m.id])).toEqual([['gold', vf.rows[0].playerId], ['silver', vf.rows[1].playerId], ['bronze', vf.rows[2].playerId]])
+    expect(res.kata.rounds.map((r) => r.name)).toEqual(['Round 1', 'Final'])
+
+    // point 21: override, with reason, audited, and clearable
+    await expect(tms.overrideMedals(admin, t.id, division.key, [], null)).rejects.toMatchObject({ code: 'reason_required' })
+    await tms.overrideMedals(admin, t.id, division.key, [{ playerId: vf.rows[1].playerId, medal: 'gold' }, { playerId: vf.rows[0].playerId, medal: 'silver' }], 'Protest upheld')
+    let [after] = await tms.results(t.id)
+    expect(after).toMatchObject({ medalsOverridden: true, overrideReason: 'Protest upheld' })
+    expect(after.medals[0].id).toBe(vf.rows[1].playerId)
+    expect((await tms.auditTrail(t.id))[0]).toMatchObject({ action: 'medals.overridden', reason: 'Protest upheld' })
+    await tms.overrideMedals(admin, t.id, division.key, null, 'Back to results')
+    ;[after] = await tms.results(t.id)
+    expect(after.medalsOverridden).toBe(false)
+  })
+
+  it('scores with a tournament\'s own point values and counts timeouts', async () => {
+    const { initialMatchState, applyCommand } = await import('./commands.js')
+    let s = applyCommand(initialMatchState(), 'RULES', { durationMs: 120_000, points: { yuko: 1, wazaAri: 2, ippon: 4 } }, 0)
+    s = applyCommand(s, 'SCORE', { side: 'ao', type: 'ippon' }, 1)
+    expect(s.match.scores.ao).toBe(4)
+    s = applyCommand(s, 'CLOCK_START', {}, 2)
+    s = applyCommand(s, 'TIMEOUT', { side: 'aka' }, 3)
+    expect(s.timeouts).toEqual({ ao: 0, aka: 1 })
+    expect(s.clock.running).toBe(false)
+  })
+})

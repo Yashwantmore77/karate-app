@@ -14,11 +14,20 @@ export function poolCount(playerCount, poolSize = DEFAULT_POOL_SIZE) {
 }
 
 /**
+ * How pools are sized when players do not divide evenly (PRD point 12):
+ * `max` never exceeds the configured size (17 at 8 → 6, 6, 5); `overflow`
+ * keeps the number of pools down and lets them run over (17 at 8 → 9, 8).
+ */
+export const POOL_MODES = ['max', 'overflow']
+
+/**
  * Rule 4: as even as possible. 20 players at size 8 is three pools of 7, 7, 6,
  * never 8, 8, 4.
  */
-export function poolSizes(playerCount, poolSize = DEFAULT_POOL_SIZE) {
-  const pools = poolCount(playerCount, poolSize)
+export function poolSizes(playerCount, poolSize = DEFAULT_POOL_SIZE, mode = 'max') {
+  const pools = mode === 'overflow' && playerCount
+    ? Math.max(1, Math.floor(playerCount / Math.max(2, poolSize || DEFAULT_POOL_SIZE)))
+    : poolCount(playerCount, poolSize)
   if (!pools) return []
   const base = Math.floor(playerCount / pools)
   const extra = playerCount % pools
@@ -67,12 +76,13 @@ export function shuffle(items, random = Math.random) {
  */
 export function drawPools(players, {
   poolSize = DEFAULT_POOL_SIZE,
+  poolMode = 'max',
   method = DRAW_METHODS.RANDOM,
   random = Math.random,
   teamOf = (player) => player.teamId,
   seedOf = (player) => player.seed,
 } = {}) {
-  const sizes = poolSizes(players.length, poolSize)
+  const sizes = poolSizes(players.length, poolSize, poolMode)
   const pools = sizes.map((capacity, index) => ({ name: poolName(index), capacity, players: [] }))
   if (!pools.length) return []
 

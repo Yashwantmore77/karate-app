@@ -5,7 +5,7 @@
 
 import { makeClock, startClock, stopClock, adjustClock, remainingNow } from './clock.js'
 import {
-  makeMatchState, awardPoint, deductPoint, setSenshu, setPenalty, evaluateOutcome, DEFAULT_RULES
+  makeMatchState, awardPoint, deductPoint, setSenshu, setPenalty, evaluateOutcome, DEFAULT_RULES, POINTS
 } from './rules.js'
 
 export const DEFAULT_DURATION_MS = 90_000
@@ -17,6 +17,7 @@ export const initialMatchState = () => ({
   koActive: false,
   koClock: makeClock(DEFAULT_RULES.koTimerMs),
   fieldNumber: '1',
+  timeouts: { ao: 0, aka: 0 },
   scoreboardActive: false,
   // A referee's declaration, which the rules cannot derive from the score.
   decision: null,
@@ -51,7 +52,7 @@ export function withOutcome(state, rules, at = Date.now()) {
 export const COMMANDS = [
   'CLOCK_START', 'CLOCK_STOP', 'CLOCK_ADJUST', 'CLOCK_SET', 'CLOCK_RESET', 'KO_TIMER',
   'SCORE', 'DEDUCT', 'SENSHU', 'PENALTY', 'FIELD_NUMBER', 'SCOREBOARD',
-  'KIKEN', 'SHIKKAKU', 'HANTEI', 'CLEAR_DECISION', 'RULES',
+  'KIKEN', 'SHIKKAKU', 'HANTEI', 'CLEAR_DECISION', 'RULES', 'TIMEOUT',
 ]
 
 /**
@@ -59,11 +60,16 @@ export const COMMANDS = [
  * Accepts only the values a tournament configures; anything else keeps the
  * defaults rather than arriving unchecked from a client.
  */
-export function rulesFrom({ durationMs, pointGap, senshu } = {}) {
-  const rules = { ...DEFAULT_RULES }
+export function rulesFrom({ durationMs, pointGap, senshu, points } = {}) {
+  const rules = { ...DEFAULT_RULES, points: { ...POINTS } }
   if (Number.isFinite(durationMs) && durationMs >= 10_000 && durationMs <= 600_000) rules.durationMs = durationMs
   if (Number.isInteger(pointGap) && pointGap >= 0 && pointGap <= 20) rules.pointGap = pointGap
   if (typeof senshu === 'boolean') rules.senshu = senshu
+  if (points && typeof points === 'object') {
+    for (const key of Object.keys(POINTS)) {
+      if (Number.isInteger(points[key]) && points[key] >= 1 && points[key] <= 10) rules.points[key] = points[key]
+    }
+  }
   return rules
 }
 
@@ -113,7 +119,7 @@ export function applyCommand(state, cmd, payload = {}, at) {
           }
 
     case 'SCORE':
-      return { ...state, match: awardPoint(state.match, payload.side, payload.type) }
+      return { ...state, match: awardPoint(state.match, payload.side, payload.type, state.rules?.points || POINTS) }
 
     case 'DEDUCT':
       return { ...state, match: deductPoint(state.match, payload.side) }
@@ -143,6 +149,14 @@ export function applyCommand(state, cmd, payload = {}, at) {
 
     case 'HANTEI':
       return { ...state, decision: { method: 'hantei', winner: payload.side } }
+
+    // A side's timeout stops the clock and is counted, so the panel can see
+    // how many each corner has taken.
+    case 'TIMEOUT': {
+      if (!['ao', 'aka'].includes(payload.side)) return state
+      const timeouts = { ao: 0, aka: 0, ...(state.timeouts || {}) }
+      return { ...state, clock: stopClock(state.clock, at), timeouts: { ...timeouts, [payload.side]: timeouts[payload.side] + 1 } }
+    }
 
     case 'CLEAR_DECISION':
       return state.decision ? { ...state, decision: null } : state

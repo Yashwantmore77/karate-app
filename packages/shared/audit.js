@@ -34,6 +34,10 @@ export const AUDIT_ACTIONS = {
   RESULTS_UNPUBLISHED: 'results.unpublished',
   CERTIFICATES_GENERATED: 'certificates.generated',
   LINK_CHANGED: 'registration_link.changed',
+  KATA_ROUND: 'kata.round',
+  KATA_SCORE_CHANGED: 'kata.score_changed',
+  MEDALS_OVERRIDDEN: 'medals.overridden',
+  LIVE_SCORE_CORRECTED: 'match.live_score_corrected',
 }
 
 /** Only the fields that actually differ, so a record says what changed. */

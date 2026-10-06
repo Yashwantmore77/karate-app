@@ -18,7 +18,7 @@ import {
 } from './lifecycle.js'
 import { AUDIT_ACTIONS as A, createAuditLog, diff } from './audit.js'
 import { DomainError, rule, invalid, missing, denied } from './errors.js'
-import { DEFAULT_POOL_SIZE, DRAW_METHODS, drawPools, roundRobin, seededRandom, poolName } from './pools.js'
+import { DEFAULT_POOL_SIZE, DRAW_METHODS, POOL_MODES, drawPools, roundRobin, seededRandom, poolName, shuffle as shuffleWith } from './pools.js'
 import {
   DEFAULT_RESULT_RULES, poolStandings, poolComplete, qualifierSeeds, buildBracket,
   bracketMedals, poolMedals, medalTally, boutOutcome,
@@ -30,6 +30,7 @@ import {
 import { hashSecret, verifySecret, randomToken } from './secret.js'
 import { checkFile, base64Size, safeFileName, FILE_PURPOSES } from './files.js'
 import { paginate, pageOptions } from './paging.js'
+import { normalizeKataScore, kataFinal, rankKata } from './kata.js'
 
 const R = REGISTRATION_STATUS
 const T = TOURNAMENT_STATUS
@@ -42,6 +43,19 @@ export const DEFAULT_SETTINGS = {
   pointGap: 8,
   weighInAutoMove: true,
   emailNotifications: true,
+  // PRD point 12: how uneven entries are split (see pools.js POOL_MODES).
+  poolMode: 'max',
+  // Round robin in pools, or straight knockout.
+  poolSystem: 'round_robin',
+  // PRD point 16: score values, yuko / waza-ari / ippon.
+  points: { yuko: 1, wazaAri: 2, ippon: 3 },
+  ruleset: 'WKF',
+  // PRD point 19: kata is judged by a panel, not fought as bouts.
+  kataMode: 'panel',
+  kataJudges: 5,
+  kataMethod: 'drop_high_low_average',
+  kataQualifiers: 8,
+  kataRounds: 2,
   fees: { kata: 0, kumite: 0, both: 0, team: 0 },
 }
 
@@ -70,7 +84,57 @@ const LOCKED_PLAYER_FIELDS = ['dob', 'gender', 'weight', 'events', 'teamId']
 export function settingsOf(tournament) {
   const s = { ...DEFAULT_SETTINGS, ...(tournament?.settings || {}) }
   s.fees = { ...DEFAULT_SETTINGS.fees, ...(tournament?.settings?.fees || {}) }
+  s.points = { ...DEFAULT_SETTINGS.points, ...(tournament?.settings?.points || {}) }
   return s
+}
+
+/**
+ * What a single category may set for itself (PRD point 3); anything it leaves
+ * out falls back to its age group, then to the tournament.
+ */
+export const CATEGORY_SETTING_KEYS = [
+  'poolSize', 'poolMode', 'poolSystem', 'matchDurationSec', 'pointGap', 'qualifiersPerPool',
+  'ruleset', 'kataJudges', 'kataMethod', 'kataQualifiers', 'kataRounds',
+]
+
+export const POOL_SYSTEMS = ['round_robin', 'knockout']
+export const KATA_METHODS = ['drop_high_low_average', 'average', 'drop_high_low_sum', 'sum']
+
+const SETTING_LIMITS = {
+  poolSize: [2, 64], matchDurationSec: [30, 600], pointGap: [0, 20], qualifiersPerPool: [1, 8],
+  kataJudges: [3, 7], kataQualifiers: [1, 64], kataRounds: [1, 5],
+}
+
+/** Keeps only valid category overrides; an empty value means "inherit". */
+export function normalizeCategorySettings(input) {
+  if (!input || typeof input !== 'object') return {}
+  const out = {}
+  for (const key of CATEGORY_SETTING_KEYS) {
+    const v = input[key]
+    if (v === undefined || v === null || v === '') continue
+    if (SETTING_LIMITS[key]) {
+      const n = Number(v)
+      if (!Number.isInteger(n) || n < SETTING_LIMITS[key][0] || n > SETTING_LIMITS[key][1]) throw invalid(`invalid_${key}`)
+      out[key] = n
+    } else if (key === 'poolMode') {
+      if (!POOL_MODES.includes(v)) throw invalid('invalid_poolMode')
+      out[key] = v
+    } else if (key === 'poolSystem') {
+      if (!POOL_SYSTEMS.includes(v)) throw invalid('invalid_poolSystem')
+      out[key] = v
+    } else if (key === 'kataMethod') {
+      if (!KATA_METHODS.includes(v)) throw invalid('invalid_kataMethod')
+      out[key] = v
+    } else {
+      out[key] = String(v).slice(0, 60)
+    }
+  }
+  return out
+}
+
+/** Tournament settings with the age group's, then the weight category's, overrides. */
+export function divisionSettingsOf(tournament, ageGroup, weightCategory) {
+  return { ...settingsOf(tournament), ...(ageGroup?.settings || {}), ...(weightCategory?.settings || {}) }
 }
 
 export const lifecycleOf = (tournament) => tournament?.lifecycleStatus || T.DRAFT
@@ -129,6 +193,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     ])
     return { tournament, masterAgeDate: tournament.masterAgeDate, ageGroups, weightCategories, settings: settingsOf(tournament) }
   }
+
+  const divisionSettingsFor = (cfg, division) => divisionSettingsOf(
+    cfg.tournament,
+    cfg.ageGroups.find((g) => g.id === division.ageGroupId),
+    cfg.weightCategories.find((w) => w.id === division.weightCategoryId),
+  )
+
+  // Kata judged by a panel has rounds, not pools and bouts (PRD point 19).
+  const isPanelKata = (division, settings) => division.event === EVENTS.KATA && settings.kataMode === 'panel'
 
   const assertConfigOpen = (tournament) => {
     if (tournament.entriesLocked) throw rule('entries_locked')
@@ -233,7 +306,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (locked) {
       if (!tournament.entriesLocked) throw rule('entries_not_locked')
       const pools = await stores.pools.list({ tournamentId })
-      if (!pools.length) throw rule('no_pools')
+      // Panel kata has rounds instead of pools, so it alone is enough.
+      if (!pools.length && !(await kataDivisions(tournamentId)).length) throw rule('no_pools')
     } else if (!reason) throw invalid('reason_required')
     const after = await stores.tournaments.update(tournamentId, { drawLocked: !!locked })
     await record(actor, { tournamentId, action: locked ? A.DRAW_LOCKED : A.DRAW_UNLOCKED, entity: 'tournament', entityId: tournamentId, reason })
@@ -259,19 +333,24 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       const tournament = await tournamentOf(tournamentId)
       assertConfigOpen(tournament)
       await validateDoc(tournamentId, doc)
-      const row = await stores[collection].insert({ active: true, ...doc, tournamentId })
+      const row = await stores[collection].insert({ active: true, ...doc, settings: normalizeCategorySettings(doc.settings), tournamentId })
       await record(actor, { tournamentId, action: A.CONFIG_CHANGED, entity, entityId: row.id, after: row })
       await recategorizeAll(actor, tournamentId, { silent: true })
       return row
     },
     async update(actor, tournamentId, id, patch) {
       const tournament = await tournamentOf(tournamentId)
-      assertConfigOpen(tournament)
+      // Category settings (pool size, duration, ...) decide nobody's category,
+      // so they may still be tuned after entries are locked; nothing else may.
+      const settingsOnly = Object.keys(patch).every((k) => k === 'settings')
+      if (!settingsOnly) assertConfigOpen(tournament)
       const before = await inTournament(collection, tournamentId, id)
-      await validateDoc(tournamentId, { ...before, ...patch })
-      const after = await stores[collection].update(id, patch)
+      const next = { ...patch }
+      if ('settings' in patch) next.settings = normalizeCategorySettings(patch.settings)
+      await validateDoc(tournamentId, { ...before, ...next })
+      const after = await stores[collection].update(id, next)
       await record(actor, { tournamentId, action: A.CONFIG_CHANGED, entity, entityId: id, before, after })
-      await recategorizeAll(actor, tournamentId, { silent: true })
+      if (!settingsOnly) await recategorizeAll(actor, tournamentId, { silent: true })
       return after
     },
     async remove(actor, tournamentId, id) {
@@ -735,9 +814,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (!tournament.entriesLocked) throw rule('entries_not_locked')
     if (tournament.drawLocked) throw rule('draw_locked')
     if (!Object.values(DRAW_METHODS).includes(method)) throw invalid('invalid_method')
-    const settings = settingsOf(tournament)
-    const size = poolSize || settings.poolSize
-    const all = await divisions(tournamentId)
+    const cfg = await config(tournamentId)
+    const all = (await divisions(tournamentId)).filter((d) => !isPanelKata(d, cfg.settings))
     const targets = only ? all.filter((d) => d.key === only) : all
     if (only && !targets.length) throw missing('division_not_found')
     const players = new Map((await stores.players.list({ tournamentId })).map((p) => [p.id, p]))
@@ -745,17 +823,23 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const random = seededRandom(drawSeed)
     const created = []
 
+    let size = null
     for (const division of targets) {
       await clearBridge(tournamentId, division.key)
       await stores.pools.removeWhere({ tournamentId, divisionKey: division.key })
+      const ds = divisionSettingsFor(cfg, division)
+      size = poolSize || ds.poolSize
+      // A knockout category is drawn as one list; the bracket is cut from it.
+      const knockout = ds.poolSystem === 'knockout'
       const drawn = drawPools(division.playerIds.map((id) => players.get(id)), {
-        poolSize: size, method, random, teamOf: (p) => p.teamId, seedOf: (p) => p.seed,
+        poolSize: knockout ? division.playerIds.length || 1 : size, poolMode: knockout ? 'max' : ds.poolMode,
+        method, random, teamOf: (p) => p.teamId, seedOf: (p) => p.seed,
       })
       for (const pool of drawn) {
         created.push(await stores.pools.insert({
           tournamentId, divisionKey: division.key, event: division.event, ageGroupId: division.ageGroupId,
           weightCategoryId: division.weightCategoryId, label: division.label, name: pool.name,
-          playerIds: pool.players.map((p) => p.id), method, drawSeed, poolSize: size, generatedAt: iso(),
+          playerIds: pool.players.map((p) => p.id), method, drawSeed, poolSize: size, poolSystem: knockout ? 'knockout' : 'round_robin', generatedAt: iso(),
         }))
       }
       for (const id of division.playerIds) {
@@ -812,6 +896,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       division: division.event === EVENTS.KATA ? 'Kata' : (weightCategory?.label || weightCategory?.name || 'Open'),
       divisionKey: division.key,
       event: division.event,
+      // The rules this category is fought under (PRD point 3), read by the
+      // scoring console so a category can differ from the tournament default.
+      rules: (({ matchDurationSec, pointGap, points, ruleset, poolSystem }) => ({ matchDurationSec, pointGap, points, ruleset, poolSystem }))(divisionSettingsOf(tournament, ageGroup, weightCategory)),
     })
   }
 
@@ -851,6 +938,22 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
             age: p.age || 1, playerId, teamId: p.teamId, poolId: pool.id,
           })
           competitorOf.set(playerId, c.id)
+        }
+        // A knockout category goes straight to a bracket: seeds first (1 is
+        // strongest), then the drawn order, byes to the top seeds.
+        if (pool.poolSystem === 'knockout') {
+          const order = [...pool.playerIds].sort((a, b) => (Number(players.get(a).seed) || 999) - (Number(players.get(b).seed) || 999))
+          await stores.brackets.removeWhere({ tournamentId, divisionKey: division.key })
+          await stores.brackets.insert({
+            tournamentId, divisionKey: division.key, categoryId: category.id, knockoutOnly: true,
+            entries: order.map((playerId) => ({ id: competitorOf.get(playerId), playerId, pool: pool.name, place: null })),
+          })
+          await stores.pools.update(pool.id, { categoryId: category.id })
+          const before = (await stores.matches.list({ categoryId: category.id })).length
+          await syncBracket(tournamentId, division.key)
+          created += (await stores.matches.list({ categoryId: category.id })).length - before
+          number = await nextMatchNumber(tournamentId)
+          continue
         }
         for (const bout of roundRobin(pool.playerIds)) {
           await stores.matches.insert({
@@ -922,6 +1025,133 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return after
   }
 
+  /** PRD point 15: put the players in the other corners, before the bout is fought. */
+  async function swapCorners(actor, tournamentId, matchId, reason = null) {
+    const { match } = await findBridgedMatch(tournamentId, matchId)
+    if (boutOutcome(match) || match.status === 'cancelled') throw rule('match_finished')
+    if (['live', 'open'].includes(match.status)) throw rule('match_in_progress')
+    const patch = { redId: match.blueId, blueId: match.redId, akaPlayerId: match.aoPlayerId ?? null, aoPlayerId: match.akaPlayerId ?? null }
+    const after = await stores.matches.update(matchId, patch)
+    await record(actor, { tournamentId, action: A.MATCH_SCHEDULED, entity: 'match', entityId: matchId, before: { redId: match.redId, blueId: match.blueId }, after: { redId: patch.redId, blueId: patch.blueId }, reason: reason || 'Corners swapped' })
+    return after
+  }
+
+  // --- kata panel (PRD point 19, sections 32-33) -----------------------------
+
+  const kataRoundsOf = async (tournamentId, key = null) =>
+    (await stores.kataRounds.list(key ? { tournamentId, divisionKey: key } : { tournamentId }))
+      .sort((a, b) => String(a.divisionKey).localeCompare(String(b.divisionKey)) || a.round - b.round)
+
+  /** Kata categories judged by a panel, with their rounds so far. */
+  async function kataDivisions(tournamentId) {
+    const cfg = await config(tournamentId)
+    const rounds = await kataRoundsOf(tournamentId)
+    return (await divisions(tournamentId)).filter((d) => isPanelKata(d, cfg.settings)).map((d) => {
+      const ds = divisionSettingsFor(cfg, d)
+      return {
+        ...d, judges: ds.kataJudges, method: ds.kataMethod, qualifiers: ds.kataQualifiers, plannedRounds: ds.kataRounds,
+        rounds: rounds.filter((r) => r.divisionKey === d.key).map(({ id, round, name, status, performerIds }) => ({ id, round, name, status, performers: performerIds.length })),
+      }
+    })
+  }
+
+  /** The scores sheet of a round: every performer, every judge, final and rank. */
+  async function kataRoundView(tournamentId, roundId) {
+    const round = await inTournament('kataRounds', tournamentId, roundId)
+    const scores = await stores.kataScores.list({ roundId })
+    const players = new Map((await stores.players.list({ tournamentId })).map((p) => [p.id, p]))
+    const teams = new Map((await stores.teams.list({ tournamentId })).map((t) => [t.id, t]))
+    const rows = round.performerIds.map((playerId, order) => {
+      const bySeat = {}
+      for (const s of scores.filter((x) => x.playerId === playerId)) bySeat[s.seat] = s.score
+      const list = Object.values(bySeat)
+      const p = players.get(playerId)
+      return {
+        playerId, order: order + 1, name: p?.name || '?', club: p?.club || teams.get(p?.teamId)?.name || null,
+        team: teams.get(p?.teamId)?.name || null, state: p?.state || null, bySeat, scores: list,
+        final: kataFinal(list, round.judges, round.method),
+      }
+    })
+    return { ...round, rows: rankKata(rows) }
+  }
+
+  /**
+   * Opens the next round of a kata category. Round one is everyone, in a
+   * drawn order; later rounds take the top qualifiers of the round before.
+   */
+  async function createKataRound(actor, tournamentId, key, { seed = null } = {}) {
+    const cfg = await config(tournamentId)
+    if (!cfg.tournament.entriesLocked) throw rule('entries_not_locked')
+    const division = (await divisions(tournamentId)).find((d) => d.key === key && isPanelKata(d, cfg.settings))
+    if (!division) throw missing('division_not_found')
+    const ds = divisionSettingsFor(cfg, division)
+    const existing = await kataRoundsOf(tournamentId, key)
+    const last = existing[existing.length - 1]
+    if (last && last.status !== 'completed') throw rule('round_open')
+    if (last?.name === 'Final') throw rule('final_done')
+    let performerIds
+    if (!last) {
+      performerIds = shuffleWith(division.playerIds, seededRandom(seed ?? Math.floor(now().getTime() % 2147483647)))
+    } else {
+      const view = await kataRoundView(tournamentId, last.id)
+      const ranked = view.rows.filter((r) => r.rank != null)
+      // Qualifiers perform in reverse order of their previous score.
+      performerIds = ranked.slice(0, ds.kataQualifiers).reverse().map((r) => r.playerId)
+    }
+    const number = existing.length + 1
+    const isFinal = number >= ds.kataRounds || performerIds.length <= Math.max(2, Math.min(ds.kataQualifiers, 4))
+    const row = await stores.kataRounds.insert({
+      tournamentId, divisionKey: key, label: division.label, round: number, name: isFinal ? 'Final' : `Round ${number}`,
+      performerIds, judges: ds.kataJudges, method: ds.kataMethod, status: 'open', openedAt: iso(),
+    })
+    await record(actor, { tournamentId, action: A.KATA_ROUND, entity: 'kata_round', entityId: row.id, after: { divisionKey: key, round: row.name, performers: performerIds.length } })
+    return row
+  }
+
+  /**
+   * A judge's score for one performer. A judge scores from their own seat;
+   * an admin may enter any seat (a paper sheet typed in). Changing a score
+   * already given is recorded.
+   */
+  async function submitKataScore(actor, tournamentId, roundId, { playerId, score, seat = null }) {
+    const round = await inTournament('kataRounds', tournamentId, roundId)
+    if (round.status !== 'open') throw rule('round_closed')
+    if (!round.performerIds.includes(playerId)) throw invalid('invalid_playerId')
+    const value = normalizeKataScore(score)
+    if (value == null) throw invalid('invalid_score')
+    const judgeSeat = actor?.role === 'judge' ? Number(actor.seat) : Number(seat)
+    if (!Number.isInteger(judgeSeat) || judgeSeat < 1 || judgeSeat > round.judges) throw invalid('invalid_seat')
+    const existing = (await stores.kataScores.list({ roundId, playerId, seat: judgeSeat }))[0]
+    if (existing) {
+      if (existing.score === value) return existing
+      const after = await stores.kataScores.update(existing.id, { score: value, judgeUid: actor?.uid || null, at: iso() })
+      await record(actor, { tournamentId, action: A.KATA_SCORE_CHANGED, entity: 'kata_round', entityId: roundId, before: { player: playerId, seat: judgeSeat, score: existing.score }, after: { player: playerId, seat: judgeSeat, score: value } })
+      return after
+    }
+    return stores.kataScores.insert({ tournamentId, roundId, playerId, seat: judgeSeat, score: value, judgeUid: actor?.uid || null, at: iso() })
+  }
+
+  async function completeKataRound(actor, tournamentId, roundId) {
+    const view = await kataRoundView(tournamentId, roundId)
+    if (view.status !== 'open') throw rule('round_closed')
+    if (view.rows.some((r) => r.final == null)) throw rule('scores_missing')
+    await stores.kataRounds.update(roundId, { status: 'completed', completedAt: iso() })
+    await record(actor, { tournamentId, action: A.KATA_ROUND, entity: 'kata_round', entityId: roundId, after: { completed: view.name } })
+    return kataRoundView(tournamentId, roundId)
+  }
+
+  /** Medals of a kata category, from its completed final. */
+  async function kataMedals(tournamentId, key, settings) {
+    const rounds = await kataRoundsOf(tournamentId, key)
+    const final = rounds.find((r) => r.name === 'Final' && r.status === 'completed')
+    if (!final) return { rounds, medals: [] }
+    const view = await kataRoundView(tournamentId, final.id)
+    const bronzes = Math.max(0, settings.bronzeCount ?? 2)
+    const medalFor = (rank, index) => (rank === 1 ? 'gold' : rank === 2 ? 'silver' : index < 2 + bronzes ? 'bronze' : null)
+    const medals = view.rows.filter((r) => r.rank != null).map((r, i) => ({ id: r.playerId, rank: Math.min(r.rank, 3), medal: medalFor(r.rank, i) })).filter((m) => m.medal)
+    return { rounds, medals }
+  }
+
   // --- results and knockout --------------------------------------------------
 
   async function divisionPoolsWithStandings(tournamentId, key, settings) {
@@ -955,7 +1185,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (data.pools.length < 2) throw rule('single_pool_no_bracket')
     if (!data.pools.every((p) => p.complete)) throw rule('pools_incomplete')
     if (data.bouts.some((b) => b.stage === 'knockout')) throw rule('bracket_exists')
-    const seeds = qualifierSeeds(data.pools, cfg.settings.qualifiersPerPool)
+    const division = (await divisions(tournamentId)).find((d) => d.key === key)
+    const seeds = qualifierSeeds(data.pools, division ? divisionSettingsFor(cfg, division).qualifiersPerPool : cfg.settings.qualifiersPerPool)
     const competitorOfPlayer = new Map(data.competitors.map((c) => [c.playerId, c.id]))
     await stores.brackets.removeWhere({ tournamentId, divisionKey: key })
     await stores.brackets.insert({
@@ -1025,6 +1256,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const slots = await syncBracket(tournamentId, key)
     const competitors = new Map((await stores.competitors.list({ categoryId: bracket.categoryId })).map((c) => [c.id, c]))
     return {
+      knockoutOnly: !!bracket.knockoutOnly,
       divisionKey: key,
       rounds: [...new Set(slots.map((s) => s.round))].sort((a, b) => a - b).map((round) => ({
         round,
@@ -1046,8 +1278,32 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const playersById = new Map((await stores.players.list({ tournamentId })).map((p) => [p.id, p]))
     const teamsById = new Map((await stores.teams.list({ tournamentId })).map((t) => [t.id, t]))
     const out = []
+    const overrides = new Map((await stores.medalOverrides.list({ tournamentId })).map((o) => [o.divisionKey, o]))
     for (const division of await divisions(tournamentId)) {
-      const data = await divisionPoolsWithStandings(tournamentId, division.key, cfg.settings)
+      const ds = divisionSettingsFor(cfg, division)
+      const named = (row) => {
+        const p = playersById.get(row.id)
+        const team = teamsById.get(p?.teamId)
+        return { ...row, name: p?.name || '?', team: team?.name || null, club: p?.club || team?.club || team?.name || null, district: p?.district || team?.district || null, state: p?.state || team?.state || null, country: p?.country || team?.country || null }
+      }
+      const override = overrides.get(division.key)
+      const applyOverride = (computed) => (override
+        ? override.medals.map((m) => named({ id: m.playerId, rank: m.rank, medal: m.medal }))
+        : computed.map(named))
+
+      if (isPanelKata(division, cfg.settings)) {
+        const { rounds, medals } = await kataMedals(tournamentId, division.key, ds)
+        const views = []
+        for (const r of rounds) views.push(await kataRoundView(tournamentId, r.id))
+        out.push({
+          ...division, pools: [], bracket: null, hasBracket: false, canGenerateBracket: false,
+          kata: { rounds: views.map(({ id, name, status, judges, method, rows }) => ({ id, name, status, judges, method, rows })) },
+          medals: applyOverride(medals), medalsOverridden: !!override, overrideReason: override?.reason || null,
+        })
+        continue
+      }
+
+      const data = await divisionPoolsWithStandings(tournamentId, division.key, ds)
       const bracket = await bracketView(tournamentId, division.key)
       let medals = []
       if (bracket) {
@@ -1057,21 +1313,50 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       } else if (data.pools.length === 1 && data.pools[0].complete) {
         medals = poolMedals(data.pools[0].standings)
       }
-      const named = (row) => {
-        const p = playersById.get(row.id)
-        const team = teamsById.get(p?.teamId)
-        return { ...row, name: p?.name || '?', team: team?.name || null, club: p?.club || team?.club || team?.name || null, district: p?.district || team?.district || null, state: p?.state || team?.state || null, country: p?.country || team?.country || null }
-      }
       out.push({
         ...division,
-        pools: data.pools.map((p) => ({ ...p, standings: p.standings.map(named) })),
+        // A knockout-only category has its draw in the bracket, not in pools.
+        pools: bracket?.knockoutOnly ? [] : data.pools.map((p) => ({ ...p, standings: p.standings.map(named) })),
         bracket: bracket ? { rounds: bracket.rounds } : null,
         hasBracket: !!bracket,
         canGenerateBracket: !bracket && data.pools.length > 1 && data.pools.every((p) => p.complete),
-        medals: medals.map(named),
+        medals: applyOverride(medals),
+        medalsOverridden: !!override,
+        overrideReason: override?.reason || null,
       })
     }
     return out
+  }
+
+  /**
+   * PRD point 21: the admin may set a category's medals by hand (a protest
+   * upheld, a withdrawal after the final). Always with a reason, always in
+   * the audit log; clearing it returns to the medals the results produce.
+   */
+  async function overrideMedals(actor, tournamentId, key, medals, reason) {
+    if (!reason) throw invalid('reason_required')
+    const division = (await divisions(tournamentId)).find((d) => d.key === key)
+    if (!division) throw missing('division_not_found')
+    const before = (await results(tournamentId)).find((d) => d.key === key)?.medals || []
+    const existing = (await stores.medalOverrides.list({ tournamentId, divisionKey: key }))[0]
+    if (medals === null) {
+      if (existing) await stores.medalOverrides.remove(existing.id)
+      await record(actor, { tournamentId, action: A.MEDALS_OVERRIDDEN, entity: 'division', entityId: key, before: { medals: before.map((m) => `${m.medal}:${m.name}`) }, after: { medals: 'as calculated' }, reason })
+      return { cleared: true }
+    }
+    if (!Array.isArray(medals) || medals.length > 8) throw invalid('invalid_medals')
+    const clean = medals.map((m) => {
+      if (!division.playerIds.includes(m.playerId)) throw invalid('invalid_playerId')
+      if (!['gold', 'silver', 'bronze'].includes(m.medal)) throw invalid('invalid_medal')
+      return { playerId: m.playerId, medal: m.medal, rank: m.medal === 'gold' ? 1 : m.medal === 'silver' ? 2 : 3 }
+    })
+    if (new Set(clean.map((m) => m.playerId)).size !== clean.length) throw invalid('duplicate_player')
+    const doc = { tournamentId, divisionKey: key, medals: clean, reason, by: actor?.uid || null, at: iso() }
+    if (existing) await stores.medalOverrides.update(existing.id, doc)
+    else await stores.medalOverrides.insert(doc)
+    const names = new Map((await stores.players.list({ tournamentId })).map((p) => [p.id, p.name]))
+    await record(actor, { tournamentId, action: A.MEDALS_OVERRIDDEN, entity: 'division', entityId: key, before: { medals: before.map((m) => `${m.medal}:${m.name}`) }, after: { medals: clean.map((m) => `${m.medal}:${names.get(m.playerId)}`) }, reason })
+    return { overridden: true }
   }
 
   /** Section 42: freezes the medals and makes results public. */
@@ -1255,6 +1540,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         key: d.key, label: d.label, event: d.event,
         pools: d.pools.map((p) => ({ pool: p.pool, complete: p.complete, standings: p.standings.map(stripPrivate) })),
         bracket: d.bracket, medals: d.medals.map(stripPrivate),
+        kata: d.kata ? { rounds: d.kata.rounds.map((r) => ({ name: r.name, status: r.status, judges: r.judges, rows: r.rows.map(({ playerId, name, club, team, state, bySeat, final, rank, order }) => ({ playerId, name, club, team, state, bySeat, final, rank, order })) })) } : null,
       })),
       medals: medals.map(stripPrivate),
       tally: t.resultsPublished ? { club: medalTally(medals, 'club'), state: medalTally(medals, 'state'), district: medalTally(medals, 'district'), country: medalTally(medals, 'country') } : null,
@@ -1371,7 +1657,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer,
     // matches and results
-    generateMatches, listMatches, correctResult, results, generateBracket, bracketView, syncBracket,
+    generateMatches, listMatches, correctResult, swapCorners, overrideMedals,
+    kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf, results, generateBracket, bracketView, syncBracket,
     publishResults, listMedals, tally, generateCertificates, listCertificates,
     // links and coaches
     getLink, saveLink, linkInfo, openLink, coachOverview,
@@ -1386,6 +1673,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 export const TMS_COLLECTIONS = [
   'ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals',
   'certificates', 'registrationLinks', 'notifications', 'auditLog', 'files',
+  'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'organizations',
 ]
 
 export { DomainError, poolName }
