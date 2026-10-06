@@ -1,8 +1,11 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireAuth, requireRole, tournamentAccess, mayAccessTournament } from '../auth/middleware.js'
+import { findUserRecord } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { DEFAULT_SLOT_MINUTES, SLOT_MIN_MINUTES, SLOT_MAX_MINUTES } from '../lib/schedule.js'
+
+const DAY = { type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/, max: 10, nullable: true }
 
 const TOURNAMENT_SCHEMA = {
   name: { type: 'string', required: true, min: 3, max: 120 },
@@ -27,9 +30,35 @@ const TOURNAMENT_SCHEMA = {
     max: SLOT_MAX_MINUTES,
     default: DEFAULT_SLOT_MINUTES,
   },
+
+  // PRD section 5. All optional, so the scoring app's own tournament form keeps
+  // working unchanged; the PRD lifecycle lives in `lifecycleStatus`, moved only
+  // through /tournaments/:id/lifecycle so every step is checked and audited.
+  type: { type: 'enum', values: ['kata', 'kumite', 'kata_kumite'], nullable: true },
+  slug: { type: 'string', max: 80, pattern: /^[a-z0-9-]+$/, nullable: true },
+  description: { type: 'string', max: 2000, nullable: true },
+  logoUrl: { type: 'string', max: 500, nullable: true },
+  organizer: { type: 'string', max: 160, nullable: true },
+  association: { type: 'string', max: 160, nullable: true },
+  venue: { type: 'string', max: 160, nullable: true },
+  address: { type: 'string', max: 300, nullable: true },
+  city: { type: 'string', max: 80, nullable: true },
+  district: { type: 'string', max: 80, nullable: true },
+  state: { type: 'string', max: 80, nullable: true },
+  country: { type: 'string', max: 80, nullable: true },
+  contactPerson: { type: 'string', max: 120, nullable: true },
+  contactMobile: { type: 'string', max: 30, nullable: true },
+  contactEmail: { type: 'string', max: 200, nullable: true },
+  registrationStart: { ...DAY },
+  registrationClose: { ...DAY },
+  weighInDate: { ...DAY },
+  startDate: { ...DAY },
+  endDate: { ...DAY },
+  // Rule 1: every age is taken against this date, never today.
+  masterAgeDate: { ...DAY },
 }
 
-export function tournamentRoutes(stores) {
+export function tournamentRoutes(stores, tms) {
   const router = Router()
   const body = bodyReader(TOURNAMENT_SCHEMA)
   const { tournaments, categories, competitors, matches } = stores
@@ -38,8 +67,22 @@ export function tournamentRoutes(stores) {
   // what is on before they can be sent to a mat.
   router.use(requireAuth)
 
+  router.param('id', tournamentAccess(findUserRecord))
+
   router.get('/', async (req, res) => {
+    // A coach session belongs to one tournament and reads it through /coach.
+    if (req.user.role === 'coach') return res.status(403).json({ error: 'forbidden' })
     const { page, limit, q } = readPageQuery(req.query)
+    const account = await findUserRecord(req.user.uid)
+    // An account limited to some tournaments (PRD section 4) pages through
+    // only those; everyone else pages the store directly.
+    if (account?.tournamentIds?.length && account.role !== 'super_admin') {
+      const needle = q.toLowerCase()
+      const allowed = (await tournaments.list()).filter((t) => mayAccessTournament(account, t.id)
+        && (!needle || [t.name, t.location].some((v) => String(v ?? '').toLowerCase().includes(needle))))
+      const start = (page - 1) * limit
+      return res.json({ tournaments: allowed.slice(start, start + limit), ...pageMeta({ page, limit, total: allowed.length }) })
+    }
     const { rows, total } = await tournaments.paginate({}, {
       q, searchFields: ['name', 'location'], page, limit,
     })
@@ -57,7 +100,9 @@ export function tournamentRoutes(stores) {
   router.patch('/:id', requireRole('admin'), async (req, res) => {
     const patch = body.forPatch(req.body)
     await loadOrFail(tournaments, req.params.id)
-    res.json({ tournament: await tournaments.update(req.params.id, patch) })
+    // Through the service, so a master-date change re-ages every player and is
+    // refused once entries are locked.
+    res.json({ tournament: await tms.updateTournament(req.user, req.params.id, patch) })
   })
 
   router.delete('/:id', requireRole('admin'), async (req, res) => {
@@ -72,6 +117,7 @@ export function tournamentRoutes(stores) {
       await matches.removeWhere({ categoryId: category.id })
     }
     await categories.removeWhere({ tournamentId: req.params.id })
+    await tms.purgeTournament(req.params.id)
     await tournaments.remove(req.params.id)
 
     res.status(204).end()

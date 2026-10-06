@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -13,6 +13,7 @@ import { TableSearch, TablePager, NoResults } from '../../components/TableToolba
 import { usePagedList } from '../../components/usePagedList'
 import PageBar from '../../components/PageBar'
 import * as users from '../../data/users'
+import { tournaments as tournamentStore } from '../../data/domain'
 
 // Only on create: an existing account keeps its password unless a new one is
 // typed, so the field is optional when editing.
@@ -59,12 +60,18 @@ export default function AdminUserList({ uid }) {
   const error = writeError || (loadError ? messageFor(loadError) : null)
   const setError = setWriteError
 
+  // PRD section 4: which tournaments an account may work.
+  const [allTournaments, setAllTournaments] = useState([])
+  useEffect(() => { tournamentStore.list().then(setAllTournaments).catch(() => {}) }, [])
+  const tournamentName = (id) => allTournaments.find((t) => t.id === id)?.name || id
+
   const formik = useFormik({
     initialValues: {
       email: editing?.email || '',
       password: '',
       role: editing?.role || 'judge',
       seat: editing?.seat ?? '',
+      tournamentIds: editing?.tournamentIds || [],
     },
     enableReinitialize: true,
     validationSchema: schemaFor(!!editingId),
@@ -75,6 +82,8 @@ export default function AdminUserList({ uid }) {
       // can tell clearing one from leaving it alone.
       const seat = values.seat === '' ? null : Number(values.seat)
       const fields = { email: values.email.trim(), role: values.role, seat }
+      // Sent only when changed, so saving an account never rewrites its access.
+      if (JSON.stringify(values.tournamentIds) !== JSON.stringify(editing?.tournamentIds || [])) fields.tournamentIds = values.tournamentIds
       if (values.password) fields.password = values.password
 
       try {
@@ -154,6 +163,8 @@ export default function AdminUserList({ uid }) {
                     <TableCell>Email</TableCell>
                     <TableCell>Role</TableCell>
                     <TableCell>Seat</TableCell>
+                    <TableCell>Tournaments</TableCell>
+                    <TableCell>2FA</TableCell>
                     <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
@@ -165,6 +176,8 @@ export default function AdminUserList({ uid }) {
                         <Chip label={account.role} size="small" color={roleColour(account.role)} />
                       </TableCell>
                       <TableCell>{account.seat ?? '—'}</TableCell>
+                      <TableCell>{account.tournamentIds?.length ? account.tournamentIds.map(tournamentName).join(', ') : 'All'}</TableCell>
+                      <TableCell>{account.twoFactorEnabled ? '✓ On' : 'Off'}</TableCell>
                       <TableCell align="right">
                         <IconButton
                           aria-label={`Edit ${account.email}`}
@@ -232,6 +245,15 @@ export default function AdminUserList({ uid }) {
               error={!!formik.errors.seat}
               helperText={formik.errors.seat || 'Leave blank if this account has no seat'}
             />
+            <TextField
+              select fullWidth margin="normal" label="Tournaments this account may work"
+              value={formik.values.tournamentIds}
+              onChange={(e) => formik.setFieldValue('tournamentIds', typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+              slotProps={{ select: { multiple: true, renderValue: (ids) => (ids.length ? ids.map(tournamentName).join(', ') : 'All tournaments') }, inputLabel: { shrink: true } }}
+              helperText="Leave empty for all tournaments. A super admin always sees all."
+            >
+              {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
+            </TextField>
           </DialogContent>
           <DialogActions>
             <Button onClick={closeModal}>Cancel</Button>

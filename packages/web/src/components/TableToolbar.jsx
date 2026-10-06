@@ -9,21 +9,25 @@ export function TableSearch({ value, onChange, placeholder = 'Search', ...props 
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      inputProps={{ 'aria-label': placeholder }}
       sx={{ minWidth: 240 }}
-      InputProps={{
-        startAdornment: (
-          <InputAdornment position="start">
-            <Search fontSize="small" />
-          </InputAdornment>
-        ),
-        endAdornment: value ? (
-          <InputAdornment position="end">
-            <IconButton size="small" aria-label="Clear search" onClick={() => onChange('')}>
-              <Clear fontSize="small" />
-            </IconButton>
-          </InputAdornment>
-        ) : null,
+      // MUI v9 takes these through slotProps; the old InputProps/inputProps
+      // are no longer read, so the icon, clear button and label went missing.
+      slotProps={{
+        htmlInput: { 'aria-label': placeholder },
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <Search fontSize="small" />
+            </InputAdornment>
+          ),
+          endAdornment: value ? (
+            <InputAdornment position="end">
+              <IconButton size="small" aria-label="Clear search" onClick={() => onChange('')}>
+                <Clear fontSize="small" />
+              </IconButton>
+            </InputAdornment>
+          ) : null,
+        },
       }}
       {...props}
     />

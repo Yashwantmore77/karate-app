@@ -77,7 +77,7 @@ const panelCheckboxSx = {
 }
 
 export default function KumiteConsole({
-  matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize
+  matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize, rules = null, displayInfo = null
 }) {
   const observing = mode === 'observe'
   const [state, send, mat] = useMatchChannel(matchId, { control: !observing })
@@ -94,6 +94,14 @@ export default function KumiteConsole({
     if (state?.fieldNumber) setFieldNumberDraft(state.fieldNumber)
   }, [state?.fieldNumber])
 
+  // A bout from a configured tournament runs under that tournament's rules
+  // (duration, point gap). The reducer ignores this once the bout has begun.
+  const rulesKey = rules ? JSON.stringify(rules) : null
+  useEffect(() => {
+    if (observing || !state || !rulesKey) return
+    send('RULES', JSON.parse(rulesKey))
+  }, [observing, !!state, rulesKey, send])
+
   // Publish to the public scoreboard, with a heartbeat so a display can tell
   // a quiet match from a dead connection.
   useEffect(() => {
@@ -109,11 +117,19 @@ export default function KumiteConsole({
       senshu: state.match.senshu,
       clock: state.koActive ? state.koClock : state.clock,
       heartbeatAt: serverNow(),
+      // Section 38: category, round, match number, result and what is next.
+      category: displayInfo?.category ?? null,
+      matchNumber: displayInfo?.matchNumber ?? null,
+      round: displayInfo?.round ?? null,
+      next: displayInfo?.next ?? null,
+      outcome: state.outcome?.ended && state.outcome.winner
+        ? `${state.outcome.winner === 'aka' ? 'AKA' : 'AO'} wins`
+        : null,
     })
     publish()
     const id = setInterval(publish, 2000)
     return () => clearInterval(id)
-  }, [observing, state, matchId, blueComp?.name, redComp?.name, serverNow])
+  }, [observing, state, matchId, blueComp?.name, redComp?.name, serverNow, displayInfo])
 
   // The server hands one mat to one socket, so holding it is the real question
   // — not whether this screen asked for control. Anything else renders
@@ -145,8 +161,12 @@ export default function KumiteConsole({
     // A referee decision (kiken, shikkaku, hantei) beats the score, so take the
     // verdict the authority already published rather than recomputing it.
     const { winner } = view.outcome
-      ?? evaluateOutcome(view.match, DEFAULT_RULES, { expired: true })
+      ?? evaluateOutcome(view.match, view.rules || DEFAULT_RULES, { expired: true })
+    const method = view.outcome?.method
     onFinalize({
+      // Kiken (withdrawal) is recorded as a walkover and shikkaku as a
+      // disqualification, the PRD's own terms for them (section 27).
+      result: { method: method || 'points', type: method === 'kiken' ? 'WALKOVER' : method === 'shikkaku' ? 'DISQUALIFIED' : 'COMPLETED' },
       status: 'completed',
       winner: winner === 'aka' ? 'red' : winner === 'ao' ? 'blue' : 'tie',
       avgRed: view.match.scores.aka,
@@ -321,7 +341,7 @@ export default function KumiteConsole({
                 {shownClock.display}
               </Typography>
 
-              <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 1, justifyContent: 'center' }}>
                 <IconButton disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: 5_000 })}>
                   <KeyboardArrowUp />
                 </IconButton>
@@ -375,7 +395,7 @@ export default function KumiteConsole({
 
               <Stack direction="row" spacing={1}>
                 <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Reset the time', resetTime)} sx={utilityButtonSx}>Reset time</Button>
-                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', () => useDuration(DEFAULT_RULES.extraTimeMs))} sx={utilityButtonSx}>Extra time</Button>
+                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', () => useDuration((view.rules || DEFAULT_RULES).extraTimeMs))} sx={utilityButtonSx}>Extra time</Button>
               </Stack>
               <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Set the clock to 60 seconds', () => useDuration(60_000))} sx={{ ...utilityButtonSx, mt: 1 }}>
                 60 seconds
@@ -384,7 +404,7 @@ export default function KumiteConsole({
               <Divider sx={{ my: 2 }} />
 
               <Typography variant="caption" display="block" sx={{ mb: 1 }}>Match time</Typography>
-              <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', alignItems: 'center' }}>
                 <TextField
                   size="small"
                   type="number"

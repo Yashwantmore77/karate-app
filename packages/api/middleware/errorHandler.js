@@ -1,4 +1,5 @@
 import { ApiError } from '../lib/errors.js'
+import { DomainError } from '@kumite/shared/errors.js'
 
 /** A body larger than the limit arrives here as a parser error, not a crash. */
 const isBodyTooLarge = (err) => err?.type === 'entity.too.large'
@@ -15,7 +16,9 @@ export function errorHandler(logger = console) {
   return (err, req, res, _next) => {
     if (res.headersSent) return
 
-    if (err instanceof ApiError) {
+    // A business rule from the shared tournament service: as deliberate as an
+    // ApiError, and answered the same way.
+    if (err instanceof ApiError || err instanceof DomainError) {
       const body = { error: err.code }
       if (err.details) body.details = err.details
       return res.status(err.status).json(body)

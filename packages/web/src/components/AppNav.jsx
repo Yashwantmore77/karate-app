@@ -7,6 +7,14 @@ import {
 import { Menu as MenuIcon, Logout } from '@mui/icons-material'
 import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
+import { useConnection } from '../state/ConnectionContext'
+
+const CONNECTION = {
+  online: { label: '● Live', color: 'success' },
+  connecting: { label: '○ Connecting…', color: 'warning' },
+  reconnecting: { label: '○ Reconnecting…', color: 'warning' },
+  offline: { label: '✕ Offline', color: 'error' },
+}
 
 // What each role can reach. The scoreboard is on every list because it is the
 // one screen anyone might want to throw onto a second display mid-session.
@@ -19,6 +27,15 @@ const MENUS = {
     { label: 'Accounts', to: '/admin/accounts' },
     { label: 'Sign-ins', to: '/admin/sign-ins' },
     { label: 'Scoreboard', to: '/display' },
+    { label: 'Public site', to: '/tournaments' },
+  ],
+  registration_officer: [
+    { label: 'Registrations', to: '/registration_officer' },
+    { label: 'Public site', to: '/tournaments' },
+  ],
+  weighin_officer: [
+    { label: 'Weigh-in', to: '/weighin_officer' },
+    { label: 'Public site', to: '/tournaments' },
   ],
   referee: [
     { label: 'Matches', to: '/referee' },
@@ -57,8 +74,11 @@ export default function AppNav({ user, profile }) {
   const navigate = useNavigate()
   const { logout } = useSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { status } = useConnection()
+  const connection = CONNECTION[status]
 
-  const items = MENUS[profile?.role] || []
+  const base = MENUS[profile?.role === 'super_admin' ? 'admin' : profile?.role] || []
+  const items = base.length ? [...base, { label: 'My account', to: '/account' }] : base
   const onPublicScreen = location.pathname === '/display' || location.pathname === '/login'
   if (!user || !profile || onPublicScreen || items.length === 0) return null
 
@@ -79,7 +99,7 @@ export default function AppNav({ user, profile }) {
 
   return (
     <>
-      <AppBar position="sticky" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+      <AppBar position="sticky" className="no-print" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar sx={{ gap: 1 }}>
           <Box
             component="img"
@@ -116,6 +136,13 @@ export default function AppNav({ user, profile }) {
           </Box>
 
           <Box sx={{ flexGrow: { xs: 1, md: 0 } }} />
+
+          {/* Only with a server: offline mode has no connection to lose. */}
+          {connection && (
+            <Tooltip title={status === 'online' ? 'Connected to the tournament server' : 'Changes will not reach other devices until the connection is back'}>
+              <Chip label={connection.label} size="small" color={connection.color} variant="outlined" sx={{ mr: 1 }} />
+            </Tooltip>
+          )}
 
           <Chip
             label={profile.role}

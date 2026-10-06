@@ -557,3 +557,26 @@ describe('BE-4 auth', () => {
     })
   })
 })
+
+describe('public live channel (PRD 57)', () => {
+  let app, port2
+  beforeEach(async () => {
+    app = createApp()
+    port2 = await new Promise((resolve) => app.http.listen(0, () => resolve(app.http.address().port)))
+  })
+  afterEach(() => new Promise((resolve) => app.http.close(resolve)))
+
+  it('lets an anonymous viewer sync time and hear about changes, without any data', async () => {
+    const viewer = connect(`http://localhost:${port2}/public`, { transports: ['websocket'] })
+    await new Promise((resolve) => viewer.on('connect', resolve))
+    const { t1 } = await new Promise((resolve) => viewer.emit('time:ping', {}, resolve))
+    expect(t1).toBeGreaterThan(0)
+    const heard = new Promise((resolve) => viewer.once('public:changed', resolve))
+    await app.stores.tournaments.insert({ name: 'x' })
+    expect(Object.keys(await heard)).toEqual(['at'])
+    const shown = new Promise((resolve) => viewer.once('display:update', resolve))
+    await app.stores.display.insert({ id: 'live', status: 'open', akaName: 'R' })
+    expect(await shown).toMatchObject({ status: 'open', akaName: 'R' })
+    viewer.disconnect()
+  })
+})

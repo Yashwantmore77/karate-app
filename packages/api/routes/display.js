@@ -20,6 +20,13 @@ const DISPLAY_SCHEMA = {
   // locally, which is the only way every screen can agree to the second.
   clock: { type: 'object', nullable: true },
   heartbeatAt: { type: 'integer', min: 0, nullable: true },
+  // PRD section 38: what the hall reads around the scores.
+  category: { type: 'string', max: 120, nullable: true },
+  matchNumber: { type: 'string', max: 20, nullable: true },
+  round: { type: 'string', max: 60, nullable: true },
+  outcome: { type: 'string', max: 80, nullable: true },
+  // The bout after this one on the same mat: { matchNumber, akaName, aoName, category }.
+  next: { type: 'object', nullable: true },
 }
 
 export function displayRoutes(stores) {

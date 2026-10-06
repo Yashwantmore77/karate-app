@@ -7,7 +7,9 @@ import { conflict, notFound } from '../lib/errors.js'
 const scryptAsync = promisify(scrypt)
 const KEY_LEN = 64
 const COLLECTION = 'users'
-export const ROLES = ['admin', 'referee', 'judge']
+// PRD section 3. Coaches are not accounts: they arrive through a registration
+// link (see signCoachToken), and the public needs no sign-in at all.
+export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer']
 
 // Deliberately loose: the point is to catch a transposed field, not to arbitrate
 // what a valid address is. Anything stricter rejects real addresses.
@@ -21,6 +23,9 @@ const USER_SCHEMA = {
   password: { type: 'string', required: true, min: 8, max: 200, trim: false },
   role: { type: 'enum', values: ROLES, required: true },
   seat: { type: 'integer', min: 1, max: 99, nullable: true },
+  // PRD section 4: the tournaments this account may work. Empty or absent
+  // means all of them, which is how every existing account behaves.
+  tournamentIds: { type: 'array', items: { type: 'string', max: 80 }, maxItems: 200, unique: true, nullable: true },
 }
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
@@ -53,6 +58,10 @@ const SEED = [
   { uid: 'judge2-uid', email: 'judge2@kata.local', role: 'judge', seat: 2, password: 'test123' },
   { uid: 'judge3-uid', email: 'judge3@kata.local', role: 'judge', seat: 3, password: 'test123' },
   { uid: 'judge4-uid', email: 'judge4@kata.local', role: 'judge', seat: 4, password: 'test123' },
+  // PRD section 3 staff roles. Not on the login screen's quick-select chips,
+  // which stay as they were; sign in with the address.
+  { uid: 'registrar-uid', email: 'registrar@kata.local', role: 'registration_officer', password: 'test123' },
+  { uid: 'weighin-uid', email: 'weighin@kata.local', role: 'weighin_officer', password: 'test123' },
 ]
 
 // --- in-memory store (no MONGODB_URI) --------------------------------------
@@ -83,7 +92,7 @@ async function listMemoryUsers() {
 }
 
 async function createMemoryUser(input) {
-  const { email, password, role, seat } = validate(input, USER_SCHEMA)
+  const { email, password, role, seat, tournamentIds } = validate(input, USER_SCHEMA)
   const users = await loadMemoryUsers()
   if (users.has(email)) throw conflict('email_taken')
   const user = {
@@ -91,6 +100,7 @@ async function createMemoryUser(input) {
     email,
     role,
     ...(seat !== null && seat !== undefined ? { seat } : {}),
+    ...(tournamentIds?.length ? { tournamentIds } : {}),
     passwordHash: await hashPassword(password),
   }
   users.set(email, user)
@@ -110,6 +120,7 @@ async function updateMemoryUser(uid, patch) {
     if (fields.seat === null) delete next.seat
     else next.seat = fields.seat
   }
+  if (fields.tournamentIds !== undefined) next.tournamentIds = fields.tournamentIds || []
   if (fields.password) next.passwordHash = await hashPassword(fields.password)
 
   if (next.email !== existing.email && users.has(next.email)) throw conflict('email_taken')
@@ -165,13 +176,14 @@ async function listMongoUsers() {
 }
 
 async function createMongoUser(input) {
-  const { email, password, role, seat } = validate(input, USER_SCHEMA)
+  const { email, password, role, seat, tournamentIds } = validate(input, USER_SCHEMA)
   const collection = await usersCollection()
   const doc = {
     uid: randomUUID(),
     email,
     role,
     ...(seat !== null && seat !== undefined ? { seat } : {}),
+    ...(tournamentIds?.length ? { tournamentIds } : {}),
     passwordHash: await hashPassword(password),
   }
   try {
@@ -199,6 +211,7 @@ async function updateMongoUser(uid, patch) {
     if (fields.seat === null) $unset.seat = ''
     else $set.seat = fields.seat
   }
+  if (fields.tournamentIds !== undefined) $set.tournamentIds = fields.tournamentIds || []
   if (fields.password) $set.passwordHash = await hashPassword(fields.password)
 
   try {
@@ -224,10 +237,43 @@ async function deleteMongoUser(uid) {
 const findByEmail = (email) => (isMongoConfigured() ? findMongoUserByEmail(email) : findMemoryUserByEmail(email))
 const findByUid = (uid) => (isMongoConfigured() ? findMongoUserByUid(uid) : findMemoryUserByUid(uid))
 
+// Secrets never leave this module: not the hash, not a two-factor secret.
 const strip = (user) => {
-  const { passwordHash, _id, ...safe } = user
-  return safe
+  const { passwordHash, _id, twoFactorSecret, pendingTwoFactorSecret, ...safe } = user
+  return { ...safe, twoFactorEnabled: !!twoFactorSecret }
 }
+
+/**
+ * Security fields no request body may set directly: a new password hash
+ * (reset), two-factor secrets. Only the auth routes call this.
+ */
+export async function setSecurity(uid, { password, twoFactorSecret, pendingTwoFactorSecret }) {
+  const patch = {}
+  if (password !== undefined) patch.passwordHash = await hashPassword(password)
+  if (twoFactorSecret !== undefined) patch.twoFactorSecret = twoFactorSecret
+  if (pendingTwoFactorSecret !== undefined) patch.pendingTwoFactorSecret = pendingTwoFactorSecret
+  if (isMongoConfigured()) {
+    const collection = await usersCollection()
+    const $set = {}
+    const $unset = {}
+    for (const [k, v] of Object.entries(patch)) (v === null ? $unset : $set)[k] = v === null ? '' : v
+    const update = {}
+    if (Object.keys($set).length) update.$set = $set
+    if (Object.keys($unset).length) update.$unset = $unset
+    await collection.updateOne({ uid }, update)
+    return
+  }
+  const user = await findMemoryUserByUid(uid)
+  if (!user) throw notFound()
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete user[k]
+    else user[k] = v
+  }
+}
+
+/** The raw record, secrets included, for the auth routes only. */
+export const findUserRecord = (uid) => findByUid(uid)
+export const findUserRecordByEmail = (email) => findByEmail(email)
 
 /**
  * Returns the user when the credentials check out, otherwise null. Callers get
@@ -244,7 +290,7 @@ export async function authenticate(email, password) {
   }
   const ok = await verifyPassword(String(password || ''), user.passwordHash)
   if (!ok) return null
-  return strip(user)
+  return { ...strip(user), twoFactorSecret: user.twoFactorSecret || null }
 }
 
 export async function findUser(uid) {

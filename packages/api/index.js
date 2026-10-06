@@ -16,6 +16,12 @@ import { categoryRoutes } from './routes/categories.js'
 import { competitorRoutes } from './routes/competitors.js'
 import { matchRoutes } from './routes/matches.js'
 import { displayRoutes } from './routes/display.js'
+import { tmsRoutes } from './routes/tms.js'
+import { publicRoutes } from './routes/public.js'
+import { coachRoutes } from './routes/coach.js'
+import { fileRoutes } from './routes/files.js'
+import { emailNotifier } from './lib/emailNotifier.js'
+import { createTms } from '@kumite/shared/tms.js'
 
 const EXPIRY_SWEEP_MS = 250
 
@@ -42,6 +48,10 @@ export function createApp() {
   }
   // Bounded before anything parses it: an unbounded body is a denial of service
   // that needs no credentials.
+  // A bulk player upload is the one body that is legitimately large.
+  app.use(/\/players\/bulk/, express.json({ limit: '2mb' }))
+  // An upload is a 2 MB file as base64, about 2.7 MB of JSON.
+  app.use(/\/files$/, express.json({ limit: '4mb' }))
   app.use(express.json({ limit: '32kb' }))
   app.use(security({ allowedOrigin: process.env.CORS_ORIGIN || '*' }))
 
@@ -49,17 +59,28 @@ export function createApp() {
 
   // Built per instance and announced over the socket, so a device that is
   // already looking at a list finds out it changed without polling for it.
-  const emitChange = (collection) => io.emit('data:changed', { collection })
+  const emitChange = (collection) => {
+    io.emit('data:changed', { collection })
+    announcePublic(collection)
+  }
   const stores = withChangeEvents(createStores(), (collection) => emitChange(collection))
+
+  // The PRD's tournament management, on the same stores as everything else.
+  const tms = createTms(stores, { onNotify: emailNotifier(stores) })
 
   const categories = categoryRoutes(stores)
   const competitors = competitorRoutes(stores)
-  const matches = matchRoutes(stores)
+  const matches = matchRoutes(stores, tms)
 
   app.use(`${API_BASE}/auth`, authRoutes())
   app.use(`${API_BASE}/users`, userRoutes())
   app.use(`${API_BASE}/officials`, officialRoutes())
-  app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores))
+  app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores, tms))
+  app.use(`${API_BASE}/tournaments`, tmsRoutes(tms, stores))
+  // Public APIs are kept apart from the admin ones (section 56).
+  app.use(`${API_BASE}/public`, publicRoutes(tms))
+  app.use(`${API_BASE}/coach`, coachRoutes(tms))
+  app.use(`${API_BASE}/files`, fileRoutes(tms))
   app.use(`${API_BASE}/categories`, categories.flat)
   app.use(`${API_BASE}/competitors`, competitors.flat)
   app.use(`${API_BASE}/matches`, matches.flat)
@@ -77,6 +98,36 @@ export function createApp() {
   const http = createServer(app)
   const io = new Server(http, { cors: { origin: true } })
   io.use(socketAuth)
+
+  // PRD section 57: public pages and hall screens have no session, so they get
+  // their own namespace. It carries no data, only "something changed" (the
+  // page re-reads the public API, which applies Rule 8) and the scoreboard row
+  // the hall is already showing.
+  const publicIo = io.of('/public')
+  const timePong = (_payload, ack) => {
+    const t1 = serverNow()
+    if (typeof ack === 'function') ack({ t1, t2: serverNow() })
+  }
+  publicIo.on('connection', (socket) => {
+    socket.on('time:ping', timePong)
+  })
+
+  // Coalesced: a draw writes hundreds of rows, and every viewer re-reading the
+  // page for each one would be a self-inflicted flood.
+  const PUBLIC_DEBOUNCE_MS = 400
+  let pendingPublic = null
+  function announcePublic(collection) {
+    if (collection === 'display') {
+      stores.display.get('live').then((row) => publicIo.emit('display:update', row ?? null)).catch(() => {})
+      return
+    }
+    if (['auditLog', 'registrationLinks'].includes(collection)) return
+    if (pendingPublic) return
+    pendingPublic = setTimeout(() => {
+      pendingPublic = null
+      publicIo.emit('public:changed', { at: serverNow() })
+    }, PUBLIC_DEBOUNCE_MS)
+  }
 
   const rooms = new Map()
   const roomFor = (matchId) => {
@@ -159,9 +210,12 @@ export function createApp() {
     })
   }, EXPIRY_SWEEP_MS)
 
-  http.on('close', () => clearInterval(sweep))
+  http.on('close', () => {
+    clearInterval(sweep)
+    if (pendingPublic) clearTimeout(pendingPublic)
+  })
 
-  return { app, http, io, rooms, stores }
+  return { app, http, io, rooms, stores, tms }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

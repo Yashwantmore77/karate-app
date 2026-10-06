@@ -12,6 +12,7 @@ const session = vi.hoisted(() => ({
   getToken: () => null,
   clearSession: vi.fn(),
   loginToServer: vi.fn(),
+  tokenExpiresAt: () => null,
 }))
 vi.mock('../data/session', () => session)
 vi.mock('../data/geolocation', () => ({ currentCoords: vi.fn(async () => null) }))
@@ -110,5 +111,19 @@ describe('Login', () => {
     await signIn()
     await screen.findByText('Wrong email or password')
     expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled()
+  })
+
+  it('asks for the authenticator code only when the server wants one', async () => {
+    session.loginToServer
+      .mockRejectedValueOnce(Object.assign(new Error('login failed'), { status: 401, code: 'two_factor_required' }))
+      .mockResolvedValueOnce({ uid: 'u1', email: 'ref@club.test', role: 'referee' })
+    const user = userEvent.setup()
+    await signIn('ref@club.test')
+    const code = await screen.findByLabelText(/6-digit code/i)
+    expect(screen.queryByText('Wrong email or password')).not.toBeInTheDocument()
+    await user.type(code, '123456')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+    await waitFor(() => expect(screen.getByText('Referee Home')).toBeInTheDocument())
+    expect(session.loginToServer).toHaveBeenLastCalledWith('ref@club.test', 'correct horse', null, '123456')
   })
 })

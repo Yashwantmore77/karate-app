@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Box, Toolbar, Typography, IconButton } from '@mui/material'
 import { ArrowBack } from '@mui/icons-material'
@@ -6,11 +7,51 @@ import { matches as matchStore } from '../../data/domain'
 import { useMatchRecord } from '../../hooks/useMatchRecord'
 import { isExpired } from '../../utils/dateUtils'
 import KumiteConsole from '../../features/console/KumiteConsole'
+import { settingsOf } from '@kumite/shared/tms.js'
+import { boutOutcome } from '@kumite/shared/results.js'
+import { tms } from '../../data/tms'
+
+// A bout from a PRD draw, or any tournament with its own rules configured,
+// is scored under those rules (PRD section 29); older matches keep the
+// console's defaults.
+export function matchRules(tournament, match) {
+  if (!tournament || !(tournament.settings || match?.stage)) return null
+  const s = settingsOf(tournament)
+  return { durationMs: s.matchDurationSec * 1000, pointGap: s.pointGap }
+}
+
+/**
+ * What the hall screen shows around the scores for a PRD bout (section 38):
+ * its category, round and number, and the next bout on the same mat.
+ */
+export async function hallInfo(tournamentId, match) {
+  const queue = await tms.matches(tournamentId, match.mat ? { mat: String(match.mat) } : {}).catch(() => [])
+  const current = queue.find((m) => m.id === match.id)
+  if (!current) return null
+  const pending = queue.filter((m) => m.id !== match.id && !boutOutcome(m) && m.status !== 'cancelled' && m.redId && m.blueId)
+  const number = (m) => Number(String(m.matchNumber).replace(/\D/g, ''))
+  const next = pending.find((m) => number(m) > number(current)) || pending[0]
+  const round = (m) => (m.stage === 'knockout' ? m.roundName : `Pool ${m.poolName}`)
+  return {
+    category: current.categoryName,
+    matchNumber: current.matchNumber,
+    round: round(current),
+    next: next ? { matchNumber: next.matchNumber, akaName: next.akaName, aoName: next.aoName, category: next.categoryName, round: round(next) } : null,
+  }
+}
 
 export default function RefereeMatchControl() {
   const navigate = useNavigate()
   const { matchId } = useParams()
   const { match, category, tournament, redComp, blueComp, loading } = useMatchRecord(matchId)
+  const [displayInfo, setDisplayInfo] = useState(null)
+
+  useEffect(() => {
+    if (!match || !tournament || !category?.divisionKey) return undefined
+    let alive = true
+    hallInfo(tournament.id, match).then((info) => { if (alive) setDisplayInfo(info) })
+    return () => { alive = false }
+  }, [match?.id, tournament?.id, category?.divisionKey])
 
   // Nothing until the read settles, rather than a "not found" that flashes up
   // on every load before the match arrives.
@@ -46,6 +87,8 @@ export default function RefereeMatchControl() {
         tournamentExpired={tournamentExpired}
         onBack={() => navigate(-1)}
         onFinalize={updateMatchRecord}
+        rules={matchRules(tournament, match)}
+        displayInfo={displayInfo}
       />
     </Box>
   )

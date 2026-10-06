@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { apiUrl, getToken, loginToServer, clearSession } from '../data/session'
+import { apiUrl, getToken, loginToServer, clearSession, tokenExpiresAt } from '../data/session'
 import { setUnauthorizedHandler } from '../data/http'
+import { disconnect, onSocketAuthFailure } from '../data/channel/socket'
 
 const SessionContext = createContext(null)
 
@@ -17,6 +18,9 @@ export function SessionProvider({ children }) {
 
   const adopt = useCallback((apiUser) => {
     if (!apiUser) {
+      // The match socket was opened with this person's token; the next
+      // sign-in must get a fresh one.
+      disconnect()
       setUser(null)
       setProfile(null)
       return
@@ -56,15 +60,28 @@ export function SessionProvider({ children }) {
   // long. Any request the server refuses for that signs the screen out, so it
   // returns to the login page rather than sitting there "signed in" while every
   // list quietly comes back empty.
+  // The socket refusing the token means the same.
   useEffect(() => {
+    const expire = () => { clearSession(); adopt(null) }
     setUnauthorizedHandler(() => adopt(null))
-    return () => setUnauthorizedHandler(null)
+    onSocketAuthFailure(expire)
+    return () => { setUnauthorizedHandler(null); onSocketAuthFailure(null) }
   }, [adopt])
+
+  // And one that runs out signs out on time rather than at the next failed save.
+  useEffect(() => {
+    if (!user) return undefined
+    const at = tokenExpiresAt(getToken())
+    if (!at) return undefined
+    const id = setTimeout(() => { clearSession(); adopt(null) }, Math.max(0, at - Date.now()))
+    return () => clearTimeout(id)
+  }, [user, adopt])
 
   // `coords` is whatever the sign-in screen managed to obtain from the browser,
   // and is often null — denied, unsupported, or simply not resolved in time.
-  const login = useCallback(async (email, password, coords = null) => {
-    adopt(await loginToServer(email, password, coords))
+  // `code` is the second factor, sent only once the server has asked for it.
+  const login = useCallback(async (email, password, coords = null, code = null) => {
+    adopt(await (code ? loginToServer(email, password, coords, code) : loginToServer(email, password, coords)))
   }, [adopt])
 
   const logout = useCallback(() => {

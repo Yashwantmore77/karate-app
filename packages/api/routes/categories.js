@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireAuth, requireRole, tournamentAccess } from '../auth/middleware.js'
+import { findUserRecord } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 
@@ -10,6 +11,9 @@ const CATEGORY_SCHEMA = {
   // Free text rather than an enum: the admin form takes a typed division, and
   // federations name their grades differently.
   division: { type: 'string', required: true, max: 60 },
+  // Set when the category was generated from a PRD division (see tms.js).
+  divisionKey: { type: 'string', max: 200, nullable: true },
+  event: { type: 'enum', values: ['kata', 'kumite'], nullable: true },
 }
 
 /**
@@ -25,6 +29,7 @@ export function categoryRoutes(stores) {
   const { tournaments, categories, competitors, matches } = stores
 
   nested.use(requireAuth)
+  nested.param('tournamentId', tournamentAccess(findUserRecord))
   flat.use(requireAuth)
 
   nested.get('/:tournamentId/categories', async (req, res) => {

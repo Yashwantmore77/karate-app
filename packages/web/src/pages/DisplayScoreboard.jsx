@@ -57,8 +57,15 @@ export default function DisplayScoreboard() {
     </Box>
   )
 
+  const heading = [live.category, live.round, live.matchNumber].filter(Boolean).join('  ·  ')
+
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {heading && (
+        <Box sx={{ bgcolor: '#111', py: 1.5, textAlign: 'center' }}>
+          <Typography sx={{ color: '#FFF', fontSize: 34, fontWeight: 700, letterSpacing: 1 }}>{heading}</Typography>
+        </Box>
+      )}
       <Stack direction="row" sx={{ flex: 1 }}>
         {side(live.aoName, live.aoScore, WKF.ao, live.senshu === 'ao')}
         <Box sx={{
@@ -77,6 +84,17 @@ export default function DisplayScoreboard() {
         </Box>
         {side(live.akaName, live.akaScore, WKF.aka, live.senshu === 'aka')}
       </Stack>
+      {(live.outcome || live.next) && (
+        <Box sx={{ bgcolor: '#111', py: 1.5, px: 3, display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+          <Typography sx={{ color: '#7BE8A3', fontSize: 30, fontWeight: 800 }}>{live.outcome || ''}</Typography>
+          {live.next && (
+            <Typography sx={{ color: '#DDD', fontSize: 28 }}>
+              NEXT {live.next.matchNumber}: <Box component="span" sx={{ color: '#FF6B6B' }}>AKA {live.next.akaName}</Box> vs <Box component="span" sx={{ color: '#7B9BFF' }}>AO {live.next.aoName}</Box>
+              {live.next.category && live.next.category !== live.category ? ` · ${live.next.category}` : ''}
+            </Typography>
+          )}
+        </Box>
+      )}
     </Box>
   )
 }

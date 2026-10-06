@@ -21,6 +21,18 @@ export const signToken = (user) =>
     { algorithm: ALGORITHM, expiresIn: TOKEN_TTL, subject: user.uid }
   )
 
+/**
+ * A coach's session, opened through a tournament's registration link rather
+ * than an account. It names the one tournament (and, once registered, the one
+ * team) it may touch; the service enforces both.
+ */
+export const signCoachToken = ({ linkId, tournamentId, teamId = null }) =>
+  jwt.sign(
+    { uid: `coach:${linkId}`, role: 'coach', tournamentId, teamId, linkId },
+    secret,
+    { algorithm: ALGORITHM, expiresIn: TOKEN_TTL, subject: `coach:${linkId}` }
+  )
+
 /** Returns the claims, or null for anything that does not verify. */
 export function verifyToken(token) {
   if (!token) return null

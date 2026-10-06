@@ -37,13 +37,29 @@ const store = (value) => {
 export const clearSession = () => store(null)
 
 /**
+ * When a token stops being valid, read from its own `exp` claim. Not a trust
+ * decision (the server checks the signature); only so the app can sign out on
+ * time. Null for anything unreadable.
+ */
+export function tokenExpiresAt(value) {
+  try {
+    const part = String(value || '').split('.')[1]
+    if (!part) return null
+    const json = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')))
+    return Number.isFinite(json.exp) ? json.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Exchanges credentials for a token, and returns the signed-in user.
  *
  * `coords` rides along when the browser has granted location permission, for
  * the server's sign-in record. It is always optional, and never affects
  * whether the sign-in succeeds.
  */
-export async function loginToServer(email, password, coords = null) {
+export async function loginToServer(email, password, coords = null, code = null) {
   const url = apiUrl('/auth/login')
   // The app has no other way to sign anyone in, so a missing setting is said
   // plainly instead of the button appearing to do nothing.
@@ -52,9 +68,13 @@ export async function loginToServer(email, password, coords = null) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password, ...(coords ? { coords } : {}) }),
+    body: JSON.stringify({ email, password, ...(coords ? { coords } : {}), ...(code ? { code } : {}) }),
   })
-  if (!res.ok) throw Object.assign(new Error('login failed'), { status: res.status })
+  if (!res.ok) {
+    // The code tells a second-factor prompt apart from a wrong password.
+    const body = await res.json().catch(() => null)
+    throw Object.assign(new Error('login failed'), { status: res.status, code: body?.error })
+  }
 
   const { token: issued, user } = await res.json()
   store(issued)

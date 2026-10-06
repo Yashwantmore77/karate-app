@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Link as RouterLink } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import {
-  Box, Typography, Button, TextField, CircularProgress, Stack, useMediaQuery
+  Box, Typography, Button, TextField, CircularProgress, Stack, useMediaQuery, Link
 } from '@mui/material'
 import { useSession } from '../state/SessionContext'
 import { currentCoords } from '../data/geolocation'
@@ -60,6 +60,10 @@ const signInFailure = (err) => {
 export default function Login() {
   const { user, profile, login } = useSession()
   const [busy, setBusy] = useState(false)
+  // Shown only when the server asks for it (an admin with two-factor on).
+  const [needCode, setNeedCode] = useState(false)
+  const [code, setCode] = useState('')
+  const [codeError, setCodeError] = useState('')
   const stillness = useMediaQuery('(prefers-reduced-motion: reduce)')
 
   const formik = useFormik({
@@ -74,9 +78,16 @@ export default function Login() {
         // with them. Resolves to null whenever the browser will not say — denied,
         // unsupported, or too slow — and the sign-in proceeds regardless.
         const coords = await currentCoords()
-        await login(values.email.trim(), values.password, coords)
+        await login(values.email.trim(), values.password, coords, needCode ? code.trim() : null)
       } catch (err) {
-        formik.setFieldError('password', signInFailure(err))
+        if (err?.code === 'two_factor_required') {
+          setNeedCode(true)
+          setCodeError('')
+        } else if (err?.code === 'invalid_two_factor') {
+          setCodeError('That code did not match. Use the current code from your authenticator app.')
+        } else {
+          formik.setFieldError('password', signInFailure(err))
+        }
         setBusy(false)
       }
     },
@@ -103,7 +114,7 @@ export default function Login() {
         border: '1px solid rgba(255,255,255,0.14)',
         boxShadow: '0 30px 80px rgba(0,0,0,0.55)',
       }}>
-        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+        <Stack direction="row" spacing={2} sx={{ mb: 3, alignItems: 'center' }}>
           <Box sx={{ position: 'relative', width: 52, height: 52, flexShrink: 0 }}>
             <Box
               component="svg"
@@ -220,6 +231,22 @@ export default function Login() {
             sx={fieldSx}
           />
 
+          {needCode && (
+            <TextField
+              fullWidth
+              autoFocus
+              label="6-digit code from your authenticator app"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              onKeyDown={(e) => e.key === 'Enter' && formik.handleSubmit()}
+              error={!!codeError}
+              helperText={codeError || ' '}
+              autoComplete="one-time-code"
+              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+              sx={fieldSx}
+            />
+          )}
+
           <Button
             fullWidth
             size="large"
@@ -243,6 +270,9 @@ export default function Login() {
           >
             {busy ? <CircularProgress size={22} sx={{ color: '#fff' }} /> : 'Sign in'}
           </Button>
+          <Box sx={{ mt: 1.5, textAlign: 'center' }}>
+            <Link component={RouterLink} to="/forgot-password" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>Forgot password?</Link>
+          </Box>
         </Box>
 
         <Typography sx={{

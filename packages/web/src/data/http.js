@@ -24,11 +24,13 @@ export class HttpError extends Error {
 let onUnauthorized = null
 export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn }
 
-export async function request(path, { method = 'GET', body, signal } = {}) {
+export async function request(path, { method = 'GET', body, signal, token: explicitToken, anonymous = false } = {}) {
   const url = apiUrl(path)
   if (!url) throw new Error(`no server configured for ${path}`)
 
-  const token = getToken()
+  // A coach session and the public pages carry their own credentials (or
+  // none), and must never borrow a signed-in official's token.
+  const token = anonymous ? null : (explicitToken ?? getToken())
   const res = await fetch(url, {
     method,
     signal,
@@ -38,6 +40,8 @@ export async function request(path, { method = 'GET', body, signal } = {}) {
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
+
+  if (res.status === 401 && (explicitToken || anonymous)) throw new HttpError(401, 'unauthorized')
 
   if (res.status === 401) {
     // The token is gone or expired. Drop it here rather than letting every
