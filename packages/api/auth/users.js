@@ -23,6 +23,9 @@ const USER_SCHEMA = {
   password: { type: 'string', required: true, min: 8, max: 200, trim: false },
   role: { type: 'enum', values: ROLES, required: true },
   seat: { type: 'integer', min: 1, max: 99, nullable: true },
+  // PRD section 4: the tournaments this account may work. Empty or absent
+  // means all of them, which is how every existing account behaves.
+  tournamentIds: { type: 'array', items: { type: 'string', max: 80 }, max: 200, nullable: true },
 }
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
@@ -89,7 +92,7 @@ async function listMemoryUsers() {
 }
 
 async function createMemoryUser(input) {
-  const { email, password, role, seat } = validate(input, USER_SCHEMA)
+  const { email, password, role, seat, tournamentIds } = validate(input, USER_SCHEMA)
   const users = await loadMemoryUsers()
   if (users.has(email)) throw conflict('email_taken')
   const user = {
@@ -97,6 +100,7 @@ async function createMemoryUser(input) {
     email,
     role,
     ...(seat !== null && seat !== undefined ? { seat } : {}),
+    ...(tournamentIds?.length ? { tournamentIds } : {}),
     passwordHash: await hashPassword(password),
   }
   users.set(email, user)
@@ -116,6 +120,7 @@ async function updateMemoryUser(uid, patch) {
     if (fields.seat === null) delete next.seat
     else next.seat = fields.seat
   }
+  if (fields.tournamentIds !== undefined) next.tournamentIds = fields.tournamentIds || []
   if (fields.password) next.passwordHash = await hashPassword(fields.password)
 
   if (next.email !== existing.email && users.has(next.email)) throw conflict('email_taken')
@@ -171,13 +176,14 @@ async function listMongoUsers() {
 }
 
 async function createMongoUser(input) {
-  const { email, password, role, seat } = validate(input, USER_SCHEMA)
+  const { email, password, role, seat, tournamentIds } = validate(input, USER_SCHEMA)
   const collection = await usersCollection()
   const doc = {
     uid: randomUUID(),
     email,
     role,
     ...(seat !== null && seat !== undefined ? { seat } : {}),
+    ...(tournamentIds?.length ? { tournamentIds } : {}),
     passwordHash: await hashPassword(password),
   }
   try {
@@ -205,6 +211,7 @@ async function updateMongoUser(uid, patch) {
     if (fields.seat === null) $unset.seat = ''
     else $set.seat = fields.seat
   }
+  if (fields.tournamentIds !== undefined) $set.tournamentIds = fields.tournamentIds || []
   if (fields.password) $set.passwordHash = await hashPassword(fields.password)
 
   try {
@@ -230,10 +237,43 @@ async function deleteMongoUser(uid) {
 const findByEmail = (email) => (isMongoConfigured() ? findMongoUserByEmail(email) : findMemoryUserByEmail(email))
 const findByUid = (uid) => (isMongoConfigured() ? findMongoUserByUid(uid) : findMemoryUserByUid(uid))
 
+// Secrets never leave this module: not the hash, not a two-factor secret.
 const strip = (user) => {
-  const { passwordHash, _id, ...safe } = user
-  return safe
+  const { passwordHash, _id, twoFactorSecret, pendingTwoFactorSecret, ...safe } = user
+  return { ...safe, twoFactorEnabled: !!twoFactorSecret }
 }
+
+/**
+ * Security fields no request body may set directly: a new password hash
+ * (reset), two-factor secrets. Only the auth routes call this.
+ */
+export async function setSecurity(uid, { password, twoFactorSecret, pendingTwoFactorSecret }) {
+  const patch = {}
+  if (password !== undefined) patch.passwordHash = await hashPassword(password)
+  if (twoFactorSecret !== undefined) patch.twoFactorSecret = twoFactorSecret
+  if (pendingTwoFactorSecret !== undefined) patch.pendingTwoFactorSecret = pendingTwoFactorSecret
+  if (isMongoConfigured()) {
+    const collection = await usersCollection()
+    const $set = {}
+    const $unset = {}
+    for (const [k, v] of Object.entries(patch)) (v === null ? $unset : $set)[k] = v === null ? '' : v
+    const update = {}
+    if (Object.keys($set).length) update.$set = $set
+    if (Object.keys($unset).length) update.$unset = $unset
+    await collection.updateOne({ uid }, update)
+    return
+  }
+  const user = await findMemoryUserByUid(uid)
+  if (!user) throw notFound()
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete user[k]
+    else user[k] = v
+  }
+}
+
+/** The raw record, secrets included, for the auth routes only. */
+export const findUserRecord = (uid) => findByUid(uid)
+export const findUserRecordByEmail = (email) => findByEmail(email)
 
 /**
  * Returns the user when the credentials check out, otherwise null. Callers get
@@ -250,7 +290,7 @@ export async function authenticate(email, password) {
   }
   const ok = await verifyPassword(String(password || ''), user.passwordHash)
   if (!ok) return null
-  return strip(user)
+  return { ...strip(user), twoFactorSecret: user.twoFactorSecret || null }
 }
 
 export async function findUser(uid) {

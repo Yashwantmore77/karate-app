@@ -8,6 +8,7 @@ import { Menu as MenuIcon, Logout } from '@mui/icons-material'
 import { signOut, auth } from '../firebase'
 import { CYAN, TEXT } from '../theme/tokens'
 import { useConnection } from '../state/ConnectionContext'
+import { serverUrl } from '../data/session'
 
 const CONNECTION = {
   online: { label: '● Live', color: 'success' },
@@ -73,7 +74,9 @@ export default function AppNav({ user, profile }) {
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
-  const items = MENUS[profile?.role === 'super_admin' ? 'admin' : profile?.role] || []
+  const base = MENUS[profile?.role === 'super_admin' ? 'admin' : profile?.role] || []
+  // Account settings (two-factor) live on the server; offline has none.
+  const items = serverUrl() && base.length ? [...base, { label: 'My account', to: '/account' }] : base
   const onPublicScreen = location.pathname === '/display' || location.pathname === '/login'
   if (!user || !profile || onPublicScreen || items.length === 0) return null
 

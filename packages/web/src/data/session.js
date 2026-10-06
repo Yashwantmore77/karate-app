@@ -61,16 +61,20 @@ export function tokenExpiresAt(value) {
  * the server's sign-in record. It is always optional, and never affects
  * whether the sign-in succeeds.
  */
-export async function loginToServer(email, password, coords = null) {
+export async function loginToServer(email, password, coords = null, code = null) {
   const url = apiUrl('/auth/login')
   if (!url) return null
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password, ...(coords ? { coords } : {}) }),
+    body: JSON.stringify({ email, password, ...(coords ? { coords } : {}), ...(code ? { code } : {}) }),
   })
-  if (!res.ok) throw Object.assign(new Error('login failed'), { status: res.status })
+  if (!res.ok) {
+    // The code tells a second-factor prompt apart from a wrong password.
+    const body = await res.json().catch(() => null)
+    throw Object.assign(new Error('login failed'), { status: res.status, code: body?.error })
+  }
 
   const { token: issued, user } = await res.json()
   store(issued)

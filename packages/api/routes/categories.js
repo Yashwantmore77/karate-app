@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireAuth, requireRole, tournamentAccess } from '../auth/middleware.js'
+import { findUserRecord } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
 
 const CATEGORY_SCHEMA = {
@@ -27,6 +28,7 @@ export function categoryRoutes(stores) {
   const { tournaments, categories, competitors, matches } = stores
 
   nested.use(requireAuth)
+  nested.param('tournamentId', tournamentAccess(findUserRecord))
   flat.use(requireAuth)
 
   nested.get('/:tournamentId/categories', async (req, res) => {

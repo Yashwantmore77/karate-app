@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireAuth, requireRole, tournamentAccess, mayAccessTournament } from '../auth/middleware.js'
+import { findUserRecord } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
 
 const DAY = { type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/, max: 10, nullable: true }
@@ -49,7 +50,15 @@ export function tournamentRoutes(stores, tms) {
   // what is on before they can be sent to a mat.
   router.use(requireAuth)
 
-  router.get('/', async (_req, res) => res.json({ tournaments: await tournaments.list() }))
+  router.param('id', tournamentAccess(findUserRecord))
+
+  router.get('/', async (req, res) => {
+    // A coach session belongs to one tournament and reads it through /coach.
+    if (req.user.role === 'coach') return res.status(403).json({ error: 'forbidden' })
+    const account = await findUserRecord(req.user.uid)
+    const rows = await tournaments.list()
+    res.json({ tournaments: rows.filter((t) => mayAccessTournament(account, t.id)) })
+  })
 
   router.get('/:id', async (req, res) => {
     res.json({ tournament: await loadOrFail(tournaments, req.params.id) })

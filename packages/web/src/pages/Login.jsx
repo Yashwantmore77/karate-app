@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Link as RouterLink } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import {
-  Box, Typography, Button, TextField, CircularProgress, Stack, useMediaQuery
+  Box, Typography, Button, TextField, CircularProgress, Stack, useMediaQuery, Link
 } from '@mui/material'
+import { serverUrl } from '../data/session'
 import { useSession } from '../state/SessionContext'
 import { currentCoords } from '../data/geolocation'
 import AppStage from '../components/AppStage'
@@ -51,6 +52,10 @@ const fieldSx = {
 export default function Login() {
   const { user, profile, login } = useSession()
   const [busy, setBusy] = useState(false)
+  // Shown only when the server asks for it (an admin with two-factor on).
+  const [needCode, setNeedCode] = useState(false)
+  const [code, setCode] = useState('')
+  const [codeError, setCodeError] = useState('')
   const stillness = useMediaQuery('(prefers-reduced-motion: reduce)')
 
   const formik = useFormik({
@@ -68,9 +73,16 @@ export default function Login() {
         // One login surface either way: against the real API when a server
         // is configured, against the local mock otherwise. Either failure
         // reads the same to someone typing the wrong password.
-        await login(values.email.trim(), values.password, coords)
-      } catch {
-        formik.setFieldError('password', 'Wrong email or password')
+        await login(values.email.trim(), values.password, coords, needCode ? code.trim() : null)
+      } catch (err) {
+        if (err?.code === 'two_factor_required') {
+          setNeedCode(true)
+          setCodeError('')
+        } else if (err?.code === 'invalid_two_factor') {
+          setCodeError('That code did not match. Use the current code from your authenticator app.')
+        } else {
+          formik.setFieldError('password', 'Wrong email or password')
+        }
         setBusy(false)
       }
     },
@@ -214,6 +226,22 @@ export default function Login() {
             sx={fieldSx}
           />
 
+          {needCode && (
+            <TextField
+              fullWidth
+              autoFocus
+              label="6-digit code from your authenticator app"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              onKeyDown={(e) => e.key === 'Enter' && formik.handleSubmit()}
+              error={!!codeError}
+              helperText={codeError || ' '}
+              autoComplete="one-time-code"
+              slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+              sx={fieldSx}
+            />
+          )}
+
           <Button
             fullWidth
             size="large"
@@ -237,6 +265,11 @@ export default function Login() {
           >
             {busy ? <CircularProgress size={22} sx={{ color: '#fff' }} /> : 'Sign in'}
           </Button>
+          {serverUrl() && (
+            <Box sx={{ mt: 1.5, textAlign: 'center' }}>
+              <Link component={RouterLink} to="/forgot-password" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>Forgot password?</Link>
+            </Box>
+          )}
         </Box>
 
         <Typography sx={{

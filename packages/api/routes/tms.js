@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { requireAuth, requirePermission } from '../auth/middleware.js'
+import { requireAuth, requirePermission, tournamentAccess } from '../auth/middleware.js'
+import { findUserRecord } from '../auth/users.js'
 import { validate } from '../lib/validate.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { PERMISSION as P } from '@kumite/shared/permissions.js'
@@ -92,6 +93,7 @@ export const withMeta = (req) => ({ ...req.user, meta: { ip: clientIp(req), user
 export function tmsRoutes(tms) {
   const router = Router()
   router.use(requireAuth)
+  router.param('tid', tournamentAccess(findUserRecord))
 
   const tid = (req) => req.params.tid
   const reply = (key) => (value) => ({ [key]: value })

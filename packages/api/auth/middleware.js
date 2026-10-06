@@ -37,6 +37,28 @@ export function requirePermission(permission) {
   }
 }
 
+/**
+ * PRD sections 4 and 49: an account limited to some tournaments reaches only
+ * those. Read from the account on every request rather than from the token,
+ * so taking someone off a tournament takes effect at once.
+ */
+export const mayAccessTournament = (account, tournamentId) =>
+  !account?.tournamentIds?.length || account.role === 'super_admin' || account.tournamentIds.includes(tournamentId)
+
+export function tournamentAccess(findAccount) {
+  return async (req, _res, next, tournamentId) => {
+    try {
+      if (!req.user) return next(unauthorized())
+      if (req.user.role === 'coach') return next(req.user.tournamentId === tournamentId ? undefined : forbidden('tournament_forbidden'))
+      const account = await findAccount(req.user.uid)
+      if (!account) return next(unauthorized())
+      return next(mayAccessTournament(account, tournamentId) ? undefined : forbidden('tournament_forbidden'))
+    } catch (err) {
+      return next(err)
+    }
+  }
+}
+
 /** HTTP: a coach session, scoped to the tournament its link belongs to. */
 export function requireCoach(req, _res, next) {
   if (!req.user) return next(unauthorized())

@@ -12,6 +12,8 @@ import StaffRouter from './routes/StaffRouter'
 import PublicTournament from './pages/public/PublicTournament'
 import PublicTournamentList from './pages/public/PublicTournamentList'
 import RegisterPortal from './pages/public/RegisterPortal'
+import PasswordReset from './pages/account/PasswordReset'
+import MyAccount from './pages/account/MyAccount'
 import DisplayScoreboard from './pages/DisplayScoreboard'
 import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
@@ -197,6 +199,9 @@ function AppShell() {
             <Route path="/tournaments" element={<PublicTournamentList />} />
             <Route path="/tournament/:slug" element={<PublicTournament />} />
             <Route path="/register/:token" element={<RegisterPortal />} />
+            <Route path="/forgot-password" element={<PasswordReset />} />
+            <Route path="/reset-password" element={<PasswordReset />} />
+            <Route path="/account" element={<RequireAuth user={user}><MyAccount /></RequireAuth>} />
 
             <Route
               path="/no-role"
