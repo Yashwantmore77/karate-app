@@ -16,6 +16,15 @@ const MENUS = {
     { label: 'Accounts', to: '/admin/accounts' },
     { label: 'Sign-ins', to: '/admin/sign-ins' },
     { label: 'Scoreboard', to: '/display' },
+    { label: 'Public site', to: '/tournaments' },
+  ],
+  registration_officer: [
+    { label: 'Registrations', to: '/registration_officer' },
+    { label: 'Public site', to: '/tournaments' },
+  ],
+  weighin_officer: [
+    { label: 'Weigh-in', to: '/weighin_officer' },
+    { label: 'Public site', to: '/tournaments' },
   ],
   referee: [
     { label: 'Categories', to: '/referee' },
@@ -54,7 +63,7 @@ export default function AppNav({ user, profile }) {
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const items = MENUS[profile?.role] || []
+  const items = MENUS[profile?.role === 'super_admin' ? 'admin' : profile?.role] || []
   const onPublicScreen = location.pathname === '/display' || location.pathname === '/login'
   if (!user || !profile || onPublicScreen || items.length === 0) return null
 
@@ -75,7 +84,7 @@ export default function AppNav({ user, profile }) {
 
   return (
     <>
-      <AppBar position="sticky" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+      <AppBar position="sticky" className="no-print" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar sx={{ gap: 1 }}>
           <Box
             component="img"

@@ -10,7 +10,7 @@ import { serverUrl } from './session'
  */
 export const isAvailable = () => !!serverUrl()
 
-export const ROLES = ['admin', 'referee', 'judge']
+export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer']
 
 export const list = async () => (await httpGet('/users')).users
 export const create = async (fields) => (await httpPost('/users', fields)).user

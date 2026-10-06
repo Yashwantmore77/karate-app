@@ -105,3 +105,10 @@ input { width: 100%; padding: 13px 14px; border-radius: 8px; border: 1px solid v
   .middle { display: flex; align-items: center; justify-content: center;
     border-block: none; border-inline: 1px solid var(--line); min-width: 220px; }
 }
+
+/* Certificates and reports print to PDF from the browser (PRD 44, 45). */
+@media print {
+  .no-print { display: none !important; }
+  html, body, #root { background: #fff !important; color: #000 !important; height: auto; }
+  .print-page { page-break-after: always; break-after: page; }
+}

@@ -110,6 +110,10 @@ export default function AdminTournamentDetail({ uid }) {
               {tournament.location} • {new Date(tournament.date).toLocaleDateString()}
             </Typography>
           </Box>
+          {/* The PRD's tournament management: registration, draw, results. */}
+          <Button variant="contained" onClick={() => navigate(`/admin/tournament/${tournamentId}/manage`)}>
+            Manage tournament
+          </Button>
         </Toolbar>
       </PageBar>
 

@@ -7,6 +7,9 @@ const testUsers = [
   { email: 'judge2@kata.local', password: 'test123', uid: 'judge2-uid', role: 'judge', seat: 2 },
   { email: 'judge3@kata.local', password: 'test123', uid: 'judge3-uid', role: 'judge', seat: 3 },
   { email: 'judge4@kata.local', password: 'test123', uid: 'judge4-uid', role: 'judge', seat: 4 },
+  // PRD section 3 staff roles; not on the login quick-select chips.
+  { email: 'registrar@kata.local', password: 'test123', uid: 'registrar-uid', role: 'registration_officer' },
+  { email: 'weighin@kata.local', password: 'test123', uid: 'weighin-uid', role: 'weighin_officer' },
 ]
 
 const roles = {
@@ -16,6 +19,8 @@ const roles = {
   'judge2-uid': { role: 'judge', seat: 2, name: 'Judge 2' },
   'judge3-uid': { role: 'judge', seat: 3, name: 'Judge 3' },
   'judge4-uid': { role: 'judge', seat: 4, name: 'Judge 4' },
+  'registrar-uid': { role: 'registration_officer', name: 'Registration Officer' },
+  'weighin-uid': { role: 'weighin_officer', name: 'Weigh-in Officer' },
 }
 
 // Sample tournament data

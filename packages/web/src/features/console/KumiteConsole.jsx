@@ -294,7 +294,7 @@ export default function KumiteConsole({
                 {shownClock.display}
               </Typography>
 
-              <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 1, justifyContent: 'center' }}>
                 <IconButton disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: 5_000 })}>
                   <KeyboardArrowUp />
                 </IconButton>
@@ -357,7 +357,7 @@ export default function KumiteConsole({
               <Divider sx={{ my: 2 }} />
 
               <Typography variant="caption" display="block" sx={{ mb: 1 }}>Match time</Typography>
-              <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', alignItems: 'center' }}>
                 <TextField
                   size="small"
                   type="number"

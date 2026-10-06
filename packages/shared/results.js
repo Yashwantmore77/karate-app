@@ -99,7 +99,9 @@ export function poolStandings(ids, bouts, rules = {}) {
   let rank = 0
   return sorted.map((row, i) => {
     if (i === 0 || compare(sorted[i - 1], row) !== 0) rank = i + 1
-    return { ...row, rank, qualified: rank <= r.qualifiersPerPool && row.played > 0 }
+    // Places, not ranks, decide qualification: a three-way tie for first must
+    // not send three players through when the tournament takes two.
+    return { ...row, rank, qualified: i < r.qualifiersPerPool && row.played > 0 }
   })
 }
 

@@ -8,6 +8,10 @@ import NoRoleAssigned from './pages/NoRoleAssigned'
 import JudgeRouter from './routes/JudgeRouter'
 import RefereeRouter from './routes/RefereeRouter'
 import AdminRouter from './routes/AdminRouter'
+import StaffRouter from './routes/StaffRouter'
+import PublicTournament from './pages/public/PublicTournament'
+import PublicTournamentList from './pages/public/PublicTournamentList'
+import RegisterPortal from './pages/public/RegisterPortal'
 import DisplayScoreboard from './pages/DisplayScoreboard'
 import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
@@ -164,14 +168,17 @@ function AppShell() {
 
   if (isPortal) return <DisplayScoreboard />
 
-  const homePath = !user ? '/login' : !profile ? '/no-role' : `/${profile.role}`
+  // A super admin works the admin screens; the permission table still tells
+  // them apart where it matters (section 3.1).
+  const routeProfile = profile?.role === 'super_admin' ? { ...profile, role: 'admin' } : profile
+  const homePath = !user ? '/login' : !profile ? '/no-role' : `/${routeProfile.role}`
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <ConnectionProvider>
       {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
           <CircularProgress />
         </Box>
       ) : (
@@ -186,11 +193,16 @@ function AppShell() {
             {/* Public: a hall screen, no sign-in */}
             <Route path="/display" element={<DisplayScoreboard />} />
 
+            {/* Public website and the coach registration link (PRD 14, 39, 54) */}
+            <Route path="/tournaments" element={<PublicTournamentList />} />
+            <Route path="/tournament/:slug" element={<PublicTournament />} />
+            <Route path="/register/:token" element={<RegisterPortal />} />
+
             <Route
               path="/no-role"
               element={
                 <RequireAuth user={user}>
-                  {profile ? <Navigate to={`/${profile.role}`} replace /> : <NoRoleAssigned uid={user?.uid} />}
+                  {profile ? <Navigate to={`/${routeProfile.role}`} replace /> : <NoRoleAssigned uid={user?.uid} />}
                 </RequireAuth>
               }
             />
@@ -202,7 +214,7 @@ function AppShell() {
                   {!profile ? (
                     <Navigate to="/no-role" replace />
                   ) : (
-                    <RequireRole role="admin" profile={profile}><AdminRouter uid={user.uid} /></RequireRole>
+                    <RequireRole role="admin" profile={routeProfile}><AdminRouter uid={user.uid} profile={profile} /></RequireRole>
                   )}
                 </RequireAuth>
               }
@@ -227,6 +239,31 @@ function AppShell() {
                     <Navigate to="/no-role" replace />
                   ) : (
                     <RequireRole role="judge" profile={profile}><JudgeRouter uid={user.uid} profile={profile} /></RequireRole>
+                  )}
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/registration_officer/*"
+              element={
+                <RequireAuth user={user}>
+                  {!profile ? (
+                    <Navigate to="/no-role" replace />
+                  ) : (
+                    <RequireRole role="registration_officer" profile={profile}><StaffRouter uid={user.uid} profile={profile} /></RequireRole>
+                  )}
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/weighin_officer/*"
+              element={
+                <RequireAuth user={user}>
+                  {!profile ? (
+                    <Navigate to="/no-role" replace />
+                  ) : (
+                    <RequireRole role="weighin_officer" profile={profile}><StaffRouter uid={user.uid} profile={profile} /></RequireRole>
                   )}
                 </RequireAuth>
               }

@@ -145,7 +145,7 @@ export default function AdminUserList({ uid }) {
           <>
             {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
 
-            <Stack direction="row" justifyContent="flex-end" sx={{ mb: 3 }}>
+            <Stack direction="row" sx={{ mb: 3, justifyContent: 'flex-end' }}>
               <Button
                 variant="contained"
                 startIcon={<Add />}
