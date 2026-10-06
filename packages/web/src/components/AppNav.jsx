@@ -5,10 +5,9 @@ import {
   ListItemText, Typography, Divider, Chip, Tooltip,
 } from '@mui/material'
 import { Menu as MenuIcon, Logout } from '@mui/icons-material'
-import { signOut, auth } from '../firebase'
+import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
 import { useConnection } from '../state/ConnectionContext'
-import { serverUrl } from '../data/session'
 
 const CONNECTION = {
   online: { label: '● Live', color: 'success' },
@@ -22,6 +21,9 @@ const CONNECTION = {
 const MENUS = {
   admin: [
     { label: 'Tournaments', to: '/admin' },
+    // The referee screens, which an admin may also use: scheduling, panels,
+    // the draw, and deleting a bout.
+    { label: 'Matches', to: '/referee' },
     { label: 'Accounts', to: '/admin/accounts' },
     { label: 'Sign-ins', to: '/admin/sign-ins' },
     { label: 'Scoreboard', to: '/display' },
@@ -36,7 +38,7 @@ const MENUS = {
     { label: 'Public site', to: '/tournaments' },
   ],
   referee: [
-    { label: 'Categories', to: '/referee' },
+    { label: 'Matches', to: '/referee' },
     { label: 'Scoreboard', to: '/display' },
   ],
   judge: [
@@ -70,13 +72,13 @@ export const activeItem = (items, pathname) => {
 export default function AppNav({ user, profile }) {
   const location = useLocation()
   const navigate = useNavigate()
+  const { logout } = useSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
   const base = MENUS[profile?.role === 'super_admin' ? 'admin' : profile?.role] || []
-  // Account settings (two-factor) live on the server; offline has none.
-  const items = serverUrl() && base.length ? [...base, { label: 'My account', to: '/account' }] : base
+  const items = base.length ? [...base, { label: 'My account', to: '/account' }] : base
   const onPublicScreen = location.pathname === '/display' || location.pathname === '/login'
   if (!user || !profile || onPublicScreen || items.length === 0) return null
 
@@ -152,7 +154,7 @@ export default function AppNav({ user, profile }) {
             <IconButton
               color="inherit"
               aria-label="Sign out"
-              onClick={() => signOut(auth)}
+              onClick={logout}
             >
               <Logout />
             </IconButton>

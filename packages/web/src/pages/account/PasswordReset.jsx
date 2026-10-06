@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { Container, Paper, Typography, TextField, Button, Alert, Stack, Link } from '@mui/material'
 import { request } from '../../data/http'
-import { serverUrl } from '../../data/session'
 
 /**
  * PRD section 4: forgot password and reset. One screen: without a token it
@@ -17,9 +16,6 @@ export default function PasswordReset() {
   const [state, setState] = useState(null) // { severity, text }
   const [busy, setBusy] = useState(false)
 
-  if (!serverUrl()) {
-    return <Container maxWidth="sm" sx={{ py: 6 }}><Alert severity="info">Password reset needs the tournament server. In offline mode use the demo accounts.</Alert></Container>
-  }
 
   const send = async () => {
     setBusy(true)

@@ -64,8 +64,8 @@ describe('PRD tournament management over HTTP', () => {
     }
     const me = (await call('GET', '/coach/me', undefined, coach)).body
     expect(me.players).toHaveLength(10)
-    const paged = (await call('GET', `/tournaments/${t}/players?page=1&pageSize=4&sort=name`, undefined, tokens.admin)).body
-    expect(paged).toMatchObject({ total: 10, page: 1, pageSize: 4 })
+    const paged = (await call('GET', `/tournaments/${t}/players?page=2&limit=4&sort=name`, undefined, tokens.admin)).body
+    expect(paged).toMatchObject({ total: 10, page: 2, limit: 4, pages: 3 })
     expect(paged.players.map((p) => p.name)).toEqual(['Player 4', 'Player 5', 'Player 6', 'Player 7'])
     expect(me.players[0]).toMatchObject({ age: 12, registrationStatus: 'SUBMITTED' })
 
@@ -178,9 +178,12 @@ describe('PRD tournament management over HTTP', () => {
     await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
     const [m1, m2] = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
 
-    const scheduled = await call('PATCH', `/tournaments/${t}/matches/${m1.id}/schedule`, { mat: 2, refereeId: 'ref-uid-001', judgeIds: ['judge1-uid', 'judge1-uid', 'judge2-uid'] }, tokens.admin)
+    // PRD bouts are scheduled through the match API, with its clash checks.
+    const scheduled = await call('PATCH', `/matches/${m1.id}`, { mat: 2, scheduledAt: '2027-01-15T09:00:00Z', refereeId: 'ref-uid-001', judgeIds: ['judge1-uid', 'judge2-uid'] }, tokens.admin)
     expect(scheduled.body.match).toMatchObject({ mat: 2, refereeId: 'ref-uid-001', judgeIds: ['judge1-uid', 'judge2-uid'] })
-    expect((await call('PATCH', `/tournaments/${t}/matches/${m1.id}/schedule`, { judgeIds: 'judge1-uid' }, tokens.admin)).status).toBe(400)
+    expect((await call('PATCH', `/matches/${m1.id}`, { judgeIds: ['judge1-uid', 'judge1-uid'] }, tokens.admin)).status).toBe(400)
+    // the same referee cannot be on a second bout at the same time
+    expect((await call('PATCH', `/matches/${m2.id}`, { scheduledAt: '2027-01-15T09:00:00Z', refereeId: 'ref-uid-001' }, tokens.admin)).body.error).toBe('schedule_conflict')
 
     const wo = await call('POST', `/tournaments/${t}/matches/${m1.id}/correct`, { winner: 'red', resultType: 'WALKOVER' }, tokens.admin)
     expect(wo.body.match).toMatchObject({ status: 'completed', winner: 'red', result: { type: 'WALKOVER' } })

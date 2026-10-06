@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Container, Paper, Typography, Button, Alert, Stack, TextField, Box } from '@mui/material'
 import { request } from '../../data/http'
-import { serverUrl } from '../../data/session'
 import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 
 /** PRD section 4: the signed-in person's account, and optional two-factor sign-in. */
@@ -12,11 +11,8 @@ export default function MyAccount() {
   const [msg, setMsg] = useState(null)
 
   const load = () => request('/auth/account').then((r) => setAccount(r.account)).catch(() => setAccount(null))
-  useEffect(() => { if (serverUrl()) load() }, [])
+  useEffect(() => { load() }, [])
 
-  if (!serverUrl()) {
-    return <Container maxWidth="sm" sx={{ py: 6 }}><Alert severity="info">Account settings need the tournament server. Offline mode uses the built-in demo accounts.</Alert></Container>
-  }
   if (!account) return null
 
   const act = async (path, success) => {

@@ -25,7 +25,7 @@ const USER_SCHEMA = {
   seat: { type: 'integer', min: 1, max: 99, nullable: true },
   // PRD section 4: the tournaments this account may work. Empty or absent
   // means all of them, which is how every existing account behaves.
-  tournamentIds: { type: 'array', items: { type: 'string', max: 80 }, max: 200, nullable: true },
+  tournamentIds: { type: 'array', items: { type: 'string', max: 80 }, maxItems: 200, unique: true, nullable: true },
 }
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
@@ -298,9 +298,42 @@ export async function findUser(uid) {
   return user ? strip(user) : null
 }
 
-export async function listUsers() {
+/**
+ * The roster, a page at a time, searchable by address or role.
+ *
+ * Paged in memory for both backends: the account list is small by nature —
+ * the officials at one venue — and a Mongo-side skip/limit would buy nothing
+ * while splitting the search rules across two implementations.
+ */
+export async function listUsers({ q = '', page = 1, limit = 25 } = {}) {
   const users = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
-  return users.map(strip)
+  const needle = q.trim().toLowerCase()
+
+  const found = needle
+    ? users.filter((user) =>
+      String(user.email || '').toLowerCase().includes(needle)
+      || String(user.role || '').toLowerCase().includes(needle))
+    : users
+
+  const ordered = [...found].sort((a, b) => String(a.email).localeCompare(String(b.email)))
+  const start = (page - 1) * limit
+  return { rows: ordered.slice(start, start + limit).map(strip), total: found.length }
+}
+
+/**
+ * Everyone who can be put on a match, for the assignment pickers.
+ *
+ * Deliberately not the account roster: this is readable by a referee building
+ * their own panel, so it carries only what is needed to choose a person and
+ * nothing about managing them. Admins are included because an admin may take
+ * a mat.
+ */
+export async function listAssignableOfficials() {
+  const users = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
+  return users
+    .filter((user) => ROLES.includes(user.role))
+    .map(({ uid, email, role, seat }) => ({ uid, email, role, ...(seat === undefined ? {} : { seat }) }))
+    .sort((a, b) => a.role.localeCompare(b.role) || String(a.email).localeCompare(String(b.email)))
 }
 
 export async function createUser(input) {

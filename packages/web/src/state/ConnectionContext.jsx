@@ -3,25 +3,25 @@ import { serverUrl } from '../data/session'
 import { publicSocket, onClockOffset, onConnectionStatus } from '../data/channel/socket'
 
 // Every device needs to agree what "now" is before it can derive a clock from
-// an anchor. On the local adapter there is no server, so the offset is zero;
-// with a server, the measured handshake offset from the public channel is used
-// by every screen — referee, judge, scoreboard alike.
+// an anchor. The offset is zero until it has been measured against the server
+// over the public channel, and every screen — referee, judge, scoreboard —
+// then uses the same one.
 const ConnectionContext = createContext({
   offset: 0,
-  status: 'local',
+  status: 'connecting',
   setOffset: () => {},
   setStatus: () => {},
 })
 
 export function ConnectionProvider({ children }) {
   const [offset, setOffset] = useState(0)
-  const [status, setStatus] = useState(serverUrl() ? 'connecting' : 'local')
+  const [status, setStatus] = useState('connecting')
 
   useEffect(() => {
     if (!serverUrl()) return undefined
     publicSocket()
     const offOffset = onClockOffset(setOffset)
-    const offStatus = onConnectionStatus((s) => setStatus(s === 'offline' ? 'offline' : s))
+    const offStatus = onConnectionStatus(setStatus)
     return () => { offOffset(); offStatus() }
   }, [])
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Box, Typography, Stack, Chip } from '@mui/material'
-import { displayRepo } from '../data/repo'
+import { displayRepo } from '../data/display'
 import { useMatchClock } from '../hooks/useMatchClock'
 import { useServerNow } from '../hooks/useServerNow'
 

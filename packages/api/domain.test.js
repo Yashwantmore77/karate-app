@@ -316,13 +316,21 @@ describe('matches', () => {
     expect((await patch(`/matches/${match.id}`, { winner: 'aka' }, tokens.judge)).status).toBe(403)
   })
 
-  it('does not let a referee schedule or delete a bout', async () => {
+  it('lets a referee schedule a bout on their mat, but not delete one', async () => {
     const { categoryId } = await seedCategory()
-    expect((await post(`/categories/${categoryId}/matches`, {}, tokens.referee)).status).toBe(403)
+    // Scheduling is the referee's own job at the mat; waiting on an
+    // administrator for each pairing would stop it between bouts.
+    expect((await post(`/categories/${categoryId}/matches`, {}, tokens.referee)).status).toBe(201)
 
+    // Deleting is not: a match carries the judges' scores with it.
     const { match } = await json(await post(`/categories/${categoryId}/matches`, {}, tokens.admin))
     expect((await del(`/matches/${match.id}`, tokens.referee)).status).toBe(403)
     expect((await del(`/matches/${match.id}`, tokens.admin)).status).toBe(204)
+  })
+
+  it('still keeps a judge from scheduling a bout', async () => {
+    const { categoryId } = await seedCategory()
+    expect((await post(`/categories/${categoryId}/matches`, {}, tokens.judge)).status).toBe(403)
   })
 
   it('accepts both score vocabularies, since kata and kumite differ', async () => {

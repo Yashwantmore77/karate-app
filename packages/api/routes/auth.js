@@ -8,6 +8,7 @@ import { signToken } from '../auth/jwt.js'
 import { requireAuth, requireRole } from '../auth/middleware.js'
 import { recordLogin, listLogins } from '../auth/loginLog.js'
 import { rateLimit } from '../lib/rateLimit.js'
+import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { badRequest, unauthorized } from '../lib/errors.js'
 
 const LOGIN_WINDOW_MS = 60_000
@@ -147,8 +148,10 @@ export function authRoutes() {
   // Reading the trail is an administrator's business, and only theirs: it holds
   // every other account's addresses and whereabouts.
   router.get('/logins', requireAuth, requireRole('admin'), async (req, res) => {
-    const { limit, email, outcome } = req.query
-    res.json({ logins: await listLogins({ limit, email, outcome }) })
+    const { page, limit } = readPageQuery(req.query)
+    const { email, outcome } = req.query
+    const { rows, total } = await listLogins({ page, limit, email, outcome })
+    res.json({ logins: rows, ...pageMeta({ page, limit, total }) })
   })
 
   // Attempts stopped by a limiter never reach the handler, and those are

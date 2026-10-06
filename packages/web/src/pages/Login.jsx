@@ -5,7 +5,6 @@ import * as Yup from 'yup'
 import {
   Box, Typography, Button, TextField, CircularProgress, Stack, useMediaQuery, Link
 } from '@mui/material'
-import { serverUrl } from '../data/session'
 import { useSession } from '../state/SessionContext'
 import { currentCoords } from '../data/geolocation'
 import AppStage from '../components/AppStage'
@@ -49,6 +48,15 @@ const fieldSx = {
   '& .MuiFormHelperText-root.Mui-error': { color: '#FF9192' },
 }
 
+// A failed sign-in is not always a wrong password. Saying it was, when the API
+// is unreachable or the rate limiter has stepped in, sends people retyping a
+// password that was right all along.
+const signInFailure = (err) => {
+  if (err?.status === 401) return 'Wrong email or password'
+  if (err?.status === 429) return 'Too many attempts. Wait a few minutes, then try again.'
+  return 'Could not reach the sign-in service. Check the connection and try again.'
+}
+
 export default function Login() {
   const { user, profile, login } = useSession()
   const [busy, setBusy] = useState(false)
@@ -70,9 +78,6 @@ export default function Login() {
         // with them. Resolves to null whenever the browser will not say — denied,
         // unsupported, or too slow — and the sign-in proceeds regardless.
         const coords = await currentCoords()
-        // One login surface either way: against the real API when a server
-        // is configured, against the local mock otherwise. Either failure
-        // reads the same to someone typing the wrong password.
         await login(values.email.trim(), values.password, coords, needCode ? code.trim() : null)
       } catch (err) {
         if (err?.code === 'two_factor_required') {
@@ -81,7 +86,7 @@ export default function Login() {
         } else if (err?.code === 'invalid_two_factor') {
           setCodeError('That code did not match. Use the current code from your authenticator app.')
         } else {
-          formik.setFieldError('password', 'Wrong email or password')
+          formik.setFieldError('password', signInFailure(err))
         }
         setBusy(false)
       }
@@ -265,11 +270,9 @@ export default function Login() {
           >
             {busy ? <CircularProgress size={22} sx={{ color: '#fff' }} /> : 'Sign in'}
           </Button>
-          {serverUrl() && (
-            <Box sx={{ mt: 1.5, textAlign: 'center' }}>
-              <Link component={RouterLink} to="/forgot-password" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>Forgot password?</Link>
-            </Box>
-          )}
+          <Box sx={{ mt: 1.5, textAlign: 'center' }}>
+            <Link component={RouterLink} to="/forgot-password" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>Forgot password?</Link>
+          </Box>
         </Box>
 
         <Typography sx={{

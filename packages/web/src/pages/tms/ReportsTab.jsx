@@ -6,23 +6,6 @@ import { tms } from '../../data/tms'
 import { downloadCsv } from '../../components/tms/download'
 import { downloadXlsx } from '../../components/tms/excel'
 
-const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-
-/** Offline fallback: print a report as a plain table (the browser's "Save as PDF"). */
-function printTable(title, rows) {
-  const w = window.open('', '_blank')
-  if (!w) return
-  const [head, ...body] = rows
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
-    <style>body{font-family:system-ui,sans-serif;padding:16px}table{border-collapse:collapse;width:100%;font-size:12px}
-    th,td{border:1px solid #999;padding:4px 6px;text-align:left}th{background:#eee}</style></head><body>
-    <h2>${esc(title)}</h2><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
-    <tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${esc(Array.isArray(c) ? c.join(', ') : c)}</td>`).join('')}</tr>`).join('')}</tbody></table></body></html>`)
-  w.document.close()
-  w.focus()
-  w.print()
-}
-
 /** Section 45: every report as Excel (.xlsx), CSV or PDF. */
 export default function ReportsTab({ tournament, version, action }) {
   const tid = tournament.id
@@ -46,9 +29,7 @@ export default function ReportsTab({ tournament, version, action }) {
               <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
                 <Button startIcon={<TableView />} variant="contained" onClick={() => downloadXlsx(`${slug}-${key}.xlsx`, build(), title)}>Excel</Button>
                 <Button startIcon={<Download />} variant="outlined" onClick={() => downloadCsv(`${slug}-${key}.csv`, build())}>CSV</Button>
-                <Button startIcon={<Print />} variant="outlined" onClick={() => (tms.pdf
-                  ? action.run(() => tms.pdf(tid, `reports/${key}.pdf`, `${slug}-${key}.pdf`))
-                  : printTable(`${tournament.name} — ${title} report`, build()))}>PDF</Button>
+                <Button startIcon={<Print />} variant="outlined" onClick={() => action.run(() => tms.pdf(tid, `reports/${key}.pdf`, `${slug}-${key}.pdf`))}>PDF</Button>
               </Stack>
             </Paper>
           </Grid>

@@ -37,6 +37,18 @@ const emit = (socket, event, payload) =>
 const nextEvent = (socket, event) =>
   new Promise((resolve) => socket.once(event, resolve))
 
+// For events a room broadcasts more than once: joining also announces the
+// controller, so "the next one" is not necessarily the one under test.
+const nextMatching = (socket, event, matches) =>
+  new Promise((resolve) => {
+    const handler = (payload) => {
+      if (!matches(payload)) return
+      socket.off(event, handler)
+      resolve(payload)
+    }
+    socket.on(event, handler)
+  })
+
 describe('BE-1 match server', () => {
   beforeEach(async () => {
     clients = []
@@ -158,6 +170,40 @@ describe('BE-1 match server', () => {
     const snap = await emit(client(), 'match:join', { matchId: 'm1' })
     expect(snap.state.koActive).toBe(true)
     expect(snap.state.clock.running).toBe(false)
+  })
+
+  it('hands a stuck mat to a referee who takes it over', async () => {
+    const referee = client()
+    const second = client(refereeToken)
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    await emit(second, 'match:join', { matchId: 'm1', control: true })
+
+    // Control is otherwise only released on disconnect, so a device that died
+    // without the server noticing would hold this mat for good.
+    const announced = nextMatching(referee, 'match:control', (e) => !!e.takenFrom)
+    const reply = await emit(second, 'match:takeover', { matchId: 'm1' })
+    expect(reply.ok).toBe(true)
+    expect(reply.controllerId).toBe(second.id)
+
+    // The one who lost it is told, so a mat never changes hands in silence.
+    const event = await announced
+    expect(event.controllerId).toBe(second.id)
+    expect(event.takenFrom).toBe(referee.id)
+
+    expect((await emit(second, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })).ok).toBe(true)
+    expect((await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_STOP' })).error)
+      .toBe('not_controller')
+  })
+
+  it('does not let a judge take over a mat', async () => {
+    const referee = client()
+    const judge = client(judgeToken)
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    await emit(judge, 'match:join', { matchId: 'm1' })
+
+    expect((await emit(judge, 'match:takeover', { matchId: 'm1' })).error).toBe('forbidden')
+    const snap = await emit(judge, 'match:join', { matchId: 'm1' })
+    expect(snap.controllerId).toBe(referee.id)
   })
 
   it('frees the mat when the controlling device drops', async () => {

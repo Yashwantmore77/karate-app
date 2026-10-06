@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -9,6 +9,8 @@ import {
   Alert, FormHelperText,
 } from '@mui/material'
 import { ArrowBack, Edit, Delete, Add } from '@mui/icons-material'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import PageBar from '../../components/PageBar'
 import * as users from '../../data/users'
 import { tournaments as tournamentStore } from '../../data/domain'
@@ -40,41 +42,28 @@ const messageFor = (err) => MESSAGES[err?.code] || 'Something went wrong. Try ag
 
 export default function AdminUserList({ uid }) {
   const navigate = useNavigate()
-  const [accounts, setAccounts] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [writeError, setWriteError] = useState(null)
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+
+  const {
+    rows: accounts, total, page, limit, loading, error: loadError,
+    search, setSearch, setPage, refresh, reset,
+  } = usePagedList(
+    useCallback((options) => users.page(options), [])
+  )
+
+  const editing = editingId ? accounts.find((a) => a.uid === editingId) : null
+  // A failed read and a failed write are both worth showing, and only one
+  // can be on screen at a time.
+  const error = writeError || (loadError ? messageFor(loadError) : null)
+  const setError = setWriteError
+
   // PRD section 4: which tournaments an account may work.
   const [allTournaments, setAllTournaments] = useState([])
   useEffect(() => { tournamentStore.list().then(setAllTournaments).catch(() => {}) }, [])
   const tournamentName = (id) => allTournaments.find((t) => t.id === id)?.name || id
-
-  const available = users.isAvailable()
-  const editing = editingId ? accounts.find((a) => a.uid === editingId) : null
-
-  const refresh = async () => {
-    try {
-      setAccounts(await users.list())
-      setError(null)
-    } catch (err) {
-      setError(messageFor(err))
-    }
-  }
-
-  useEffect(() => {
-    if (!available) {
-      setLoading(false)
-      return
-    }
-    let alive = true
-    users.list()
-      .then((rows) => { if (alive) setAccounts(rows) })
-      .catch((err) => { if (alive) setError(messageFor(err)) })
-      .finally(() => { if (alive) setLoading(false) })
-    return () => { alive = false }
-  }, [available])
 
   const formik = useFormik({
     initialValues: {
@@ -98,9 +87,13 @@ export default function AdminUserList({ uid }) {
       if (values.password) fields.password = values.password
 
       try {
-        if (editingId) await users.update(editingId, fields)
-        else await users.create(fields)
-        await refresh()
+        if (editingId) {
+          await users.update(editingId, fields)
+          await refresh()
+        } else {
+          await users.create(fields)
+          await reset()
+        }
         closeModal()
       } catch (err) {
         setError(messageFor(err))
@@ -144,78 +137,73 @@ export default function AdminUserList({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flexGrow: 1 }}>
-        {!available ? (
-          <Alert severity="info">
-            Accounts live on the server. This build is running on local storage only,
-            where sign-in uses the built-in roster and there is nothing to manage.
-          </Alert>
-        ) : (
-          <>
-            {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
+        <>
+          {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
 
-            <Stack direction="row" sx={{ mb: 3, justifyContent: 'flex-end' }}>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => { setEditingId(null); setOpenModal(true) }}
-              >
-                New account
-              </Button>
-            </Stack>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+            <TableSearch value={search} onChange={setSearch} placeholder="Search email or role" />
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => { setEditingId(null); setOpenModal(true) }}
+            >
+              New account
+            </Button>
+          </Stack>
 
-            {loading ? null : accounts.length === 0 ? (
-              <Paper sx={{ p: 4, textAlign: 'center' }}>
-                <Typography color="text.secondary">No accounts yet</Typography>
-              </Paper>
-            ) : (
-              <TableContainer component={Paper}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Email</TableCell>
-                      <TableCell>Role</TableCell>
-                      <TableCell>Seat</TableCell>
-                      <TableCell>Tournaments</TableCell>
-                      <TableCell>2FA</TableCell>
-                      <TableCell align="right">Actions</TableCell>
+          {loading ? null : accounts.length === 0 ? (
+            <Paper>
+              <NoResults query={search} noun="accounts" />
+            </Paper>
+          ) : (
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell>Seat</TableCell>
+                    <TableCell>Tournaments</TableCell>
+                    <TableCell>2FA</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {accounts.map((account) => (
+                    <TableRow key={account.uid}>
+                      <TableCell>{account.email}</TableCell>
+                      <TableCell>
+                        <Chip label={account.role} size="small" color={roleColour(account.role)} />
+                      </TableCell>
+                      <TableCell>{account.seat ?? '—'}</TableCell>
+                      <TableCell>{account.tournamentIds?.length ? account.tournamentIds.map(tournamentName).join(', ') : 'All'}</TableCell>
+                      <TableCell>{account.twoFactorEnabled ? '✓ On' : 'Off'}</TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          aria-label={`Edit ${account.email}`}
+                          onClick={() => { setEditingId(account.uid); setOpenModal(true) }}
+                        >
+                          <Edit />
+                        </IconButton>
+                        {/* Deleting the signed-in account is refused by the
+                            server; disabling it here says so before the click. */}
+                        <IconButton
+                          aria-label={`Delete ${account.email}`}
+                          disabled={account.uid === uid}
+                          title={account.uid === uid ? 'You cannot delete your own account' : undefined}
+                          onClick={() => setDeleteConfirm(account)}
+                        >
+                          <Delete />
+                        </IconButton>
+                      </TableCell>
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {accounts.map((account) => (
-                      <TableRow key={account.uid}>
-                        <TableCell>{account.email}</TableCell>
-                        <TableCell>
-                          <Chip label={account.role} size="small" color={roleColour(account.role)} />
-                        </TableCell>
-                        <TableCell>{account.seat ?? '—'}</TableCell>
-                        <TableCell>{account.tournamentIds?.length ? account.tournamentIds.map(tournamentName).join(', ') : 'All'}</TableCell>
-                        <TableCell>{account.twoFactorEnabled ? '✓ On' : 'Off'}</TableCell>
-                        <TableCell align="right">
-                          <IconButton
-                            aria-label={`Edit ${account.email}`}
-                            onClick={() => { setEditingId(account.uid); setOpenModal(true) }}
-                          >
-                            <Edit />
-                          </IconButton>
-                          {/* Deleting the signed-in account is refused by the
-                              server; disabling it here says so before the click. */}
-                          <IconButton
-                            aria-label={`Delete ${account.email}`}
-                            disabled={account.uid === uid}
-                            title={account.uid === uid ? 'You cannot delete your own account' : undefined}
-                            onClick={() => setDeleteConfirm(account)}
-                          >
-                            <Delete />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-          </>
-        )}
+                  ))}
+                </TableBody>
+              </Table>
+              <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
+            </TableContainer>
+          )}
+        </>
       </Container>
 
       <Dialog open={openModal} onClose={closeModal} fullWidth maxWidth="sm">

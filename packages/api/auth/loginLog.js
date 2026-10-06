@@ -152,25 +152,31 @@ const serialize = ({ _id, at, ...entry }) => ({ ...entry, at: new Date(at).toISO
  * Always capped: an audit log is the one collection guaranteed to outgrow every
  * other, so there is no way to ask for all of it in one response.
  */
-export async function listLogins({ limit, email, outcome } = {}) {
+export async function listLogins({ limit, email, outcome, page = 1 } = {}) {
   const requested = Number(limit)
   const size = Number.isFinite(requested) && requested > 0 ? Math.min(Math.trunc(requested), MAX_PAGE) : DEFAULT_PAGE
+  const skip = (Math.max(1, page) - 1) * size
 
   const filter = {}
   if (email) filter.email = normalizeEmail(email)
   if (outcome && OUTCOMES.includes(outcome)) filter.outcome = outcome
 
   if (!isMongoConfigured()) {
-    return memoryLog
+    const found = memoryLog
       .filter((entry) => Object.entries(filter).every(([field, value]) => entry[field] === value))
-      .slice(0, size)
-      .map(serialize)
+    return { rows: found.slice(skip, skip + size).map(serialize), total: found.length }
   }
 
-  const rows = await (await loginCollection())
-    .find(filter, { projection: { _id: 0 } })
-    .sort({ at: -1 })
-    .limit(size)
-    .toArray()
-  return rows.map(serialize)
+  const collection = await loginCollection()
+  const [rows, total] = await Promise.all([
+    collection
+      .find(filter, { projection: { _id: 0 } })
+      // Newest first, and sorted before skipping so a page is stable.
+      .sort({ at: -1 })
+      .skip(skip)
+      .limit(size)
+      .toArray(),
+    collection.countDocuments(filter),
+  ])
+  return { rows: rows.map(serialize), total }
 }

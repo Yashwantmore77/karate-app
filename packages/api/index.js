@@ -10,6 +10,7 @@ import { security } from './middleware/security.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { authRoutes } from './routes/auth.js'
 import { userRoutes } from './routes/users.js'
+import { officialRoutes } from './routes/officials.js'
 import { tournamentRoutes } from './routes/tournaments.js'
 import { categoryRoutes } from './routes/categories.js'
 import { competitorRoutes } from './routes/competitors.js'
@@ -73,6 +74,7 @@ export function createApp() {
 
   app.use(`${API_BASE}/auth`, authRoutes())
   app.use(`${API_BASE}/users`, userRoutes())
+  app.use(`${API_BASE}/officials`, officialRoutes())
   app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores, tms))
   app.use(`${API_BASE}/tournaments`, tmsRoutes(tms, stores))
   // Public APIs are kept apart from the admin ones (section 56).
@@ -153,6 +155,29 @@ export function createApp() {
       if (typeof ack === 'function') ack(snapshot)
       else socket.emit('match:snapshot', snapshot)
       io.to(matchId).emit('match:control', { matchId, controllerId: room.controllerId })
+    })
+
+    /**
+     * Seizes a mat someone else holds.
+     *
+     * Deliberate and explicit, because control is otherwise only released on
+     * disconnect: a tab that died without the server noticing keeps a mat
+     * forever, and every referee after it presses dead buttons. The loser is
+     * told, so a mat never changes hands silently mid-bout.
+     */
+    socket.on('match:takeover', ({ matchId } = {}, ack) => {
+      const room = rooms.get(matchId)
+      if (!room) return ack?.({ error: 'unknown_match' })
+      if (!canControlMat(socket.user)) return ack?.({ error: 'forbidden' })
+
+      const previousId = room.controllerId
+      room.claim(socket.id, { force: true })
+      io.to(matchId).emit('match:control', {
+        matchId,
+        controllerId: room.controllerId,
+        takenFrom: previousId,
+      })
+      ack?.({ ok: true, controllerId: room.controllerId })
     })
 
     socket.on('match:cmd', ({ matchId, cmd, payload, clientEventId } = {}, ack) => {

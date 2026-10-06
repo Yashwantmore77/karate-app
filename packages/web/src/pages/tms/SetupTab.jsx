@@ -6,7 +6,7 @@ import {
 import { ArrowUpward, ArrowDownward, Delete, Add, ContentCopy } from '@mui/icons-material'
 import { formFields, FIELD_TYPES } from '@kumite/shared/registration.js'
 import { settingsOf } from '@kumite/shared/tms.js'
-import { tms, isRemote } from '../../data/tms'
+import { tms } from '../../data/tms'
 import { readFileBase64 } from '../../components/tms/download'
 import { checkFile } from '@kumite/shared/files.js'
 
@@ -123,12 +123,10 @@ export default function SetupTab({ tournament, reload, action }) {
               const data = await readFileBase64(file)
               const problem = checkFile({ name: file.name, type: file.type, data })
               if (problem || file.type === 'application/pdf') return action.notify({ severity: 'error', text: 'Use a PNG or JPEG of at most 2 MB.' })
-              // With a server the logo is a public file; offline it is kept
-              // inline on the tournament, as there is no file server to link to.
-              const logoUrl = isRemote
-                ? tms.publicFileUrl((await action.run(() => tms.uploadFile(tid, { name: file.name, type: file.type, data, purpose: 'logo' })))?.id)
-                : `data:${file.type};base64,${data}`
-              if (!logoUrl) return
+              // The logo is a public file the tournament links to.
+              const stored = await action.run(() => tms.uploadFile(tid, { name: file.name, type: file.type, data, purpose: 'logo' }))
+              if (!stored) return
+              const logoUrl = tms.publicFileUrl(stored.id)
               setDetails((d) => ({ ...d, logoUrl }))
               await action.run(() => tms.updateTournament(tid, { logoUrl }), 'Logo uploaded')
               reload()

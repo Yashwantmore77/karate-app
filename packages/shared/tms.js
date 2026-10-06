@@ -904,19 +904,6 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return { match, category }
   }
 
-  /** Section 37: mat, time, referee and judges for a bout. */
-  async function scheduleMatch(actor, tournamentId, matchId, { mat, scheduledAt, refereeId, judgeIds }) {
-    const { match } = await findBridgedMatch(tournamentId, matchId)
-    const patch = {}
-    if (mat !== undefined) patch.mat = mat
-    if (scheduledAt !== undefined) patch.scheduledAt = scheduledAt
-    if (refereeId !== undefined) patch.refereeId = refereeId
-    if (judgeIds !== undefined) patch.judgeIds = judgeIds
-    const after = await stores.matches.update(matchId, patch)
-    await record(actor, { tournamentId, action: A.MATCH_SCHEDULED, entity: 'match', entityId: matchId, before: match, after })
-    return after
-  }
-
   /** Rule 6: a finished result changes only with a reason, and leaves a record. */
   async function correctResult(actor, tournamentId, matchId, { winner, avgRed, avgBlue, resultType = 'COMPLETED' }, reason) {
     const { match, category } = await findBridgedMatch(tournamentId, matchId)
@@ -1384,7 +1371,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer,
     // matches and results
-    generateMatches, listMatches, scheduleMatch, correctResult, results, generateBracket, bracketView, syncBracket,
+    generateMatches, listMatches, correctResult, results, generateBracket, bracketView, syncBracket,
     publishResults, listMedals, tally, generateCertificates, listCertificates,
     // links and coaches
     getLink, saveLink, linkInfo, openLink, coachOverview,

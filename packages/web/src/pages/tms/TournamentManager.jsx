@@ -6,7 +6,6 @@ import PageBar from '../../components/PageBar'
 import StatusBadge from '../../components/tms/StatusBadge'
 import useAction from '../../components/tms/useAction'
 import { tournaments as tournamentStore } from '../../data/domain'
-import { setActor } from '../../data/tms'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 import OverviewTab from './OverviewTab'
 import SetupTab from './SetupTab'
@@ -45,10 +44,6 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   const [version, setVersion] = useState(0)
   const action = useAction()
   const role = profile?.role || 'admin'
-
-  // The offline service records this identity in the audit log, as the API
-  // would from the token.
-  useEffect(() => { setActor({ uid, role }) }, [uid, role])
 
   const reload = useCallback(async () => {
     const t = await tournamentStore.get(tournamentId)

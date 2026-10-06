@@ -110,7 +110,7 @@ describe('validate', () => {
 })
 
 describe('array fields', () => {
-  const schema = { ids: { type: 'array', items: { type: 'string', max: 5 }, max: 2 } }
+  const schema = { ids: { type: 'array', items: { type: 'string', max: 5 }, maxItems: 2 } }
   it('checks every item and the length', () => {
     expect(validate({ ids: ['a', 'b'] }, schema)).toEqual({ ids: ['a', 'b'] })
     expect(() => validate({ ids: ['a', 'b', 'c'] }, schema)).toThrow('invalid_ids')

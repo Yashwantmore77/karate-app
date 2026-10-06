@@ -10,7 +10,7 @@ import {
 } from '@kumite/shared/rules.js'
 import { initialMatchState, UNDO } from '@kumite/shared/commands.js'
 import { toMinutesSeconds, parseDuration } from '@kumite/shared/format.js'
-import { displayRepo } from '../../data/repo'
+import { displayRepo } from '../../data/display'
 import { useMatchChannel } from '../../hooks/useMatchChannel'
 import { useMatchClock } from '../../hooks/useMatchClock'
 import { useServerNow } from '../../hooks/useServerNow'
@@ -80,7 +80,7 @@ export default function KumiteConsole({
   matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize, rules = null, displayInfo = null
 }) {
   const observing = mode === 'observe'
-  const [state, send] = useMatchChannel(matchId, { control: !observing })
+  const [state, send, mat] = useMatchChannel(matchId, { control: !observing })
   const [fieldNumberDraft, setFieldNumberDraft] = useState('1')
   const [pendingAction, setPendingAction] = useState(null)
   const [decisionOpen, setDecisionOpen] = useState(false)
@@ -131,7 +131,11 @@ export default function KumiteConsole({
     return () => clearInterval(id)
   }, [observing, state, matchId, blueComp?.name, redComp?.name, serverNow, displayInfo])
 
-  const disabled = tournamentExpired || observing
+  // The server hands one mat to one socket, so holding it is the real question
+  // — not whether this screen asked for control. Anything else renders
+  // read-only, because a button that looks live and is refused is worse than
+  // one that is plainly out of reach.
+  const disabled = tournamentExpired || observing || !mat.holdsControl
   const clockRunning = view.clock.running
   const shownClock = view.koActive ? koClock : mainClock
 
@@ -285,6 +289,29 @@ export default function KumiteConsole({
       {tournamentExpired && (
         <Alert severity="error" sx={{ mb: 2 }}>
           Tournament expired. Scoring is read-only.
+        </Alert>
+      )}
+
+      {/* Only for a screen that came here to run the mat. An observer is
+          meant to be read-only and needs no explanation for it. */}
+      {!observing && mat.contested && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => mat.takeover()}>
+              Take over
+            </Button>
+          }
+        >
+          Another device is running this mat, so the controls are read-only.
+          Taking over moves control here and makes that device read-only.
+        </Alert>
+      )}
+
+      {!observing && mat.lastError === 'taken_over' && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Another referee took over this mat. Your controls are now read-only.
         </Alert>
       )}
 

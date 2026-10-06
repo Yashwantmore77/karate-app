@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -9,32 +9,46 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { Edit, Delete, Visibility, Add } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
+
+// The server applies these when a body leaves them out; the form shows the
+// same numbers so a new tournament is not a surprise.
+const DEFAULT_JUDGE_COUNT = 4
+const DEFAULT_SLOT_MINUTES = 15
 
 const validationSchema = Yup.object({
   name: Yup.string().required('Tournament name required').min(3, 'Name too short'),
   location: Yup.string().required('Location required'),
   date: Yup.date().nullable().required('Date required'),
   template: Yup.string().required('Template required'),
+  // Bounded the same way the API bounds them, so the form refuses what the
+  // server would refuse rather than failing after a round trip.
+  judgeCount: Yup.number()
+    .typeError('Judges must be a number')
+    .integer('Whole judges only')
+    .min(1, 'At least one judge')
+    .max(8, 'At most eight judges')
+    .required('Panel size required'),
+  slotMinutes: Yup.number()
+    .typeError('Slot length must be a number')
+    .integer('Whole minutes only')
+    .min(1, 'At least one minute')
+    .max(240, 'At most four hours')
+    .required('Slot length required'),
 })
 
 export default function AdminTournamentList({ uid }) {
   const navigate = useNavigate()
-  const [tournaments, setTournaments] = useState([])
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  // One place to re-read from, so a write never has to guess what the store now
-  // holds — in API mode the server may have filled in fields we did not send.
-  const refresh = () => tournamentStore.list().then(setTournaments)
-
-  useEffect(() => {
-    let alive = true
-    tournamentStore.list().then((rows) => { if (alive) setTournaments(rows) })
-    return () => { alive = false }
-  }, [])
+  const {
+    rows: tournaments, total, page, limit, search, setSearch, setPage, refresh, reset,
+  } = usePagedList(useCallback((options) => tournamentStore.page(options), []))
 
   const editingTournament = editingId ? tournaments.find(t => t.id === editingId) : null
 
@@ -43,7 +57,9 @@ export default function AdminTournamentList({ uid }) {
       name: editingTournament?.name || '',
       location: editingTournament?.location || '',
       date: editingTournament?.date ? dayjs(editingTournament.date) : null,
-      template: editingTournament?.template || 'kata'
+      template: editingTournament?.template || 'kata',
+      judgeCount: editingTournament?.judgeCount ?? DEFAULT_JUDGE_COUNT,
+      slotMinutes: editingTournament?.slotMinutes ?? DEFAULT_SLOT_MINUTES,
     },
     enableReinitialize: true,
     validationSchema,
@@ -57,10 +73,19 @@ export default function AdminTournamentList({ uid }) {
         location: values.location,
         date: formatDate(values.date),
         template: values.template,
+        // Sent as numbers: the API types these strictly, and a text input
+        // hands back a string.
+        judgeCount: Number(values.judgeCount),
+        slotMinutes: Number(values.slotMinutes),
       }
-      if (editingId) await tournamentStore.update(editingId, fields)
-      else await tournamentStore.create(fields)
-      await refresh()
+      if (editingId) {
+        await tournamentStore.update(editingId, fields)
+        await refresh()
+      } else {
+        await tournamentStore.create(fields)
+        // A new tournament belongs on the first page, not wherever we were.
+        await reset()
+      }
       handleCloseModal()
     }
   })
@@ -105,21 +130,28 @@ export default function AdminTournamentList({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
-        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">Tournaments ({tournaments.length})</Typography>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={handleOpenCreate}
-          >
-            New Tournament
-          </Button>
+        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          {/* The count is the total behind the search, not the rows on screen. */}
+          <Typography variant="h6">Tournaments ({total})</Typography>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <TableSearch
+              value={search}
+              onChange={setSearch}
+              placeholder="Search name or location"
+            />
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={handleOpenCreate}
+            >
+              New Tournament
+            </Button>
+          </Box>
         </Box>
 
         {tournaments.length === 0 ? (
-          <Paper elevation={0} sx={{ p: 3, textAlign: 'center', border: '1px dashed', borderColor: 'divider' }}>
-            <Typography color="text.secondary">No tournaments yet</Typography>
-            <Typography variant="caption" color="text.secondary">Click "New Tournament" to create one</Typography>
+          <Paper elevation={0} sx={{ border: '1px dashed', borderColor: 'divider' }}>
+            <NoResults query={search} noun="tournaments" />
           </Paper>
         ) : (
           <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
@@ -197,6 +229,7 @@ export default function AdminTournamentList({ uid }) {
                 ))}
               </TableBody>
             </Table>
+            <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
           </TableContainer>
         )}
       </Container>
@@ -264,6 +297,40 @@ export default function AdminTournamentList({ uid }) {
               </Select>
               {formik.errors.template && <FormHelperText>{formik.errors.template}</FormHelperText>}
             </FormControl>
+
+            {/* These two decide what "at the same time" means here: the slot
+                length is the window a bout holds everyone on it for, which is
+                what the double-booking check measures. */}
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid size={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  name="judgeCount"
+                  label="Judges on a panel"
+                  value={formik.values.judgeCount}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  error={!!formik.errors.judgeCount}
+                  helperText={formik.errors.judgeCount || 'Usually 4'}
+                  inputProps={{ min: 1, max: 8 }}
+                />
+              </Grid>
+              <Grid size={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  name="slotMinutes"
+                  label="Slot length (minutes)"
+                  value={formik.values.slotMinutes}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  error={!!formik.errors.slotMinutes}
+                  helperText={formik.errors.slotMinutes || 'How long a bout holds its people'}
+                  inputProps={{ min: 1, max: 240 }}
+                />
+              </Grid>
+            </Grid>
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>

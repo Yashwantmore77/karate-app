@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { requireAuth, requireRole, tournamentAccess, mayAccessTournament } from '../auth/middleware.js'
 import { findUserRecord } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
+import { readPageQuery, pageMeta } from '../lib/pagination.js'
+import { DEFAULT_SLOT_MINUTES, SLOT_MIN_MINUTES, SLOT_MAX_MINUTES } from '../lib/schedule.js'
 
 const DAY = { type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/, max: 10, nullable: true }
 
@@ -13,6 +15,21 @@ const TOURNAMENT_SCHEMA = {
   date: { type: 'string', required: true, pattern: /^\d{4}-\d{2}-\d{2}$/, max: 10 },
   template: { type: 'enum', values: ['kata', 'kumite'], required: true },
   status: { type: 'enum', values: ['draft', 'active', 'completed'], default: 'draft' },
+  // How many judges sit on a panel here. Four is the usual WKF panel, but
+  // smaller events run three or two, so it is the tournament's to decide.
+  judgeCount: { type: 'integer', min: 1, max: 8, default: 4 },
+  // How long one bout occupies its mat, and therefore everyone on it. This is
+  // what makes two matches "at the same time" a question with an answer, so
+  // the clash check has something to measure.
+  //
+  // A match stores the window it was given, so changing this moves later
+  // bouts without disturbing ones already on the schedule.
+  slotMinutes: {
+    type: 'integer',
+    min: SLOT_MIN_MINUTES,
+    max: SLOT_MAX_MINUTES,
+    default: DEFAULT_SLOT_MINUTES,
+  },
 
   // PRD section 5. All optional, so the scoring app's own tournament form keeps
   // working unchanged; the PRD lifecycle lives in `lifecycleStatus`, moved only
@@ -55,9 +72,21 @@ export function tournamentRoutes(stores, tms) {
   router.get('/', async (req, res) => {
     // A coach session belongs to one tournament and reads it through /coach.
     if (req.user.role === 'coach') return res.status(403).json({ error: 'forbidden' })
+    const { page, limit, q } = readPageQuery(req.query)
     const account = await findUserRecord(req.user.uid)
-    const rows = await tournaments.list()
-    res.json({ tournaments: rows.filter((t) => mayAccessTournament(account, t.id)) })
+    // An account limited to some tournaments (PRD section 4) pages through
+    // only those; everyone else pages the store directly.
+    if (account?.tournamentIds?.length && account.role !== 'super_admin') {
+      const needle = q.toLowerCase()
+      const allowed = (await tournaments.list()).filter((t) => mayAccessTournament(account, t.id)
+        && (!needle || [t.name, t.location].some((v) => String(v ?? '').toLowerCase().includes(needle))))
+      const start = (page - 1) * limit
+      return res.json({ tournaments: allowed.slice(start, start + limit), ...pageMeta({ page, limit, total: allowed.length }) })
+    }
+    const { rows, total } = await tournaments.paginate({}, {
+      q, searchFields: ['name', 'location'], page, limit,
+    })
+    res.json({ tournaments: rows, ...pageMeta({ page, limit, total }) })
   })
 
   router.get('/:id', async (req, res) => {

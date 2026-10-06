@@ -26,8 +26,6 @@ const crud = (segment, key) => ({
   remove: (tid, id) => send('DELETE', `${T(tid)}/${segment}/${id}`),
 })
 
-export const setActor = () => {}
-
 export const tms = {
   updateTournament: async (tid, patch) => (await send('PATCH', T(tid), patch)).tournament,
   updateSettings: async (tid, settings) => (await send('PATCH', `${T(tid)}/settings`, settings)).tournament,
@@ -40,9 +38,10 @@ export const tms = {
   teams: crud('teams', 'team'),
   players: {
     list: async (tid, filter) => (await get(`${T(tid)}/players${qs(filter)}`)).players,
+    // Screens count pages from 0 (as the MUI pager does); the API from 1.
     async page(tid, filter = {}, { page = 0, pageSize = 25, sort, dir } = {}) {
-      const res = await get(`${T(tid)}/players${qs({ ...filter, page, pageSize, sort, dir })}`)
-      return { rows: res.players, total: res.total, page: res.page, pageSize: res.pageSize }
+      const res = await get(`${T(tid)}/players${qs({ ...filter, page: page + 1, limit: pageSize, sort, dir })}`)
+      return { rows: res.players, total: res.total, page: res.page - 1, pageSize: res.limit }
     },
     create: async (tid, doc) => (await send('POST', `${T(tid)}/players`, doc)).player,
     update: async (tid, id, patch) => (await send('PATCH', `${T(tid)}/players/${id}`, patch)).player,
@@ -62,7 +61,6 @@ export const tms = {
   movePlayer: async (tid, body) => (await send('POST', `${T(tid)}/pools/move`, body)).pools,
   matches: async (tid, filter) => (await get(`${T(tid)}/matches${qs(filter)}`)).matches,
   generateMatches: (tid, opts = {}) => send('POST', `${T(tid)}/matches/generate`, opts),
-  scheduleMatch: async (tid, mid, body) => (await send('PATCH', `${T(tid)}/matches/${mid}/schedule`, body)).match,
   correctResult: async (tid, mid, body, reason) => (await send('POST', `${T(tid)}/matches/${mid}/correct`, { ...body, reason: reason || null })).match,
   results: async (tid) => (await get(`${T(tid)}/results`)).results,
   generateBracket: async (tid, divisionKey) => (await send('POST', `${T(tid)}/brackets/generate`, { divisionKey })).bracket,
@@ -78,8 +76,8 @@ export const tms = {
   markRead: (tid) => send('POST', `${T(tid)}/notifications/read`, {}),
   audit: async (tid) => (await get(`${T(tid)}/audit`)).audit,
   async auditPage(tid, { page = 0, pageSize = 25, q } = {}) {
-    const res = await get(`${T(tid)}/audit${qs({ page, pageSize, q })}`)
-    return { rows: res.audit, total: res.total, page: res.page, pageSize: res.pageSize }
+    const res = await get(`${T(tid)}/audit${qs({ page: page + 1, limit: pageSize, q })}`)
+    return { rows: res.audit, total: res.total, page: res.page - 1, pageSize: res.limit }
   },
   uploadFile: async (tid, file) => (await send('POST', `${T(tid)}/files`, file)).file,
   weighInReminder: (tid) => send('POST', `${T(tid)}/weigh-in/reminders`, {}),

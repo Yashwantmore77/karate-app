@@ -24,8 +24,18 @@ export class MatchRoom {
     return { matchId: this.matchId, seq: this.seq, controllerId: this.controllerId, state: this.state }
   }
 
-  claim(socketId) {
-    if (this.controllerId && this.controllerId !== socketId) return false
+  /**
+   * Takes the mat, if it is free or already yours.
+   *
+   * `force` is how a mat gets unstuck. Control is otherwise only given up on
+   * disconnect, so a tab that died without the server noticing — or a device
+   * left open in a bag — holds a mat indefinitely, and every referee who
+   * arrives afterwards presses buttons that do nothing. Seizing it is a
+   * deliberate act by someone with the whistle, never automatic: quietly
+   * moving control mid-bout is worse than refusing it.
+   */
+  claim(socketId, { force = false } = {}) {
+    if (this.controllerId && this.controllerId !== socketId && !force) return false
     this.controllerId = socketId
     return true
   }

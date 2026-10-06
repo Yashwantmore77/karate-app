@@ -1,16 +1,10 @@
-import { serverUrl } from '../session'
-import * as local from './local'
 import * as api from './api'
 
 /**
- * Tournament management (the PRD), from whichever side is configured — chosen
- * exactly like the competition data in ../domain: the API when VITE_SERVER_URL
- * is set, this browser's storage otherwise. Both run the same shared rules.
+ * Tournament management (the PRD), over the API. The rules themselves live in
+ * @kumite/shared/tms.js and run on the server.
  */
-const impl = serverUrl() ? api : local
-
-export const { tms, setActor } = impl
-export const isRemote = impl === api
+export const { tms } = api
 
 /** A refusal from the service or the API, as something a person can read. */
 export function describeError(err) {
@@ -19,7 +13,6 @@ export function describeError(err) {
   if (details?.errors?.length) return details.errors.map((e) => (e.row ? `Row ${e.row}: ${e.message}` : e.message)).join('; ')
   return ERROR_TEXT[code] || code.replace(/_/g, ' ')
 }
-
 const ERROR_TEXT = {
   entries_locked: 'Entries are locked. Unlock entries (with a reason) to change this.',
   entries_not_locked: 'Lock entries before generating pools.',
@@ -45,4 +38,10 @@ const ERROR_TEXT = {
   team_already_registered: 'Your team is already registered.',
   no_pools: 'Generate pools first.',
   forbidden: 'You do not have permission to do that.',
+  schedule_conflict: 'Someone on this bout is already booked at that time.',
+  referee_also_judge: 'The referee cannot also sit on the judging panel.',
+  too_many_judges: 'More judges than this tournament seats on a panel.',
+  invalid_judgeIds: 'Only judge accounts can sit on the panel.',
+  invalid_refereeId: 'Only a referee (or admin) can referee a bout.',
+  tournament_forbidden: 'Your account is not assigned to this tournament.',
 }

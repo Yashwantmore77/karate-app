@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// The rest of the suite runs with no server, so displayRepo resolves to local
-// storage. This file pins the other branch: what a hall screen does when the
-// API is the source of truth.
+// What a hall screen does against the API: read, publish, and keep polling
+// through a dropped request.
 vi.mock('./session', () => ({
   apiUrl: (path) => `http://api.test/api/v1${path}`,
   getToken: () => null,
@@ -10,7 +9,7 @@ vi.mock('./session', () => ({
   serverUrl: () => 'http://api.test',
 }))
 
-const { displayRepo } = await import('./repo')
+const { displayRepo } = await import('./display')
 
 let calls, board
 

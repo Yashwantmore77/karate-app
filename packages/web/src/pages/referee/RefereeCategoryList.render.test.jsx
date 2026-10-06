@@ -1,27 +1,30 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import RefereeCategoryList from './RefereeCategoryList'
+import * as fake from '../../test/fakeDomain'
+
+vi.mock('../../data/domain', () => import('../../test/fakeDomain'))
 
 const seed = () => {
   const future = new Date()
   future.setFullYear(future.getFullYear() + 1)
   const futureDate = future.toISOString().split('T')[0]
-  localStorage.setItem('tournaments', JSON.stringify([
+  fake.seed({ tournaments: [
     { id: 't-active', name: 'Spring Cup', location: 'NYC', date: futureDate, template: 'kata', status: 'active' },
     { id: 't-active-2', name: 'Autumn Cup', location: 'Chicago', date: futureDate, template: 'kata', status: 'active' },
     { id: 't-expired', name: 'Winter Cup', location: 'Boston', date: '2020-01-01', template: 'kumite', status: 'completed' },
-  ]))
-  localStorage.setItem('categories-t-active', JSON.stringify([
+  ] })
+  fake.seed({ categories: [
     { id: 'cat-1', tournamentId: 't-active', name: 'U12 Boys Kata', ageGroup: 'U12', gender: 'M', division: 'Beginner' }
-  ]))
-  localStorage.setItem('categories-t-active-2', JSON.stringify([
+  ] })
+  fake.seed({ categories: [
     { id: 'cat-3', tournamentId: 't-active-2', name: 'U16 Girls Kata', ageGroup: 'U16', gender: 'F', division: 'Advanced' }
-  ]))
-  localStorage.setItem('categories-t-expired', JSON.stringify([
+  ] })
+  fake.seed({ categories: [
     { id: 'cat-2', tournamentId: 't-expired', name: 'U14 Girls Kumite', ageGroup: 'U14', gender: 'F', division: 'Advanced' }
-  ]))
+  ] })
 }
 
 const renderPage = () =>
@@ -33,12 +36,8 @@ const renderPage = () =>
 
 describe('RefereeCategoryList - searchable tournament dropdown', () => {
   beforeEach(() => {
-    localStorage.clear()
+    fake.reset()
     seed()
-  })
-
-  afterEach(() => {
-    localStorage.clear()
   })
 
   it('auto-selects the first non-expired tournament and shows its categories', async () => {

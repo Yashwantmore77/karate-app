@@ -8,6 +8,7 @@ import { boutOutcome } from '@kumite/shared/results.js'
 import { settingsOf } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
 import { listOfficials } from '../../data/officials'
+import { matches as matchStore } from '../../data/domain'
 import DataTable from '../../components/tms/DataTable'
 import StatusBadge from '../../components/tms/StatusBadge'
 
@@ -87,7 +88,7 @@ export default function MatchesTab({ tournament, version, action }) {
           { key: 'actions', label: '', sortable: false, render: (m) => (
             <Stack direction="row">
               <Tooltip title="Open scoring console"><span><IconButton size="small" aria-label="Open scoring console" disabled={!m.redId || !m.blueId} onClick={() => navigate(`/admin/match/${m.id}`)}><SportsMma fontSize="small" /></IconButton></span></Tooltip>
-              <Tooltip title="Schedule"><IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, number: m.matchNumber, mat: m.mat || 1, scheduledAt: m.scheduledAt ? m.scheduledAt.slice(0, 16) : '', refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton></Tooltip>
+              <Tooltip title="Schedule"><IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, categoryId: m.categoryId, number: m.matchNumber, mat: m.mat || 1, scheduledAt: m.scheduledAt ? m.scheduledAt.slice(0, 16) : '', refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton></Tooltip>
               <Tooltip title={boutOutcome(m) ? 'Correct result' : 'Enter result'}><span><IconButton size="small" aria-label={boutOutcome(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '' })}><EditNote fontSize="small" /></IconButton></span></Tooltip>
             </Stack>
           ) },
@@ -117,7 +118,9 @@ export default function MatchesTab({ tournament, version, action }) {
           <Button variant="contained" onClick={async () => {
             const s = schedule
             setSchedule(null)
-            await action.run(() => tms.scheduleMatch(tid, s.id, { mat: s.mat, scheduledAt: s.scheduledAt ? new Date(s.scheduledAt).toISOString() : null, refereeId: s.refereeId || null, judgeIds: s.judgeIds || [] }), 'Match scheduled')
+            // Through the match API, which gives the bout its slot and refuses to
+            // book anyone into two bouts at once.
+            await action.run(() => matchStore.update(s.categoryId, s.id, { mat: s.mat, scheduledAt: s.scheduledAt ? new Date(s.scheduledAt).toISOString() : null, refereeId: s.refereeId || null, judgeIds: s.judgeIds || [] }), 'Match scheduled')
             load()
           }}>Save</Button>
         </DialogActions>

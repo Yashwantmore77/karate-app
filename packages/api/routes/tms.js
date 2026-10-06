@@ -3,6 +3,7 @@ import { requireAuth, requirePermission, tournamentAccess } from '../auth/middle
 import { findUserRecord } from '../auth/users.js'
 import { validate } from '../lib/validate.js'
 import { notFound } from '../lib/errors.js'
+import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { PERMISSION as P, can } from '@kumite/shared/permissions.js'
 import { FILE_SCHEMA } from './files.js'
@@ -173,9 +174,11 @@ export function tmsRoutes(tms, stores) {
     }
     // With ?page, one page and the total (section 62); without, the whole list
     // as before, for exports and the draw screens.
+    // Same paging contract as every other list: page from 1, limit, pages.
     if (req.query.page !== undefined) {
-      const { rows, total, page, pageSize } = await tms.pagePlayers(tid(req), filter, req.query)
-      return res.json({ players: rows, total, page, pageSize })
+      const { page, limit } = readPageQuery(req.query)
+      const { rows, total } = await tms.pagePlayers(tid(req), filter, { page: page - 1, pageSize: limit, sort: req.query.sort, dir: req.query.dir })
+      return res.json({ players: rows, ...pageMeta({ page, limit, total }) })
     }
     res.json({ players: await tms.listPlayers(tid(req), filter) })
   })
@@ -270,16 +273,6 @@ export function tmsRoutes(tms, stores) {
     const body = validate(req.body || {}, { divisionKey: { type: 'string', max: 200, nullable: true } })
     res.status(201).json(await tms.generateMatches(withMeta(req), tid(req), body))
   })
-  router.patch('/:tid/matches/:id/schedule', requirePermission(P.MATCH_GENERATE), async (req, res) => {
-    const body = validate(req.body, {
-      mat: { type: 'integer', min: 1, max: 99, nullable: true },
-      scheduledAt: { type: 'string', max: 30, nullable: true },
-      refereeId: { ...ID, nullable: true },
-      judgeIds: { type: 'array', items: { type: 'string', max: 80 }, max: 9 },
-    }, { partial: true })
-    if (body.judgeIds) body.judgeIds = [...new Set(body.judgeIds)]
-    res.json({ match: await tms.scheduleMatch(withMeta(req), tid(req), req.params.id, body) })
-  })
   router.post('/:tid/matches/:id/correct', requirePermission(P.RESULT_MANAGE), async (req, res) => {
     const { reason, ...result } = validate(req.body, {
       winner: { type: 'enum', values: ['red', 'blue', 'tie'], nullable: true },
@@ -370,9 +363,9 @@ export function tmsRoutes(tms, stores) {
   })
   router.get('/:tid/audit', requirePermission(P.AUDIT_VIEW), async (req, res) => {
     if (req.query.page !== undefined) {
-      const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 120) : undefined
-      const { rows, total, page, pageSize } = await tms.pageAudit(tid(req), { ...req.query, q })
-      return res.json({ audit: rows, total, page, pageSize })
+      const { page, limit, q } = readPageQuery(req.query)
+      const { rows, total } = await tms.pageAudit(tid(req), { page: page - 1, pageSize: limit, q: q || undefined })
+      return res.json({ audit: rows, ...pageMeta({ page, limit, total }) })
     }
     res.json({ audit: await tms.auditTrail(tid(req)) })
   })

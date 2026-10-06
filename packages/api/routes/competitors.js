@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, requireRole } from '../auth/middleware.js'
 import { bodyReader, loadOrFail } from './resource.js'
+import { readPageQuery, pageMeta } from '../lib/pagination.js'
 
 const COMPETITOR_SCHEMA = {
   name: { type: 'string', required: true, min: 2, max: 120 },
@@ -25,7 +26,11 @@ export function competitorRoutes(stores) {
 
   nested.get('/:categoryId/competitors', async (req, res) => {
     await loadOrFail(categories, req.params.categoryId)
-    res.json({ competitors: await competitors.list({ categoryId: req.params.categoryId }) })
+    const { page, limit, q } = readPageQuery(req.query)
+    const { rows, total } = await competitors.paginate({ categoryId: req.params.categoryId }, {
+      q, searchFields: ['name', 'bib'], page, limit,
+    })
+    res.json({ competitors: rows, ...pageMeta({ page, limit, total }) })
   })
 
   nested.post('/:categoryId/competitors', requireRole('admin'), async (req, res) => {

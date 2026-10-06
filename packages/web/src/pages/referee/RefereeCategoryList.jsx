@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Container, Box, Toolbar, Typography, Button, Paper, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Alert, Chip, IconButton, Autocomplete, TextField } from '@mui/material'
 import { Visibility } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
+import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 import AssignedMatches from '../../components/tms/AssignedMatches'
@@ -10,8 +12,19 @@ import AssignedMatches from '../../components/tms/AssignedMatches'
 export default function RefereeCategoryList({ uid }) {
   const navigate = useNavigate()
   const [tournaments, setTournaments] = useState([])
-  const [categories, setCategories] = useState([])
   const [selectedTournamentId, setSelectedTournamentId] = useState('')
+
+  const {
+    rows: categories, total, page, limit, search, setSearch, setPage,
+  } = usePagedList(
+    // Nothing to ask for until a tournament is chosen.
+    useCallback((options) => (
+      selectedTournamentId
+        ? categoryStore.page(selectedTournamentId, options)
+        : Promise.resolve({ rows: [], total: 0, pages: 1 })
+    ), [selectedTournamentId]),
+    { deps: [selectedTournamentId] }
+  )
 
   useEffect(() => {
     let alive = true
@@ -26,15 +39,6 @@ export default function RefereeCategoryList({ uid }) {
     return () => { alive = false }
   }, [])
 
-  useEffect(() => {
-    if (!selectedTournamentId) return
-    let alive = true
-    categoryStore.list(selectedTournamentId).then((rows) => {
-      if (alive) setCategories(rows)
-    })
-    return () => { alive = false }
-  }, [selectedTournamentId])
-
   const selectedTournament = tournaments.find(t => t.id === selectedTournamentId)
 
   const isSelectedExpired = selectedTournament ? isExpired(selectedTournament.date) : false
@@ -44,7 +48,7 @@ export default function RefereeCategoryList({ uid }) {
       <PageBar>
         <Toolbar>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">Referee Dashboard</Typography>
+            <Typography variant="h6">Matches</Typography>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
               {selectedTournament ? selectedTournament.name : 'Select a tournament'}
             </Typography>
@@ -132,7 +136,8 @@ export default function RefereeCategoryList({ uid }) {
         ) : (
           <>
             <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h6">Categories ({categories.length})</Typography>
+              <Typography variant="h6">Categories ({total})</Typography>
+              <TableSearch value={search} onChange={setSearch} placeholder="Search name, age or division" />
             </Box>
 
             <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
@@ -175,6 +180,7 @@ export default function RefereeCategoryList({ uid }) {
                   ))}
                 </TableBody>
               </Table>
+              <TablePager page={page} limit={limit} total={total} onPageChange={setPage} />
             </TableContainer>
           </>
         )}

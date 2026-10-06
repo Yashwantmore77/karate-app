@@ -8,12 +8,14 @@ Tracks every section of the PRD against what is built. Updated with each module.
 
 | Layer | Path | Notes |
 |---|---|---|
-| Business rules (one copy) | `packages/shared/tms.js` + `age.js`, `categories.js`, `lifecycle.js`, `pools.js`, `results.js`, `registration.js`, `permissions.js`, `audit.js`, `secret.js`, `files.js`, `reports.js`, `paging.js` | Runs on the API **and** in the offline browser build, so both enforce identical rules |
+| Business rules (one copy) | `packages/shared/tms.js` + `age.js`, `categories.js`, `lifecycle.js`, `pools.js`, `results.js`, `registration.js`, `permissions.js`, `audit.js`, `secret.js`, `files.js`, `reports.js`, `paging.js` | Run on the API; the web app calls them over REST |
 | API | `packages/api/routes/tms.js` (admin), `public.js`, `coach.js`, `files.js`, `auth.js`; `lib/mailer.js`, `lib/pdf.js` | `/api/v1/tournaments/:id/...`, `/api/v1/public/...`, `/api/v1/coach/...`, `/api/v1/files/...`; `/public` socket namespace |
 | Web | `packages/web/src/pages/tms/*` (admin tabs), `pages/public/*` (public site, coach portal), `components/tms/*` (reusable) | Admin: Tournaments → a tournament → **Manage tournament** |
-| Tests | `packages/shared/tms.test.js` (§64 flow on the service), `packages/api/tms.test.js` (§64 flow over HTTP), `packages/api/account.test.js` (access, reset, 2FA), `packages/web/src/data/tms/local.test.js` (offline adapter) | Plus a browser run of §64 in offline and API modes (not committed; needs Playwright) |
+| Tests | `packages/shared/tms.test.js` (§64 flow on the service), `packages/api/tms.test.js` (§64 flow over HTTP), `packages/api/account.test.js` (access, reset, 2FA) | Plus a browser run of §64 against the API (not committed; needs Playwright) |
 
 **Kept as it was:** the login screen and its role quick-select chips (Admin, Referee, Judge 1–4), the kumite console, the judge/referee screens and the original tournament/category screens. Everything PRD is added on top.
+
+**Merged with main:** main removed offline (local) mode and the Firebase mock, and added its own officials assignment, schedule clash checks, round-robin draw, mat takeover and list paging. This branch follows that: the app needs the API server; PRD bouts are scheduled through main's clash-checked match API; my paged endpoints use main's paging contract (`page` from 1, `limit`, `pages`).
 
 ---
 
@@ -38,11 +40,11 @@ Tracks every section of the PRD against what is built. Updated with each module.
 | 15 | Kata scoring | ⚠️ | Out of scope by your instruction (D1) |
 | 16 | Results | ✅ | |
 | 17 | Brackets | ✅ | |
-| 18 | Certificates | ✅ | Server-generated PDF (offline: browser print) |
+| 18 | Certificates | ✅ | Server-generated PDF, plus a printable page |
 | 19 | Reports | ✅ | Excel (.xlsx), CSV and server-generated PDF |
 | 20 | Public pages | ✅ | |
 | 21 | Real-time | ✅ | Scoring socket; a sign-in-free `/public` channel pushes updates to public pages and hall screens |
-| 22 | Testing | ✅ | 451 automated tests; §64 and the new features run in a browser in both modes |
+| 22 | Testing | ✅ | 540 automated tests after merging main; §64 run in a browser against the API |
 
 ---
 
@@ -161,14 +163,14 @@ The officer accounts are **not** on the login quick-select chips (kept unchanged
 ### §34 Pool results — ✅ played, wins, losses, score, points, penalties, rank, qualified; tie-breakers configurable (points, wins, head-to-head between two, score difference, score for, penalties).
 ### §35 Master pool / final — ✅ top N per pool (configurable) cross-seeded into a knockout (A1 v B2, B1 v A2).
 ### §36 Bracket — ✅ visual bracket, byes, fills itself as results arrive.
-### §37 Scheduling — ✅ mat, date/time, referee and judges per match; per-mat queue filter.
+### §37 Scheduling — ✅ mat, date/time, referee and judges per match through main's match API (refuses double-booking anyone, checks judge count and roles); per-mat queue filter.
 ### §38 Live display — ✅ `/display` hall screen shows category, round, match number, result and the next bout on the mat; updates by push; public page shows current matches.
 ### §39 Public tournament page — ✅ `/tournament/{slug}` with info, categories, teams, players, draw (after draw lock), live matches, results and medal tally (after publish). Drafts are hidden.
 ### §40 Search — ✅ player name/ID, team, club, category, match number (public and admin).
 ### §41 Filters — ✅ gender, event, team, registration status, payment status, weigh-in status, category, mat, match status. 🟡 club/district/state/country/age group/weight category are API filters; not all are in the UI yet.
 ### §42 Medals — ✅ stored on publish: player, team, club, category, event, rank, medal, tournament. Gold, silver, two bronzes (configurable).
 ### §43 Medal tally — ✅ by club, district, state, country.
-### §44 Certificates — ✅ every listed field incl. logo, unique certificate IDs; downloadable server-generated PDF (offline: print to PDF). Signature is a line, not an uploaded image.
+### §44 Certificates — ✅ every listed field incl. logo, unique certificate IDs; downloadable server-generated PDF, plus a printable page. Signature is a line, not an uploaded image.
 ### §45 Reports — ✅ all 11 reports (registration, player, team, category, weigh-in, pool, match, result, medal, payment, attendance) as Excel (.xlsx), CSV and server-generated PDF.
 ### §46 Dashboard — ✅ all listed counts per tournament, next matches. 🟡 "Total tournaments" across all events is on the tournament list, not a separate dashboard.
 ### §47 Notifications — ✅ in-app and email: registration submitted/approved/rejected/correction, payment, weigh-in reminder, draw published, matches scheduled, results published (teams); new registration, bulk upload, payment received (organisers). Email via `SMTP_URL`; switchable per tournament. SMS/WhatsApp are Phase 3.
@@ -200,7 +202,7 @@ The officer accounts are **not** on the login quick-select chips (kept unchanged
 
 ### §51 Admin navigation — ✅ as tabs on each tournament: Dashboard, Settings, Categories, Registrations (teams, players, bulk), Weigh-in, Draw/Pools, Matches (queue/live/completed), Results (pools, final, tally), Certificates, Reports, Audit log. Users & roles: existing Accounts page.
 ### §52 Coach panel — ✅ team, players, registration, bulk upload (Excel/CSV), document uploads, payment and weigh-in status, notifications (also emailed), link to draw/results. 🟡 certificates download for coaches pending.
-### §53 Referee panel — ✅ "Assigned to me" list, categories → matches → console. Judges get the same list.
+### §53 Referee panel — ✅ "Assigned to me" list, categories → matches → console; judges see only their own bouts (main's officials filtering).
 ### §54 Public website — ✅ home (`/tournaments`), details, categories, players, draw, live, results, tally.
 ### §55 Database entities — 🟡 implemented as collections: tournaments, ageGroups, weightCategories, teams, players (with event entries, payment and weigh-in embedded), pools, brackets, matches/competitors/categories (existing), medals, certificates, registrationLinks, notifications, auditLog, files, passwordResets, users. Indexed per tournament in Mongo. Embedded rather than separate tables for player_entries/payments/weigh_ins (D8).
 ### §56 API — ✅ modular `/api/v1/tournaments/{id}/settings|age-groups|weight-categories|teams|players|registrations|weigh-ins|pools|matches|results|certificates|...`; public APIs separate under `/api/v1/public`.
@@ -235,7 +237,7 @@ The officer accounts are **not** on the login quick-select chips (kept unchanged
 | Publish results | ✅ |
 | Certificate | ✅ |
 
-Verified three ways: shared service test, HTTP test, and a browser run of every step in both offline and API modes.
+Verified three ways: shared service test, HTTP test, and a browser run of every step against the API.
 
 ### §65 Future enhancements — ⬜ not started (by design).
 ### §66 Product vision — n/a.
@@ -249,18 +251,19 @@ Verified three ways: shared service test, HTTP test, and a browser run of every 
 | D1 | Kata workflow and kata judge panel with configurable calculation (§32–33) | Kata entries register, categorise, draw and fight bouts through the existing flag/score judging; no 5-judge drop-high/low panel | ⚠️ Open — kata is out of scope by your instruction. Ready to build when you want it |
 | D2 | Match statuses SCHEDULED…DISQUALIFIED (§27) | Bouts keep the scoring app's lowercase statuses (plus `cancelled`); walkover/disqualification are recorded as the result type | ✅ Resolved in behaviour; names differ so the existing console is untouched |
 | D3 | Excel upload and export (§15, §45) | Native .xlsx in and out, CSV too | ✅ Resolved |
-| D4 | Downloadable PDF certificates (§44) | Server-generated PDF; offline mode uses print to PDF | ✅ Resolved |
+| D4 | Downloadable PDF certificates (§44) | Server-generated PDF, plus a printable page | ✅ Resolved |
 | D5 | File uploads (§5, §12, §17) | Stored with the tournament, checked by content, private except logos | ✅ Resolved. Files sit in the database (≤ 2 MB each); move to object storage if volumes grow |
 | D6 | Configurable kumite rules feeding scoring (§29) | Duration and point gap applied by the console per bout | ✅ Resolved |
-| D7 | Real-time public updates (§57) | Pushed over the `/public` socket namespace (offline: follows other tabs) | ✅ Resolved |
+| D7 | Real-time public updates (§57) | Pushed over the `/public` socket namespace | ✅ Resolved |
 | D8 | Separate tables with foreign keys (§55) | Document collections; entries, payment and weigh-in embedded in the player; ownership checked in code; indexes added | ⚠️ By design for MongoDB |
 | D9 | Changing a completed match result | Requires a reason everywhere (Rule 6). In API mode the old kata "reopen round" on a completed match also needs one | ⚠️ Intended by Rule 6; flagged because it changes an existing flow |
 | D10 | Kumite scores on match records | PRD bouts allow scores above 10; older matches keep the 0–10 judge-average limit | ⚠️ Kept so existing kata matches stay validated |
-| D11 | Accounts, password reset, 2FA, email, server PDF (§4, §44, §47) | Need the tournament server; offline mode uses the built-in demo accounts and the browser's print | ⚠️ Offline mode has no server to send mail or hold accounts |
+| D11 | Offline use | Main removed offline mode; the app always needs the API server | ⚠️ Main's decision, followed here |
 
 ## Fixed along the way
 - MUI v9 dropped `InputLabelProps`/`InputProps` and Stack/Box layout props. The new screens use `slotProps`/`sx`; the console's two Stacks, the accounts page, the app's loading box and one Stack on the login page were fixed too (they were silently ignored). The login role chips are unchanged.
 - Hall screens opened with `?portal` now use the server clock offset like every other screen.
+- Merging main: both branches had added an `array` validator type and `scheduledAt`/`refereeId` to the match schema; my duplicates would have silently disabled main's stricter checks, and were removed. Main's table search box used the `InputProps` MUI v9 ignores; fixed. Other screens from main still pass a few `inputProps`/`InputLabelProps` (console time fields, the tournament and schedule forms) that MUI v9 ignores — left as they are, outside this merge.
 
 ## Configuration (API)
 | Variable | Purpose |

@@ -31,13 +31,9 @@ export const readFileBase64 = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file)
 })
 
-/**
- * Opens a stored file in a new tab. Accepts what either side returns: the
- * offline service's record (base64) or the API's blob.
- */
+/** Opens a file the API sent back (as a blob) in a new tab. */
 export function openStoredFile(file) {
-  const blob = file.blob || new Blob([Uint8Array.from(atob(file.data), (c) => c.charCodeAt(0))], { type: file.type })
-  const url = URL.createObjectURL(blob)
+  const url = URL.createObjectURL(file.blob)
   window.open(url, '_blank', 'noopener')
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
