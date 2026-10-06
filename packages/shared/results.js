@@ -105,8 +105,10 @@ export function poolStandings(ids, bouts, rules = {}) {
   })
 }
 
+export const isCancelled = (bout) => String(bout.status).toLowerCase() === 'cancelled'
+
 export const poolComplete = (bouts) =>
-  bouts.length > 0 && bouts.every((b) => boutOutcome(b) || ['CANCELLED'].includes(b.status))
+  bouts.length > 0 && bouts.every((b) => boutOutcome(b) || isCancelled(b))
 
 // --- knockout ------------------------------------------------------------------
 

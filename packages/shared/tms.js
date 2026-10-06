@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS = {
 }
 
 export const PAYMENT_STATUS = ['PENDING', 'PAID', 'FAILED', 'REFUNDED']
+export const RESULT_TYPES = ['COMPLETED', 'WALKOVER', 'DISQUALIFIED', 'CANCELLED']
 export const WEIGH_IN_STATUS = ['PENDING', 'PASSED', 'FAILED', 'RECHECK_REQUIRED']
 
 // A player takes part in the draw once approved, and not if rejected.
@@ -842,6 +843,7 @@ export function createTms(stores, { now = () => new Date() } = {}) {
           divisionKey: category.divisionKey,
           categoryName: category.name,
           poolName: m.poolId ? pools.get(m.poolId)?.name : null,
+          resultType: m.result?.type || (m.status === 'cancelled' ? 'CANCELLED' : boutOutcome(m) ? 'COMPLETED' : null),
           akaName: competitors.get(m.redId)?.name || null,
           aoName: competitors.get(m.blueId)?.name || null,
           akaPlayerId: m.akaPlayerId || competitors.get(m.redId)?.playerId || null,
@@ -876,11 +878,17 @@ export function createTms(stores, { now = () => new Date() } = {}) {
   }
 
   /** Rule 6: a finished result changes only with a reason, and leaves a record. */
-  async function correctResult(actor, tournamentId, matchId, { winner, avgRed, avgBlue, status = 'completed' }, reason) {
+  async function correctResult(actor, tournamentId, matchId, { winner, avgRed, avgBlue, resultType = 'COMPLETED' }, reason) {
     const { match, category } = await findBridgedMatch(tournamentId, matchId)
-    if (boutOutcome(match) && !reason) throw invalid('correction_reason_required')
-    if (!['red', 'blue', 'tie'].includes(winner)) throw invalid('invalid_winner')
-    const patch = { winner, status, avgRed: avgRed ?? match.avgRed ?? 0, avgBlue: avgBlue ?? match.avgBlue ?? 0 }
+    if ((boutOutcome(match) || match.status === 'cancelled') && !reason) throw invalid('correction_reason_required')
+    if (!RESULT_TYPES.includes(resultType)) throw invalid('invalid_resultType')
+    // Section 27: a cancelled bout has no winner and counts for nobody; a
+    // walkover or disqualification is a finished bout with a winner.
+    const patch = resultType === 'CANCELLED'
+      ? { winner: null, status: 'cancelled', result: { type: 'CANCELLED', method: 'cancelled' } }
+      : { winner, status: 'completed', avgRed: avgRed ?? match.avgRed ?? 0, avgBlue: avgBlue ?? match.avgBlue ?? 0, result: { type: resultType, method: resultType === 'WALKOVER' ? 'kiken' : resultType === 'DISQUALIFIED' ? 'shikkaku' : 'manual' } }
+    if (resultType !== 'CANCELLED' && !['red', 'blue', 'tie'].includes(winner)) throw invalid('invalid_winner')
+    if (resultType !== 'CANCELLED' && resultType !== 'COMPLETED' && winner === 'tie') throw invalid('invalid_winner')
     const after = await stores.matches.update(matchId, patch)
     await record(actor, { tournamentId, action: A.MATCH_RESULT_CHANGED, entity: 'match', entityId: matchId, before: { winner: match.winner, avgRed: match.avgRed, avgBlue: match.avgBlue, status: match.status }, after: patch, reason })
     if (match.stage === 'knockout') await syncBracket(tournamentId, category.divisionKey)
@@ -1213,7 +1221,7 @@ export function createTms(stores, { now = () => new Date() } = {}) {
       pools: poolRows.map((p) => ({ id: p.id, divisionKey: p.divisionKey, label: p.label, name: p.name, players: p.playerIds.map((id) => ({ id, name: names.get(id) || '?' })) })),
       matches: matchRows.map((m) => ({
         id: m.id, matchNumber: m.matchNumber, mat: m.mat, scheduledAt: m.scheduledAt || null, category: m.categoryName, divisionKey: m.divisionKey,
-        pool: m.poolName, round: m.round, stage: m.stage, roundName: m.roundName || null, status: m.status,
+        pool: m.poolName, round: m.round, stage: m.stage, roundName: m.roundName || null, status: m.status, resultType: m.resultType,
         aka: m.akaName, ao: m.aoName, winner: m.winner || null, akaScore: m.avgRed ?? null, aoScore: m.avgBlue ?? null,
       })),
       results: res.map((d) => ({
@@ -1247,7 +1255,7 @@ export function createTms(stores, { now = () => new Date() } = {}) {
       matches: matches.length,
       completedMatches: matches.filter((m) => boutOutcome(m)).length,
       liveMatches: matches.filter((m) => ['live', 'open'].includes(m.status)).length,
-      pendingMatches: matches.filter((m) => !boutOutcome(m)).length,
+      pendingMatches: matches.filter((m) => !boutOutcome(m) && m.status !== 'cancelled').length,
       gold: medals.filter((m) => m.medal === 'gold').length,
       silver: medals.filter((m) => m.medal === 'silver').length,
       bronze: medals.filter((m) => m.medal === 'bronze').length,

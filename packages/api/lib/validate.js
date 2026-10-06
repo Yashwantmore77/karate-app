@@ -41,6 +41,12 @@ function coerce(field, raw, rule) {
       if (!rule.values.includes(raw)) reject()
       return raw
     }
+    case 'array': {
+      // A bounded list of one item type, each checked by the same rules.
+      if (!Array.isArray(raw)) reject()
+      if (raw.length > (rule.max ?? 50)) reject()
+      return raw.map((item) => coerce(field, item, rule.items))
+    }
     case 'object': {
       // An opaque payload (a clock anchor, a scoreboard snapshot). The request
       // body limit is what bounds its size; nothing here inspects its shape.

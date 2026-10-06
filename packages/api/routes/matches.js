@@ -8,7 +8,7 @@ import { clientIp, userAgent } from '../lib/requestMeta.js'
 const MATCH_SCHEMA = {
   redId: { type: 'string', max: 60, nullable: true },
   blueId: { type: 'string', max: 60, nullable: true },
-  status: { type: 'enum', values: ['scheduled', 'open', 'live', 'completed'], default: 'open' },
+  status: { type: 'enum', values: ['scheduled', 'open', 'live', 'completed', 'cancelled'], default: 'open' },
   // Both vocabularies are accepted because both exist in this system: kata
   // scores red against blue, kumite runs ao against aka.
   winner: { type: 'enum', values: ['red', 'blue', 'tie', 'ao', 'aka', 'draw'], nullable: true },

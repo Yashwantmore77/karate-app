@@ -38,6 +38,22 @@ const store = (value) => {
 export const clearSession = () => store(null)
 
 /**
+ * When a token stops being valid, read from its own `exp` claim. Not a trust
+ * decision (the server checks the signature); only so the app can sign out on
+ * time. Null for anything unreadable.
+ */
+export function tokenExpiresAt(value) {
+  try {
+    const part = String(value || '').split('.')[1]
+    if (!part) return null
+    const json = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')))
+    return Number.isFinite(json.exp) ? json.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Exchanges credentials for a token. Returns null when no server is
  * configured, so the local-only mode carries on untouched.
  *

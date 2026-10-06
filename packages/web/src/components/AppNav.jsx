@@ -7,6 +7,14 @@ import {
 import { Menu as MenuIcon, Logout } from '@mui/icons-material'
 import { signOut, auth } from '../firebase'
 import { CYAN, TEXT } from '../theme/tokens'
+import { useConnection } from '../state/ConnectionContext'
+
+const CONNECTION = {
+  online: { label: '● Live', color: 'success' },
+  connecting: { label: '○ Connecting…', color: 'warning' },
+  reconnecting: { label: '○ Reconnecting…', color: 'warning' },
+  offline: { label: '✕ Offline', color: 'error' },
+}
 
 // What each role can reach. The scoreboard is on every list because it is the
 // one screen anyone might want to throw onto a second display mid-session.
@@ -62,6 +70,8 @@ export default function AppNav({ user, profile }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { status } = useConnection()
+  const connection = CONNECTION[status]
 
   const items = MENUS[profile?.role === 'super_admin' ? 'admin' : profile?.role] || []
   const onPublicScreen = location.pathname === '/display' || location.pathname === '/login'
@@ -121,6 +131,13 @@ export default function AppNav({ user, profile }) {
           </Box>
 
           <Box sx={{ flexGrow: { xs: 1, md: 0 } }} />
+
+          {/* Only with a server: offline mode has no connection to lose. */}
+          {connection && (
+            <Tooltip title={status === 'online' ? 'Connected to the tournament server' : 'Changes will not reach other devices until the connection is back'}>
+              <Chip label={connection.label} size="small" color={connection.color} variant="outlined" sx={{ mr: 1 }} />
+            </Tooltip>
+          )}
 
           <Chip
             label={profile.role}

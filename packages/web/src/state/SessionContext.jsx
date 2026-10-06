@@ -2,7 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import {
   auth, db, onAuthStateChanged, doc, getDoc, signInWithEmailAndPassword, signOut,
 } from '../firebase'
-import { serverUrl, apiUrl, getToken, loginToServer, clearSession } from '../data/session'
+import { serverUrl, apiUrl, getToken, loginToServer, clearSession, tokenExpiresAt } from '../data/session'
+import { setUnauthorizedHandler } from '../data/http'
+import { disconnect, onSocketAuthFailure } from '../data/channel/socket'
 
 const SessionContext = createContext(null)
 
@@ -30,6 +32,9 @@ function ApiSession({ children }) {
 
   const adopt = (apiUser) => {
     if (!apiUser) {
+      // The match socket was opened with this person's token; the next
+      // sign-in must get a fresh one.
+      disconnect()
       setUser(null)
       setProfile(null)
       return
@@ -65,6 +70,25 @@ function ApiSession({ children }) {
     })()
     return () => { cancelled = true }
   }, [])
+
+  // A token the server rejects, over HTTP or the socket, ends the session here
+  // instead of leaving screens that silently show nothing.
+  useEffect(() => {
+    const expire = () => { clearSession(); adopt(null) }
+    setUnauthorizedHandler(expire)
+    onSocketAuthFailure(expire)
+    return () => { setUnauthorizedHandler(null); onSocketAuthFailure(null) }
+  }, [])
+
+  // And one that runs out (12 h, a tournament day) signs out on time rather
+  // than at the next failed save.
+  useEffect(() => {
+    if (!user) return undefined
+    const at = tokenExpiresAt(getToken())
+    if (!at) return undefined
+    const id = setTimeout(() => { clearSession(); adopt(null) }, Math.max(0, at - Date.now()))
+    return () => clearTimeout(id)
+  }, [user])
 
   // Every "Sign out" button in the app already calls signOut(auth) — the
   // mock's pub/sub. Rather than rewiring a dozen call sites to a second

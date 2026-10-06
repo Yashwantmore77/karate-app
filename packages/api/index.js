@@ -54,7 +54,10 @@ export function createApp() {
 
   // Built per instance and announced over the socket, so a device that is
   // already looking at a list finds out it changed without polling for it.
-  const emitChange = (collection) => io.emit('data:changed', { collection })
+  const emitChange = (collection) => {
+    io.emit('data:changed', { collection })
+    announcePublic(collection)
+  }
   const stores = withChangeEvents(createStores(), (collection) => emitChange(collection))
 
   // The PRD's tournament management, on the same stores as everything else.
@@ -88,6 +91,36 @@ export function createApp() {
   const http = createServer(app)
   const io = new Server(http, { cors: { origin: true } })
   io.use(socketAuth)
+
+  // PRD section 57: public pages and hall screens have no session, so they get
+  // their own namespace. It carries no data, only "something changed" (the
+  // page re-reads the public API, which applies Rule 8) and the scoreboard row
+  // the hall is already showing.
+  const publicIo = io.of('/public')
+  const timePong = (_payload, ack) => {
+    const t1 = serverNow()
+    if (typeof ack === 'function') ack({ t1, t2: serverNow() })
+  }
+  publicIo.on('connection', (socket) => {
+    socket.on('time:ping', timePong)
+  })
+
+  // Coalesced: a draw writes hundreds of rows, and every viewer re-reading the
+  // page for each one would be a self-inflicted flood.
+  const PUBLIC_DEBOUNCE_MS = 400
+  let pendingPublic = null
+  function announcePublic(collection) {
+    if (collection === 'display') {
+      stores.display.get('live').then((row) => publicIo.emit('display:update', row ?? null)).catch(() => {})
+      return
+    }
+    if (['auditLog', 'registrationLinks'].includes(collection)) return
+    if (pendingPublic) return
+    pendingPublic = setTimeout(() => {
+      pendingPublic = null
+      publicIo.emit('public:changed', { at: serverNow() })
+    }, PUBLIC_DEBOUNCE_MS)
+  }
 
   const rooms = new Map()
   const roomFor = (matchId) => {
@@ -147,7 +180,10 @@ export function createApp() {
     })
   }, EXPIRY_SWEEP_MS)
 
-  http.on('close', () => clearInterval(sweep))
+  http.on('close', () => {
+    clearInterval(sweep)
+    if (pendingPublic) clearTimeout(pendingPublic)
+  })
 
   return { app, http, io, rooms, stores, tms }
 }

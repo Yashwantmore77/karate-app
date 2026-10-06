@@ -5,6 +5,7 @@ import { Visibility } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { competitors as competitorStore } from '../../data/domain'
 import { collectMatches } from '../../data/domain/tree'
+import AssignedMatches from '../../components/tms/AssignedMatches'
 
 export default function JudgeMatchList({ uid, profile }) {
   const navigate = useNavigate()
@@ -43,6 +44,7 @@ export default function JudgeMatchList({ uid, profile }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
+        <AssignedMatches uid={uid} field="judgeIds" basePath="/judge" />
         <Grid container spacing={2} sx={{ mb: 4 }}>
           <Grid item xs={6} sm={3}>
             <Paper elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>

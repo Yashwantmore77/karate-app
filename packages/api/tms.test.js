@@ -149,4 +149,29 @@ describe('PRD tournament management over HTTP', () => {
     const { body: { tournament } } = await call('POST', '/tournaments', { name: 'Draft Cup', location: 'X', date: '2027-01-01', template: 'kumite' }, tokens.admin)
     expect((await call('GET', `/public/tournaments/${tournament.id}`)).status).toBe(404)
   })
+
+  it('assigns officials to a match and records a walkover and a cancellation', async () => {
+    const { t, link } = await setUpTournament()
+    const coach = await openCoach(link)
+    for (let i = 0; i < 3; i += 1) {
+      const { body: { player } } = await call('POST', '/coach/players', { name: `W${i}`, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    }
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)
+    await call('POST', `/tournaments/${t}/locks/draw`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
+    const [m1, m2] = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
+
+    const scheduled = await call('PATCH', `/tournaments/${t}/matches/${m1.id}/schedule`, { mat: 2, refereeId: 'ref-uid-001', judgeIds: ['judge1-uid', 'judge1-uid', 'judge2-uid'] }, tokens.admin)
+    expect(scheduled.body.match).toMatchObject({ mat: 2, refereeId: 'ref-uid-001', judgeIds: ['judge1-uid', 'judge2-uid'] })
+    expect((await call('PATCH', `/tournaments/${t}/matches/${m1.id}/schedule`, { judgeIds: 'judge1-uid' }, tokens.admin)).status).toBe(400)
+
+    const wo = await call('POST', `/tournaments/${t}/matches/${m1.id}/correct`, { winner: 'red', resultType: 'WALKOVER' }, tokens.admin)
+    expect(wo.body.match).toMatchObject({ status: 'completed', winner: 'red', result: { type: 'WALKOVER' } })
+    const cancelled = await call('POST', `/tournaments/${t}/matches/${m2.id}/correct`, { resultType: 'CANCELLED' }, tokens.admin)
+    expect(cancelled.body.match).toMatchObject({ status: 'cancelled', winner: null })
+    const listed = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.referee)).body.matches
+    expect(listed.find((m) => m.id === m1.id).resultType).toBe('WALKOVER')
+  })
 })

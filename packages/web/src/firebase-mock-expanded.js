@@ -337,3 +337,7 @@ export const testData = {
 
 // Export firestoreData for debugging
 export const debugData = () => firestoreData
+
+// The offline roster without its passwords, for screens that assign officials
+// (PRD section 37) when there is no server to list accounts from.
+export const mockRoster = () => testUsers.map(({ password, ...user }) => ({ ...user, ...(roles[user.uid] || {}) }))

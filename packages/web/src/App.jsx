@@ -166,7 +166,7 @@ function AppShell() {
   const { user, profile, loading } = useSession()
   const isPortal = new URLSearchParams(location.search).has('portal')
 
-  if (isPortal) return <DisplayScoreboard />
+  if (isPortal) return <ConnectionProvider><DisplayScoreboard /></ConnectionProvider>
 
   // A super admin works the admin screens; the permission table still tells
   // them apart where it matters (section 3.1).

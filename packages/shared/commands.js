@@ -28,7 +28,10 @@ export const initialMatchState = () => ({
  * nobody has to notice an 8-point gap or a hansoku by eye, and every device is
  * told the same thing at the same moment.
  */
-export function withOutcome(state, rules = DEFAULT_RULES, at = Date.now()) {
+export function withOutcome(state, rules, at = Date.now()) {
+  // A match carries the rules it was set up with (RULES); an explicit argument
+  // still wins, for tests and callers that evaluate under other rules.
+  const active = rules || state.rules || DEFAULT_RULES
   if (state.decision) {
     const declared = { ended: true, winner: state.decision.winner, method: state.decision.method }
     const unchanged = state.outcome
@@ -37,7 +40,7 @@ export function withOutcome(state, rules = DEFAULT_RULES, at = Date.now()) {
     return unchanged ? state : { ...state, outcome: declared }
   }
   const expired = remainingNow(state.clock, at) === 0 && !state.koActive
-  const outcome = evaluateOutcome(state.match, rules, { expired })
+  const outcome = evaluateOutcome(state.match, active, { expired })
   if (!outcome.ended) return state.outcome ? { ...state, outcome: null } : state
   const same = state.outcome
     && state.outcome.winner === outcome.winner
@@ -48,8 +51,21 @@ export function withOutcome(state, rules = DEFAULT_RULES, at = Date.now()) {
 export const COMMANDS = [
   'CLOCK_START', 'CLOCK_STOP', 'CLOCK_ADJUST', 'CLOCK_SET', 'CLOCK_RESET', 'KO_TIMER',
   'SCORE', 'DEDUCT', 'SENSHU', 'PENALTY', 'FIELD_NUMBER', 'SCOREBOARD',
-  'KIKEN', 'SHIKKAKU', 'HANTEI', 'CLEAR_DECISION',
+  'KIKEN', 'SHIKKAKU', 'HANTEI', 'CLEAR_DECISION', 'RULES',
 ]
+
+/**
+ * The tournament's own kumite rules (PRD section 29), applied to a match.
+ * Accepts only the values a tournament configures; anything else keeps the
+ * defaults rather than arriving unchecked from a client.
+ */
+export function rulesFrom({ durationMs, pointGap, senshu } = {}) {
+  const rules = { ...DEFAULT_RULES }
+  if (Number.isFinite(durationMs) && durationMs >= 10_000 && durationMs <= 600_000) rules.durationMs = durationMs
+  if (Number.isInteger(pointGap) && pointGap >= 0 && pointGap <= 20) rules.pointGap = pointGap
+  if (typeof senshu === 'boolean') rules.senshu = senshu
+  return rules
+}
 
 // Undo is handled by whoever is authoritative, not by the reducer: it steps
 // back to a previous state rather than computing a new one.
@@ -130,6 +146,19 @@ export function applyCommand(state, cmd, payload = {}, at) {
 
     case 'CLEAR_DECISION':
       return state.decision ? { ...state, decision: null } : state
+
+    // Sets the match up under its tournament's rules. Only before the bout
+    // starts: changing the duration or gap mid-match would rewrite the score's
+    // meaning under the referee's feet.
+    case 'RULES': {
+      const started = state.clock.running || state.clock.startedAt != null
+        || state.match.scores.ao || state.match.scores.aka || state.clock.remainingMs !== state.durationMs
+      if (started) return state
+      const rules = rulesFrom(payload)
+      const same = state.rules && JSON.stringify(state.rules) === JSON.stringify(rules) && state.durationMs === rules.durationMs
+      if (same) return state
+      return { ...state, rules, durationMs: rules.durationMs, clock: makeClock(rules.durationMs) }
+    }
 
     default:
       throw new UnknownCommand(cmd)

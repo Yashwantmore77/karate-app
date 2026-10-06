@@ -5,6 +5,7 @@ import { Visibility } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
+import AssignedMatches from '../../components/tms/AssignedMatches'
 
 export default function RefereeCategoryList({ uid }) {
   const navigate = useNavigate()
@@ -52,6 +53,7 @@ export default function RefereeCategoryList({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
+        <AssignedMatches uid={uid} field="refereeId" basePath="/referee" />
         <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <Autocomplete
             sx={{ minWidth: 350 }}

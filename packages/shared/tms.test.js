@@ -366,3 +366,29 @@ describe('section 64 core flow', () => {
     await expect(tms.setLifecycle(admin, tournament.id, 'REGISTRATION_OPEN')).rejects.toMatchObject({ code: 'master_age_date_required' })
   })
 })
+
+describe('tournament rules on the console (section 29) and result types (section 27)', () => {
+  it('sets a match up under the tournament rules, but never mid-bout', async () => {
+    const { initialMatchState, applyCommand, withOutcome } = await import('./commands.js')
+    let s = applyCommand(initialMatchState(), 'RULES', { durationMs: 120_000, pointGap: 5 }, 0)
+    expect(s.durationMs).toBe(120_000)
+    expect(s.clock.remainingMs).toBe(120_000)
+    s = applyCommand(s, 'SCORE', { side: 'aka', type: 'ippon' }, 1)
+    s = applyCommand(s, 'SCORE', { side: 'aka', type: 'wazaAri' }, 2)
+    // 5-point gap ends it under these rules, where the default needs 8
+    expect(withOutcome(s, undefined, 3).outcome).toMatchObject({ ended: true, winner: 'aka', method: 'gapRule' })
+    expect(applyCommand(s, 'RULES', { durationMs: 60_000, pointGap: 8 }, 4)).toBe(s)
+  })
+
+  it('refuses rules a tournament could not have set', async () => {
+    const { rulesFrom } = await import('./commands.js')
+    expect(rulesFrom({ durationMs: 5, pointGap: -1 })).toMatchObject({ durationMs: 180_000, pointGap: 8 })
+  })
+
+  it('records walkovers and cancellations, and a cancelled bout counts for nobody', async () => {
+    const { boutOutcome, poolComplete } = await import('./results.js')
+    expect(boutOutcome({ status: 'completed', winner: 'red', result: { type: 'WALKOVER' } }).winner).toBe('aka')
+    expect(boutOutcome({ status: 'cancelled', winner: null })).toBeNull()
+    expect(poolComplete([{ status: 'completed', winner: 'red' }, { status: 'cancelled' }])).toBe(true)
+  })
+})

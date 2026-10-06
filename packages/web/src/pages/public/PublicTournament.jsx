@@ -5,11 +5,11 @@ import {
   Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Chip,
 } from '@mui/material'
 import { tms } from '../../data/tms'
+import { watchPublicChanges } from '../../data/live'
 import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import Bracket from '../../components/tms/Bracket'
 import { StandingsTable, MedalList, TallyTable } from '../tms/ResultsTab'
 
-const POLL_MS = 5000
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
 
@@ -18,8 +18,8 @@ const LABEL = { info: 'Tournament', categories: 'Categories', teams: 'Teams', pl
 
 /**
  * PRD sections 38-41 and 54: the public tournament page. Reads only the public
- * API, which strips everything Rule 8 forbids; refreshes itself so live scores
- * and results arrive without a reload.
+ * API, which strips everything Rule 8 forbids; updates itself when the server
+ * announces a change, so live scores and results arrive without a reload.
  */
 export default function PublicTournament() {
   const { slug } = useParams()
@@ -34,8 +34,9 @@ export default function PublicTournament() {
     let alive = true
     const load = () => tms.public.view(slug).then((d) => { if (alive) { setData(d); setError(null) } }).catch((e) => alive && setError(e))
     load()
-    const timer = setInterval(load, POLL_MS)
-    return () => { alive = false; clearInterval(timer) }
+    // Pushed by the server when anything changes (PRD section 57).
+    const stop = watchPublicChanges(load)
+    return () => { alive = false; stop() }
   }, [slug])
 
   const query = q.trim().toLowerCase()

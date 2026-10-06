@@ -4,7 +4,7 @@ import { validate } from '../lib/validate.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { PERMISSION as P } from '@kumite/shared/permissions.js'
 import { TOURNAMENT_STATUS, REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS, WEIGH_IN_STATUS } from '@kumite/shared/tms.js'
+import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES } from '@kumite/shared/tms.js'
 
 // PRD section 56: everything a tournament owns, under /tournaments/:tid/...
 // Each route checks a permission from the shared table, validates its body,
@@ -257,12 +257,15 @@ export function tmsRoutes(tms) {
       mat: { type: 'integer', min: 1, max: 99, nullable: true },
       scheduledAt: { type: 'string', max: 30, nullable: true },
       refereeId: { ...ID, nullable: true },
+      judgeIds: { type: 'array', items: { type: 'string', max: 80 }, max: 9 },
     }, { partial: true })
+    if (body.judgeIds) body.judgeIds = [...new Set(body.judgeIds)]
     res.json({ match: await tms.scheduleMatch(withMeta(req), tid(req), req.params.id, body) })
   })
   router.post('/:tid/matches/:id/correct', requirePermission(P.RESULT_MANAGE), async (req, res) => {
     const { reason, ...result } = validate(req.body, {
-      winner: { type: 'enum', values: ['red', 'blue', 'tie'], required: true },
+      winner: { type: 'enum', values: ['red', 'blue', 'tie'], nullable: true },
+      resultType: { type: 'enum', values: RESULT_TYPES, default: 'COMPLETED' },
       avgRed: { type: 'number', min: 0, max: 99, nullable: true },
       avgBlue: { type: 'number', min: 0, max: 99, nullable: true },
       reason: REASON,
