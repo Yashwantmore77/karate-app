@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { isMongoConfigured, getDb } from '../db/mongo.js'
+import { TMS_COLLECTIONS } from '@kumite/shared/tms.js'
 
 // One document store, two backends, chosen the same way the user store already
 // chooses: MONGODB_URI present means Mongo, absent means memory. Routes are
@@ -88,7 +89,8 @@ function mongoCollection(name) {
   }
 }
 
-export const COLLECTIONS = ['tournaments', 'categories', 'competitors', 'matches', 'display']
+// The scoring app's own collections, then the PRD's tournament-management ones.
+export const COLLECTIONS = ['tournaments', 'categories', 'competitors', 'matches', 'display', ...TMS_COLLECTIONS]
 
 /**
  * Builds the stores for one application instance.

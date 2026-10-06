@@ -15,6 +15,10 @@ import { categoryRoutes } from './routes/categories.js'
 import { competitorRoutes } from './routes/competitors.js'
 import { matchRoutes } from './routes/matches.js'
 import { displayRoutes } from './routes/display.js'
+import { tmsRoutes } from './routes/tms.js'
+import { publicRoutes } from './routes/public.js'
+import { coachRoutes } from './routes/coach.js'
+import { createTms } from '@kumite/shared/tms.js'
 
 const EXPIRY_SWEEP_MS = 250
 
@@ -41,6 +45,8 @@ export function createApp() {
   }
   // Bounded before anything parses it: an unbounded body is a denial of service
   // that needs no credentials.
+  // A bulk player upload is the one body that is legitimately large.
+  app.use(/\/players\/bulk/, express.json({ limit: '2mb' }))
   app.use(express.json({ limit: '32kb' }))
   app.use(security({ allowedOrigin: process.env.CORS_ORIGIN || '*' }))
 
@@ -51,13 +57,20 @@ export function createApp() {
   const emitChange = (collection) => io.emit('data:changed', { collection })
   const stores = withChangeEvents(createStores(), (collection) => emitChange(collection))
 
+  // The PRD's tournament management, on the same stores as everything else.
+  const tms = createTms(stores)
+
   const categories = categoryRoutes(stores)
   const competitors = competitorRoutes(stores)
-  const matches = matchRoutes(stores)
+  const matches = matchRoutes(stores, tms)
 
   app.use(`${API_BASE}/auth`, authRoutes())
   app.use(`${API_BASE}/users`, userRoutes())
-  app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores))
+  app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores, tms))
+  app.use(`${API_BASE}/tournaments`, tmsRoutes(tms))
+  // Public APIs are kept apart from the admin ones (section 56).
+  app.use(`${API_BASE}/public`, publicRoutes(tms))
+  app.use(`${API_BASE}/coach`, coachRoutes(tms))
   app.use(`${API_BASE}/categories`, categories.flat)
   app.use(`${API_BASE}/competitors`, competitors.flat)
   app.use(`${API_BASE}/matches`, matches.flat)
@@ -136,7 +149,7 @@ export function createApp() {
 
   http.on('close', () => clearInterval(sweep))
 
-  return { app, http, io, rooms, stores }
+  return { app, http, io, rooms, stores, tms }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -9,6 +9,9 @@ const CATEGORY_SCHEMA = {
   // Free text rather than an enum: the admin form takes a typed division, and
   // federations name their grades differently.
   division: { type: 'string', required: true, max: 60 },
+  // Set when the category was generated from a PRD division (see tms.js).
+  divisionKey: { type: 'string', max: 200, nullable: true },
+  event: { type: 'enum', values: ['kata', 'kumite'], nullable: true },
 }
 
 /**

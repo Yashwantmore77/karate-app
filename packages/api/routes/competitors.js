@@ -8,6 +8,10 @@ const COMPETITOR_SCHEMA = {
   // occasionally a letter, and arithmetic is never done on one.
   bib: { type: 'string', required: true, max: 20 },
   age: { type: 'integer', required: true, min: 1, max: 120 },
+  // Links back to the registered player when generated from a PRD pool.
+  playerId: { type: 'string', max: 80, nullable: true },
+  teamId: { type: 'string', max: 80, nullable: true },
+  poolId: { type: 'string', max: 80, nullable: true },
 }
 
 export function competitorRoutes(stores) {
