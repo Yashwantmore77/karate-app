@@ -19,6 +19,7 @@ import { tmsRoutes } from './routes/tms.js'
 import { publicRoutes } from './routes/public.js'
 import { coachRoutes } from './routes/coach.js'
 import { fileRoutes } from './routes/files.js'
+import { emailNotifier } from './lib/emailNotifier.js'
 import { createTms } from '@kumite/shared/tms.js'
 
 const EXPIRY_SWEEP_MS = 250
@@ -64,7 +65,7 @@ export function createApp() {
   const stores = withChangeEvents(createStores(), (collection) => emitChange(collection))
 
   // The PRD's tournament management, on the same stores as everything else.
-  const tms = createTms(stores)
+  const tms = createTms(stores, { onNotify: emailNotifier(stores) })
 
   const categories = categoryRoutes(stores)
   const competitors = competitorRoutes(stores)

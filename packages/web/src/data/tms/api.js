@@ -74,6 +74,7 @@ export const tms = {
   markRead: (tid) => send('POST', `${T(tid)}/notifications/read`, {}),
   audit: async (tid) => (await get(`${T(tid)}/audit`)).audit,
   uploadFile: async (tid, file) => (await send('POST', `${T(tid)}/files`, file)).file,
+  weighInReminder: (tid) => send('POST', `${T(tid)}/weigh-in/reminders`, {}),
   readFile: (_tid, id) => fetchFile(`/files/${id}`, getToken()),
   publicFileUrl: (id) => apiUrl(`/public/files/${id}`),
 

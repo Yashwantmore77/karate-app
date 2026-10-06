@@ -196,4 +196,24 @@ describe('PRD tournament management over HTTP', () => {
     const logo = await call('POST', `/tournaments/${t}/files`, { name: 'l.png', type: 'image/png', data: PNG, purpose: 'logo' }, tokens.admin)
     expect((await raw(`/public/files/${logo.body.file.id}`)).status).toBe(200)
   })
+
+  it('emails teams and organisers, and sends a weigh-in reminder', async () => {
+    const { readOutbox, clearOutbox } = await import('./lib/mailer.js')
+    const { t, link } = await setUpTournament()
+    await call('PATCH', `/tournaments/${t}`, { contactEmail: 'office@open.example' }, tokens.admin)
+    const { body } = await call('POST', `/public/register/${link.token}/session`, { password: 'dojo-pass' })
+    const coach = (await call('POST', '/coach/team', { name: 'Mail Dojo', email: 'coach@dojo.example' }, body.token)).body.token
+    clearOutbox()
+    const { body: { player } } = await call('POST', '/coach/players', { name: 'Ravi', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)
+    expect(readOutbox().map((m) => m.to)).toEqual(['office@open.example'])
+    await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    expect(readOutbox().at(-1)).toMatchObject({ to: 'coach@dojo.example', subject: 'State Open: Registration approved' })
+    expect((await call('POST', `/tournaments/${t}/weigh-in/reminders`, {}, tokens.weighin)).body).toEqual({ teams: 1 })
+    expect(readOutbox().at(-1).text).toMatch(/Weigh-in reminder.*Ravi/)
+    // organisers can turn email off without losing in-app notices
+    await call('PATCH', `/tournaments/${t}/settings`, { emailNotifications: false }, tokens.admin)
+    const before = readOutbox().length
+    await call('POST', `/tournaments/${t}/weigh-in/reminders`, {}, tokens.admin)
+    expect(readOutbox()).toHaveLength(before)
+  })
 })

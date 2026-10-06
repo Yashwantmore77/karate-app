@@ -45,10 +45,14 @@ export default function WeighInTab({ tournament, version, action }) {
         rows={rows}
         empty="No approved kumite players to weigh."
         toolbar={(
+          <>
+          <Button variant="outlined" disabled={tournament.entriesLocked}
+            onClick={() => action.run(() => tms.weighInReminder(tid), (r) => `Reminder sent to ${r.teams} team(s)`)}>Send weigh-in reminder</Button>
           <TextField select size="small" label="Weigh-in status" value={status} onChange={(e) => setStatus(e.target.value)} sx={{ minWidth: 170 }}>
             <MenuItem value="">All</MenuItem>
             {WEIGH_IN_STATUS.map((s) => <MenuItem key={s} value={s}>{humanize(s)}</MenuItem>)}
           </TextField>
+          </>
         )}
         columns={[
           { key: 'name', label: 'Player' },

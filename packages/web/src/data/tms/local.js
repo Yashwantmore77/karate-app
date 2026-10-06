@@ -216,6 +216,7 @@ export const tms = {
   markRead: (tid) => s.markNotificationsRead(tid, 'admin'),
   audit: (tid) => s.auditTrail(tid),
   uploadFile: (tid, file) => s.uploadFile(me(), tid, file),
+  weighInReminder: (tid) => s.sendWeighInReminder(me(), tid),
   // Offline, staff at this browser can open what this browser stored.
   readFile: (_tid, id) => s.readFile(me(), id, { canViewRegistrations: true }),
   publicFileUrl: () => null,

@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS = {
   matchDurationSec: 180,
   pointGap: 8,
   weighInAutoMove: true,
+  emailNotifications: true,
   fees: { kata: 0, kumite: 0, both: 0, team: 0 },
 }
 
@@ -82,7 +83,7 @@ export function feeFor(player, settings) {
   return events.reduce((sum, e) => sum + (settings.fees[e] || 0), 0)
 }
 
-export function createTms(stores, { now = () => new Date() } = {}) {
+export function createTms(stores, { now = () => new Date(), onNotify = null } = {}) {
   const audit = createAuditLog(stores.auditLog)
   const iso = () => now().toISOString()
 
@@ -104,8 +105,20 @@ export function createTms(stores, { now = () => new Date() } = {}) {
 
   const record = (actor, entry) => audit.record({ actor, requestMeta: actor?.meta, ...entry })
 
-  const notify = (tournamentId, audience, type, message, extra = {}) =>
-    stores.notifications.insert({ tournamentId, audience, type, message, read: false, at: iso(), ...extra })
+  // In-app first; then any other channel the host wires in (the API sends
+  // email). A failing channel never fails the action that caused it.
+  const notify = async (tournamentId, audience, type, message, extra = {}) => {
+    const row = await stores.notifications.insert({ tournamentId, audience, type, message, read: false, at: iso(), ...extra })
+    if (onNotify) {
+      try {
+        const tournament = await stores.tournaments.get(tournamentId)
+        if (settingsOf(tournament).emailNotifications !== false) await onNotify(row, tournament)
+      } catch {
+        // the in-app notification stands
+      }
+    }
+    return row
+  }
 
   const config = async (tournamentId) => {
     const tournament = await tournamentOf(tournamentId)
@@ -1265,6 +1278,24 @@ export function createTms(stores, { now = () => new Date() } = {}) {
     }
   }
 
+  /** Section 47: reminds every team with kumite players still to weigh in. */
+  async function sendWeighInReminder(actor, tournamentId) {
+    const tournament = await tournamentOf(tournamentId)
+    const players = await stores.players.list({ tournamentId })
+    const byTeam = new Map()
+    for (const p of players) {
+      if (!p.events?.includes('kumite') || !DRAW_ELIGIBLE.has(p.registrationStatus)) continue
+      if ((p.weighIn?.status || 'PENDING') === 'PASSED') continue
+      byTeam.set(p.teamId, [...(byTeam.get(p.teamId) || []), p.name])
+    }
+    const when = tournament.weighInDate ? ` on ${tournament.weighInDate}` : ''
+    for (const [teamId, names] of byTeam) {
+      await notify(tournamentId, 'team', 'weighin_reminder', `Weigh-in reminder${when}: ${names.length} player(s) still to weigh in — ${names.join(', ')}.`, { teamId })
+    }
+    await record(actor, { tournamentId, action: A.TOURNAMENT_UPDATED, entity: 'tournament', entityId: tournamentId, reason: `Weigh-in reminder sent to ${byTeam.size} team(s)` })
+    return { teams: byTeam.size }
+  }
+
   const listNotifications = async (tournamentId, audience = 'admin') =>
     (await stores.notifications.list({ tournamentId, audience })).sort((a, b) => String(b.at).localeCompare(String(a.at)))
 
@@ -1332,7 +1363,7 @@ export function createTms(stores, { now = () => new Date() } = {}) {
     // links and coaches
     getLink, saveLink, linkInfo, openLink, coachOverview,
     // public, dashboard, audit
-    publicList, publicView, publicTournament, dashboard, listNotifications, markNotificationsRead,
+    publicList, publicView, publicTournament, dashboard, listNotifications, markNotificationsRead, sendWeighInReminder,
     auditTrail: (tournamentId) => audit.forTournament(tournamentId),
     // files
     uploadFile, readFile,

@@ -61,6 +61,7 @@ export default function SetupTab({ tournament, reload, action }) {
     const out = {}
     for (const [k] of NUMBER_SETTINGS) out[k] = Number(settings[k])
     out.weighInAutoMove = !!settings.weighInAutoMove
+    out.emailNotifications = settings.emailNotifications !== false
     out.fees = Object.fromEntries(Object.entries(settings.fees).map(([k, v]) => [k, Number(v) || 0]))
     action.run(() => tms.updateSettings(tid, out), 'Settings saved').then(reload)
   }
@@ -159,6 +160,10 @@ export default function SetupTab({ tournament, reload, action }) {
           <Grid size={{ xs: 12 }}>
             <FormControlLabel control={<Switch checked={!!settings.weighInAutoMove} onChange={(e) => setSettings({ ...settings, weighInAutoMove: e.target.checked })} />}
               label="Weigh-in may move a player to the weight category their actual weight fits" />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <FormControlLabel control={<Switch checked={settings.emailNotifications !== false} onChange={(e) => setSettings({ ...settings, emailNotifications: e.target.checked })} />}
+              label="Email notifications to teams (their team email) and organisers (contact email)" />
           </Grid>
         </Grid>
         <Button size="large" variant="contained" sx={{ mt: 1 }} onClick={saveSettings} disabled={action.busy}>Save rules</Button>

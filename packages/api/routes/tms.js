@@ -85,6 +85,7 @@ const TOURNAMENT_SETTINGS = {
   matchDurationSec: { type: 'integer', min: 30, max: 600 },
   pointGap: { type: 'integer', min: 1, max: 20 },
   weighInAutoMove: { type: 'boolean' },
+  emailNotifications: { type: 'boolean' },
   fees: { type: 'object' },
 }
 
@@ -316,6 +317,10 @@ export function tmsRoutes(tms) {
       expiresAt: { type: 'string', max: 30, nullable: true },
     })
     res.json({ link: await tms.saveLink(withMeta(req), tid(req), body) })
+  })
+
+  router.post('/:tid/weigh-in/reminders', requirePermission(P.WEIGHIN_RECORD), async (req, res) => {
+    res.json(await tms.sendWeighInReminder(withMeta(req), tid(req)))
   })
 
   router.get('/:tid/dashboard', requirePermission(P.REGISTRATION_VIEW), async (req, res) => res.json({ dashboard: await tms.dashboard(tid(req)) }))
