@@ -112,6 +112,18 @@ describe('PRD tournament management over HTTP', () => {
     expect((await call('POST', `/tournaments/${t}/results/publish`, {}, tokens.admin)).body).toMatchObject({ published: true, medals: 4 })
     expect((await call('POST', `/tournaments/${t}/certificates/generate`, {}, tokens.admin)).body.created).toBe(4)
 
+    // section 44/45: server-generated PDFs
+    const pdf = await fetch(`http://localhost:${port}/api/v1/tournaments/${t}/certificates.pdf`, { headers: { authorization: `Bearer ${tokens.admin}` } })
+    expect(pdf.headers.get('content-type')).toBe('application/pdf')
+    const bytes = Buffer.from(await pdf.arrayBuffer())
+    expect(bytes.subarray(0, 5).toString()).toBe('%PDF-')
+    expect(bytes.toString('latin1').match(/\/Type \/Page\b/g)).toHaveLength(4)
+    const report = await fetch(`http://localhost:${port}/api/v1/tournaments/${t}/reports/match.pdf`, { headers: { authorization: `Bearer ${tokens.admin}` } })
+    expect(report.status).toBe(200)
+    expect(Buffer.from(await report.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-')
+    expect((await fetch(`http://localhost:${port}/api/v1/tournaments/${t}/reports/secrets.pdf`, { headers: { authorization: `Bearer ${tokens.admin}` } })).status).toBe(404)
+    expect((await fetch(`http://localhost:${port}/api/v1/tournaments/${t}/reports/match.pdf`, { headers: { authorization: `Bearer ${tokens.referee}` } })).status).toBe(403)
+
     // public, by slug, with no sign-in and nothing private (Rule 8)
     const view = await call('GET', '/public/tournaments/state-open')
     expect(view.status).toBe(200)

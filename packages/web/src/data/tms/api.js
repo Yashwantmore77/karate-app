@@ -75,6 +75,25 @@ export const tms = {
   audit: async (tid) => (await get(`${T(tid)}/audit`)).audit,
   uploadFile: async (tid, file) => (await send('POST', `${T(tid)}/files`, file)).file,
   weighInReminder: (tid) => send('POST', `${T(tid)}/weigh-in/reminders`, {}),
+  async reportData(tid) {
+    const [players, teams, groups, weights, divisions, pools, matches, results, medals] = await Promise.all([
+      tms.players.list(tid), tms.teams.list(tid), tms.ageGroups.list(tid), tms.weightCategories.list(tid),
+      tms.divisions(tid), tms.pools(tid), tms.matches(tid), tms.results(tid), tms.medals(tid),
+    ])
+    return { players, teams, groups, weights, divisions, pools, matches, results, medals }
+  },
+  // Server-built PDFs (certificates, reports), downloaded with the session token.
+  async pdf(tid, path, filename) {
+    const { blob } = await fetchFile(`${T(tid)}/${path}`, getToken())
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  },
   readFile: (_tid, id) => fetchFile(`/files/${id}`, getToken()),
   publicFileUrl: (id) => apiUrl(`/public/files/${id}`),
 

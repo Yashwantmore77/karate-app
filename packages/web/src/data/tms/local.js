@@ -3,6 +3,7 @@
 // only the storage differs.
 
 import { createTms, TMS_COLLECTIONS } from '@kumite/shared/tms.js'
+import { loadReportData } from '@kumite/shared/reports.js'
 import * as legacy from '../domain/local'
 
 const PREFIX = 'kt:tms:v1'
@@ -217,6 +218,9 @@ export const tms = {
   audit: (tid) => s.auditTrail(tid),
   uploadFile: (tid, file) => s.uploadFile(me(), tid, file),
   weighInReminder: (tid) => s.sendWeighInReminder(me(), tid),
+  reportData: (tid) => loadReportData(s, tid),
+  // Offline there is no PDF server; the screens fall back to the browser's print.
+  pdf: null,
   // Offline, staff at this browser can open what this browser stored.
   readFile: (_tid, id) => s.readFile(me(), id, { canViewRegistrations: true }),
   publicFileUrl: () => null,

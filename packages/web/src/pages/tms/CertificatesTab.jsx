@@ -20,6 +20,10 @@ export default function CertificatesTab({ tournament, version, action, basePath 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <Button size="large" variant="contained" disabled={!tournament.resultsPublished}
             onClick={() => action.run(() => tms.generateCertificates(tid), (r) => `${r.created} new certificates`).then(load)}>Generate certificates</Button>
+          {tms.pdf && (
+            <Button size="large" variant="contained" color="secondary" disabled={!rows.length}
+              onClick={() => action.run(() => tms.pdf(tid, 'certificates.pdf', `${tournament.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-certificates.pdf`))}>Download PDF</Button>
+          )}
           <Button size="large" variant="outlined" disabled={!rows.length} onClick={() => navigate(`${basePath}/tournament/${tid}/certificates/print`)}>Print / save as PDF</Button>
         </Stack>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Generating again only issues certificates for new medals; existing IDs never change.</Typography>

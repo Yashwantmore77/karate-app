@@ -2,9 +2,12 @@ import { Router } from 'express'
 import { requireAuth, requirePermission, tournamentAccess } from '../auth/middleware.js'
 import { findUserRecord } from '../auth/users.js'
 import { validate } from '../lib/validate.js'
+import { notFound } from '../lib/errors.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { PERMISSION as P, can } from '@kumite/shared/permissions.js'
 import { FILE_SCHEMA } from './files.js'
+import { certificatesPdf, tablePdf } from '../lib/pdf.js'
+import { REPORT_KEYS, REPORT_TITLE, loadReportData, buildReport } from '@kumite/shared/reports.js'
 import { TOURNAMENT_STATUS, REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
 import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES } from '@kumite/shared/tms.js'
 
@@ -92,7 +95,12 @@ const TOURNAMENT_SETTINGS = {
 // The actor is always the authenticated caller; the request adds where from.
 export const withMeta = (req) => ({ ...req.user, meta: { ip: clientIp(req), userAgent: userAgent(req) } })
 
-export function tmsRoutes(tms) {
+export function tmsRoutes(tms, stores) {
+  const loadTournament = async (id) => {
+    const t = await stores.tournaments.get(id)
+    if (!t) throw notFound('tournament_not_found')
+    return t
+  }
   const router = Router()
   router.use(requireAuth)
   router.param('tid', tournamentAccess(findUserRecord))
@@ -294,6 +302,31 @@ export function tmsRoutes(tms) {
     res.json({ tally: await tms.tally(tid(req), by) })
   })
   router.get('/:tid/certificates', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => res.json({ certificates: await tms.listCertificates(tid(req)) }))
+  const sendPdf = (res, buffer, filename) => {
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.send(buffer)
+  }
+  const slugOf = (t) => String(t.slug || t.name || 'tournament').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+
+  // Section 44: the certificates as one downloadable PDF, built on the server.
+  router.get('/:tid/certificates.pdf', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
+    const tournament = await loadTournament(tid(req))
+    const logoId = String(tournament.logoUrl || '').match(/\/public\/files\/([A-Za-z0-9_-]+)$/)?.[1]
+    const logo = logoId ? await tms.readFile(null, logoId).then((f) => Buffer.from(f.data, 'base64')).catch(() => null) : null
+    sendPdf(res, await certificatesPdf(tournament, await tms.listCertificates(tid(req)), { logo }), `${slugOf(tournament)}-certificates.pdf`)
+  })
+
+  // Section 45: any report as a PDF table.
+  router.get('/:tid/reports/:key.pdf', requirePermission(P.REPORT_EXPORT), async (req, res) => {
+    if (!REPORT_KEYS.includes(req.params.key)) return res.status(404).json({ error: 'route_not_found' })
+    const tournament = await loadTournament(tid(req))
+    const rows = buildReport(req.params.key, await loadReportData(tms, tid(req)))
+    const title = `${tournament.name} — ${REPORT_TITLE[req.params.key]} report`
+    sendPdf(res, await tablePdf(title, rows, { subtitle: `Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · ${rows.length - 1} rows` }), `${slugOf(tournament)}-${req.params.key}.pdf`)
+  })
+
   router.post('/:tid/certificates/generate', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
     res.status(201).json(await tms.generateCertificates(withMeta(req), tid(req)))
   })

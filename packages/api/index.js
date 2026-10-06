@@ -74,7 +74,7 @@ export function createApp() {
   app.use(`${API_BASE}/auth`, authRoutes())
   app.use(`${API_BASE}/users`, userRoutes())
   app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores, tms))
-  app.use(`${API_BASE}/tournaments`, tmsRoutes(tms))
+  app.use(`${API_BASE}/tournaments`, tmsRoutes(tms, stores))
   // Public APIs are kept apart from the admin ones (section 56).
   app.use(`${API_BASE}/public`, publicRoutes(tms))
   app.use(`${API_BASE}/coach`, coachRoutes(tms))
