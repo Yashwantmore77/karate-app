@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Container, Typography, Grid, Paper, Button, Stack, Table, TableHead, TableRow, TableCell, TableBody, TableContainer,
-  Box, CircularProgress,
+  Box,
 } from '@mui/material'
 import { Add, People, EmojiEvents, LiveTv, Public, Login, Business } from '@mui/icons-material'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { tms } from '../../data/tms'
 import StatCard from '../../components/tms/StatCard'
 import StatusBadge from '../../components/tms/StatusBadge'
+import { PageLoader } from '../../components/Loader'
 
 const SUM_KEYS = ['teams', 'players', 'kataPlayers', 'kumitePlayers', 'pendingVerification', 'pendingPayment', 'pendingWeighIn', 'matches', 'completedMatches', 'liveMatches', 'pendingMatches', 'gold', 'silver', 'bronze']
 
@@ -31,7 +32,7 @@ export default function AdminDashboard({ profile }) {
     return () => { alive = false }
   }, [])
 
-  if (!rows) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+  if (!rows) return <PageLoader label="Loading dashboard…" />
 
   const total = Object.fromEntries(SUM_KEYS.map((k) => [k, rows.reduce((n, r) => n + (r.d?.[k] || 0), 0)]))
   const status = (t) => t.lifecycleStatus || 'DRAFT'

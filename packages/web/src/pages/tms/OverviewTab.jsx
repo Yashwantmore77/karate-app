@@ -7,6 +7,7 @@ import StatCard from '../../components/tms/StatCard'
 import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { LockIcon } from './TournamentManager'
+import { PageLoader } from '../../components/Loader'
 
 const ORDER = Object.values(TOURNAMENT_STATUS)
 
@@ -20,7 +21,7 @@ export default function OverviewTab({ tournament, reload, version, action, role 
   const manage = can(role, P.TOURNAMENT_MANAGE)
 
   useEffect(() => {
-    tms.dashboard(tid).then(setStats).catch(() => setStats(null))
+    tms.dashboard(tid).then(setStats).catch(() => setStats({}))
     tms.notifications(tid).then(setNotes).catch(() => setNotes([]))
   }, [tid, version])
 
@@ -93,7 +94,7 @@ export default function OverviewTab({ tournament, reload, version, action, role 
           ['Completed matches', s.completedMatches, 'success'], ['Pending matches', s.pendingMatches],
           ['Gold', s.gold], ['Silver', s.silver], ['Bronze', s.bronze],
         ].map(([label, value, tone]) => (
-          <Grid key={label} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}><StatCard label={label} value={value} tone={tone} /></Grid>
+          <Grid key={label} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}><StatCard label={label} value={value} tone={tone} loading={!stats} /></Grid>
         ))}
       </Grid>
 
@@ -101,7 +102,8 @@ export default function OverviewTab({ tournament, reload, version, action, role 
         <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, height: '100%' }}>
             <Typography variant="h3" gutterBottom>Next matches</Typography>
-            {!s.nextMatches?.length && <Typography color="text.secondary">No pending matches.</Typography>}
+            {!stats && <PageLoader minHeight={120} />}
+            {stats && !s.nextMatches?.length && <Typography color="text.secondary">No pending matches.</Typography>}
             <List dense>
               {(s.nextMatches || []).map((m) => (
                 <ListItem key={m.id} disableGutters>

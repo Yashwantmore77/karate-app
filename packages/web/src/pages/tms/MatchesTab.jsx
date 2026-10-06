@@ -11,6 +11,7 @@ import { listOfficials } from '../../data/officials'
 import { matches as matchStore } from '../../data/domain'
 import DataTable from '../../components/tms/DataTable'
 import StatusBadge from '../../components/tms/StatusBadge'
+import { useLoading } from '../../components/Loader'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
@@ -63,7 +64,8 @@ export default function MatchesTab({ tournament, version, action }) {
   useEffect(() => { listOfficials().then(setOfficials) }, [])
   const officialName = (uid) => officials.find((o) => o.uid === uid)?.label || uid
 
-  const load = () => tms.matches(tid).then(setMatches)
+  const { loading, refreshing, wrap } = useLoading()
+  const load = () => wrap(tms.matches(tid).then(setMatches))
   useEffect(() => { load() }, [tid, version])
 
   const rows = useMemo(() => matches.filter((m) => {
@@ -95,9 +97,10 @@ export default function MatchesTab({ tournament, version, action }) {
           {Array.from({ length: settings.mats }, (_, i) => <MenuItem key={i + 1} value={i + 1}>Mat {i + 1}</MenuItem>)}
         </TextField>
       </Stack>
-      {!matches.length && <Alert severity="info">No matches yet. Draw pools, lock the draw and generate matches on the Draw tab.</Alert>}
+      {!loading && !matches.length && <Alert severity="info">No matches yet. Draw pools, lock the draw and generate matches on the Draw tab.</Alert>}
       <DataTable
         rows={rows}
+        loading={loading} refreshing={refreshing}
         exportName={`${tournament.slug || 'tournament'}-matches`} exportTitle={`${tournament.name} — Matches`}
         filters={[{ key: 'categoryName', label: 'Category' }, { key: 'stage', label: 'Stage', value: (m) => (m.stage === 'knockout' ? m.roundName : 'Pool') }]}
         searchPlaceholder="Search match number, player, category"

@@ -13,6 +13,7 @@ import {
   competitors as competitorStore,
 } from '../../data/domain'
 import { downloadCSV } from '../../utils/csvExport'
+import { PageLoader } from '../../components/Loader'
 
 const validationSchema = Yup.object({
   name: Yup.string().required('Name required').min(2, 'Name too short'),
@@ -116,7 +117,7 @@ export default function AdminCategoryDetail({ uid }) {
     )
   }
 
-  if (loading) return null
+  if (loading) return <PageLoader label="Loading category…" />
   if (!tournament || !category) return <div>Category not found</div>
 
   return (

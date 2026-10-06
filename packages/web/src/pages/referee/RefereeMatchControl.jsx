@@ -10,6 +10,7 @@ import KumiteConsole from '../../features/console/KumiteConsole'
 import { settingsOf } from '@kumite/shared/tms.js'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { tms } from '../../data/tms'
+import { PageLoader } from '../../components/Loader'
 
 // A bout from a PRD draw, or any tournament with its own rules configured,
 // is scored under those rules (PRD section 29); older matches keep the
@@ -57,7 +58,7 @@ export default function RefereeMatchControl() {
 
   // Nothing until the read settles, rather than a "not found" that flashes up
   // on every load before the match arrives.
-  if (loading) return null
+  if (loading) return <PageLoader label="Loading match…" />
   if (!match || !redComp || !blueComp) return <div>Match not found</div>
 
   const tournamentExpired = !!tournament && isExpired(tournament.date)

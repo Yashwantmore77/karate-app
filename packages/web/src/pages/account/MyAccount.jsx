@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Container, Paper, Typography, Button, Alert, Stack, TextField, Box } from '@mui/material'
 import { request } from '../../data/http'
 import { ROLE_LABEL } from '@kumite/shared/permissions.js'
+import { PageLoader } from '../../components/Loader'
 
 /** PRD section 4: the signed-in person's account, and optional two-factor sign-in. */
 export default function MyAccount() {
@@ -13,7 +14,7 @@ export default function MyAccount() {
   const load = () => request('/auth/account').then((r) => setAccount(r.account)).catch(() => setAccount(null))
   useEffect(() => { load() }, [])
 
-  if (!account) return null
+  if (!account) return <PageLoader label="Loading your account…" />
 
   const act = async (path, success) => {
     try {

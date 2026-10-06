@@ -14,7 +14,7 @@ const DISPLAY_SAFETY_POLL_MS = 10_000
  * The referee's console publishes to it; a screen in the hall reads it.
  */
 export const displayRepo = {
-  get: async () => (await httpGet('/display')).display,
+  get: async () => (await httpGet('/display', { quiet: true })).display,
   put: async (payload) => (await httpPut('/display', payload)).display,
   /**
    * Pushed over the public socket channel, which needs no session (a hall

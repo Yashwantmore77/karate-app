@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Container, Box, Toolbar, Typography, IconButton, Tabs, Tab, CircularProgress, Alert, Stack } from '@mui/material'
+import { Container, Box, Toolbar, Typography, IconButton, Tabs, Tab, Alert, Stack } from '@mui/material'
 import { ArrowBack, Lock, LockOpen } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import StatusBadge from '../../components/tms/StatusBadge'
@@ -20,6 +20,7 @@ import ResultsTab from './ResultsTab'
 import CertificatesTab from './CertificatesTab'
 import ReportsTab from './ReportsTab'
 import AuditTab from './AuditTab'
+import { PageLoader } from '../../components/Loader'
 
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
 // only when the signed-in role holds its permission (section 3).
@@ -63,7 +64,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   const current = tabs.find((t) => t.key === params.get('tab')) || tabs[0]
 
   if (missing) return <Container sx={{ py: 4 }}><Alert severity="error">Tournament not found.</Alert></Container>
-  if (!tournament) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+  if (!tournament) return <PageLoader label="Loading tournament…" />
 
   const Current = current?.Component
   const status = tournament.lifecycleStatus || 'DRAFT'

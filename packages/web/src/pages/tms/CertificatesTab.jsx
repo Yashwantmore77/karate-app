@@ -4,13 +4,15 @@ import { Stack, Paper, Typography, Button, Alert } from '@mui/material'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import { MEDAL_ICON } from './ResultsTab'
+import { useLoading } from '../../components/Loader'
 
 /** Section 44: one certificate per medal, each with its own unique ID. */
 export default function CertificatesTab({ tournament, version, action, basePath = '/admin' }) {
   const navigate = useNavigate()
   const tid = tournament.id
   const [rows, setRows] = useState([])
-  const load = () => tms.certificates(tid).then(setRows)
+  const { loading, refreshing, wrap } = useLoading()
+  const load = () => wrap(tms.certificates(tid).then(setRows))
   useEffect(() => { load() }, [tid, version])
 
   return (
@@ -26,7 +28,7 @@ export default function CertificatesTab({ tournament, version, action, basePath 
         </Stack>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Generating again only issues certificates for new medals; existing IDs never change.</Typography>
       </Paper>
-      <DataTable rows={rows} empty="No certificates issued yet." columns={[
+      <DataTable rows={rows} loading={loading} refreshing={refreshing} empty="No certificates issued yet." columns={[
         { key: 'certificateId', label: 'Certificate ID' },
         { key: 'name', label: 'Player' },
         { key: 'club', label: 'Club' },

@@ -15,6 +15,7 @@ import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import PlayerForm from '../../components/tms/PlayerForm'
 import BulkUpload from '../../components/tms/BulkUpload'
 import { openStoredFile } from '../../components/tms/download'
+import { useLoading } from '../../components/Loader'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -49,9 +50,10 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const manage = can(role, P.REGISTRATION_MANAGE)
   const locked = !!tournament.entriesLocked
 
-  const load = () => Promise.all([
+  const { loading, refreshing, wrap } = useLoading()
+  const load = () => wrap(Promise.all([
     tms.teams.list(tid), tms.players.page(tid, clean({ ...filter, q: pageQuery.q }), pageQuery), tms.ageGroups.list(tid), tms.weightCategories.list(tid),
-  ]).then(([t, p, g, w]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w) })
+  ]).then(([t, p, g, w]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w) }))
   useEffect(() => { load() }, [tid, version, JSON.stringify(filter), JSON.stringify(pageQuery)])
   // A filter change starts again from the first page.
   useEffect(() => { setPageQuery((q) => ({ ...q, page: 0 })) }, [JSON.stringify(filter)])
@@ -156,8 +158,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   return (
     <Stack spacing={2}>
       <ToggleButtonGroup exclusive value={view} onChange={(_e, v) => v && setView(v)} size="small">
-        <ToggleButton value="players">Players ({paged.total})</ToggleButton>
-        <ToggleButton value="teams">Teams ({teams.length})</ToggleButton>
+        <ToggleButton value="players">Players ({loading ? '…' : paged.total})</ToggleButton>
+        <ToggleButton value="teams">Teams ({loading ? '…' : teams.length})</ToggleButton>
         {manage && <ToggleButton value="bulk">Bulk upload</ToggleButton>}
       </ToggleButtonGroup>
 
@@ -166,6 +168,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
       {view === 'teams' && (
         <DataTable
           rows={teams}
+          loading={loading} refreshing={refreshing}
           exportName={`${tournament.slug || 'tournament'}-teams`} exportTitle={`${tournament.name} — Teams`}
           filters={[{ key: 'district', label: 'District' }, { key: 'state', label: 'State' }]}
           empty="No teams yet. Coaches register through the registration link, or add one here."
@@ -190,6 +193,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
       {view === 'players' && (
         <DataTable
           rows={players}
+          loading={loading} refreshing={refreshing}
           server={{ ...paged, onChange: (next) => setPageQuery((q) => ({ ...q, ...next })) }}
           exportName={`${tournament.slug || 'tournament'}-players`} exportTitle={`${tournament.name} — Players`}
           exportRows={() => tms.players.list(tid, clean({ ...filter, q: pageQuery.q }))}

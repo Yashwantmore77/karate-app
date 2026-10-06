@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Table, TableHead, TableBody, TableRow, TableCell, TableContainer, TableSortLabel, TablePagination,
-  Paper, Typography, Box, TextField, InputAdornment, Button, Menu, MenuItem,
+  Paper, Typography, Box, TextField, InputAdornment, Button, Menu, MenuItem, LinearProgress, CircularProgress,
 } from '@mui/material'
 import { Search, FileDownload } from '@mui/icons-material'
 import { downloadCsv, printTable } from './download'
@@ -40,6 +40,8 @@ export default function DataTable({
   // PRD point 28: drop-down filters built from the values in the list, e.g.
   // [{ key: 'district', label: 'District', value: (r) => r.district }].
   filters = [],
+  // First load (a spinner in place of the rows) and a later reload (a thin bar).
+  loading = false, refreshing = false,
 }) {
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState({})
@@ -80,14 +82,20 @@ export default function DataTable({
     return out
   }, [rows, columns, query, sort, server, picked, filters])
 
+  const [exporting, setExporting] = useState(false)
   const doExport = async (kind) => {
     setExportAnchor(null)
-    const all = exportRows ? await exportRows() : filtered
-    const data = tableRows(columns, all)
-    const stamp = new Date().toISOString().slice(0, 10)
-    if (kind === 'csv') downloadCsv(`${exportName}-${stamp}.csv`, data)
-    else if (kind === 'xlsx') await downloadXlsx(`${exportName}-${stamp}.xlsx`, data, String(exportTitle || exportName).slice(0, 31))
-    else printTable(exportTitle || exportName, data)
+    setExporting(true)
+    try {
+      const all = exportRows ? await exportRows() : filtered
+      const data = tableRows(columns, all)
+      const stamp = new Date().toISOString().slice(0, 10)
+      if (kind === 'csv') downloadCsv(`${exportName}-${stamp}.csv`, data)
+      else if (kind === 'xlsx') await downloadXlsx(`${exportName}-${stamp}.xlsx`, data, String(exportTitle || exportName).slice(0, 31))
+      else printTable(exportTitle || exportName, data)
+    } finally {
+      setExporting(false)
+    }
   }
 
   const shown = server ? rows : filtered.slice(page * perPage, page * perPage + perPage)
@@ -116,7 +124,9 @@ export default function DataTable({
             {toolbar}
             {canExport && (
               <>
-                <Button variant="outlined" startIcon={<FileDownload />} onClick={(e) => setExportAnchor(e.currentTarget)} disabled={!total && !exportRows}>Export</Button>
+                <Button variant="outlined" startIcon={exporting ? <CircularProgress size={16} /> : <FileDownload />} onClick={(e) => setExportAnchor(e.currentTarget)} disabled={exporting || (!total && !exportRows)}>
+                  {exporting ? 'Exporting…' : 'Export'}
+                </Button>
                 <Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
                   <MenuItem onClick={() => doExport('xlsx')}>Excel (.xlsx)</MenuItem>
                   <MenuItem onClick={() => doExport('csv')}>CSV</MenuItem>
@@ -127,6 +137,7 @@ export default function DataTable({
           </Box>
         </Box>
       )}
+      {(refreshing || (loading && shown.length > 0)) ? <LinearProgress aria-label="Updating" sx={{ height: 2 }} /> : <Box sx={{ height: 2 }} />}
       <TableContainer sx={{ overflowX: 'auto' }}>
         <Table size={dense ? 'small' : 'medium'}>
           <TableHead>
@@ -158,7 +169,13 @@ export default function DataTable({
             {!shown.length && (
               <TableRow>
                 <TableCell colSpan={columns.length}>
-                  <Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{query ? 'No matches.' : empty}</Typography>
+                  {loading ? (
+                    <Box role="status" sx={{ py: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5 }}>
+                      <CircularProgress size={22} /><Typography color="text.secondary">Loading…</Typography>
+                    </Box>
+                  ) : (
+                    <Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{query ? 'No matches.' : empty}</Typography>
+                  )}
                 </TableCell>
               </TableRow>
             )}

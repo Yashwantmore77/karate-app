@@ -5,6 +5,7 @@ import { REPORT_KEYS, REPORT_TITLE, buildReport } from '@kumite/shared/reports.j
 import { tms } from '../../data/tms'
 import { downloadCsv } from '../../components/tms/download'
 import { downloadXlsx } from '../../components/tms/excel'
+import { PageLoader } from '../../components/Loader'
 
 /** Section 45: every report as Excel (.xlsx), CSV or PDF. */
 export default function ReportsTab({ tournament, version, action }) {
@@ -12,7 +13,7 @@ export default function ReportsTab({ tournament, version, action }) {
   const [data, setData] = useState(null)
 
   useEffect(() => { tms.reportData(tid).then(setData) }, [tid, version])
-  if (!data) return null
+  if (!data) return <PageLoader label="Preparing reports…" />
 
   const slug = tournament.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 

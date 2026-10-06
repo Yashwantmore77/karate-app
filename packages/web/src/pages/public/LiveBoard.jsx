@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Box, Typography, Paper, Grid, Stack, Chip, CircularProgress, Card, CardActionArea, CardContent, Container } from '@mui/material'
+import { Box, Typography, Paper, Grid, Stack, Chip, Card, CardActionArea, CardContent, Container } from '@mui/material'
 import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import { displayRepo } from '../../data/display'
 import Bracket from '../../components/tms/Bracket'
 import KataRoundTable from '../../components/tms/KataRoundTable'
+import { PageLoader } from '../../components/Loader'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
@@ -29,7 +30,7 @@ export default function LiveBoard() {
   useEffect(() => { if (!slug) tms.public.list().then(setList).catch(() => setList([])) }, [slug])
 
   if (!slug) {
-    if (!list) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+    if (!list) return <PageLoader label="Loading tournaments…" />
     const running = list.filter((t) => t.lifecycleStatus !== 'COMPLETED' && t.lifecycleStatus !== 'ARCHIVED')
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
@@ -75,7 +76,7 @@ function Board({ slug }) {
     return () => clearInterval(id)
   }, [slides.length])
 
-  if (!data) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+  if (!data) return <PageLoader label="Loading live board…" />
 
   const pending = data.matches.filter((m) => !['completed', 'cancelled'].includes(m.status) && m.aka && m.ao).sort((a, b) => number(a) - number(b))
   const mats = [...new Set(pending.map((m) => m.mat || 1))].sort((a, b) => a - b)

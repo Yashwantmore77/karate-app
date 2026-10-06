@@ -24,7 +24,25 @@ export class HttpError extends Error {
 let onUnauthorized = null
 export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn }
 
-export async function request(path, { method = 'GET', body, signal, token: explicitToken, anonymous = false } = {}) {
+// Requests in flight, for the progress bar at the top of the app. Background
+// polls pass `quiet` so a hall screen's heartbeat never shows as loading.
+let inFlight = 0
+const activityListeners = new Set()
+const setInFlight = (n) => { inFlight = n; activityListeners.forEach((fn) => fn(inFlight)) }
+export const getInFlight = () => inFlight
+export const onActivity = (fn) => { activityListeners.add(fn); return () => activityListeners.delete(fn) }
+
+export async function request(path, { quiet = false, ...options } = {}) {
+  if (quiet) return send(path, options)
+  setInFlight(inFlight + 1)
+  try {
+    return await send(path, options)
+  } finally {
+    setInFlight(inFlight - 1)
+  }
+}
+
+async function send(path, { method = 'GET', body, signal, token: explicitToken, anonymous = false } = {}) {
   const url = apiUrl(path)
   if (!url) throw new Error(`no server configured for ${path}`)
 

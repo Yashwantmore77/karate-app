@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
 import {
   Container, Paper, Typography, TextField, Button, Stack, Alert, Grid, Box, Dialog, DialogTitle, DialogContent,
-  DialogActions, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, List, ListItem, ListItemText, CircularProgress,
+  DialogActions, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, List, ListItem, ListItemText,
   FormControlLabel, Checkbox,
 } from '@mui/material'
 import { Add, Edit, Delete } from '@mui/icons-material'
@@ -14,6 +14,7 @@ import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import useAction from '../../components/tms/useAction'
 import { openStoredFile } from '../../components/tms/download'
+import { PageLoader } from '../../components/Loader'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -61,7 +62,7 @@ export default function RegisterPortal() {
   if (infoError) {
     return <Container maxWidth="sm" sx={{ py: 6 }}><Alert severity="error">{describeError(infoError)}</Alert></Container>
   }
-  if (!info) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+  if (!info) return <PageLoader label="Opening registration…" />
 
   const open = async () => {
     const s = await action.run(() => tms.public.openLink(token, password))
@@ -95,7 +96,7 @@ export default function RegisterPortal() {
     )
   }
 
-  if (!me) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+  if (!me) return <PageLoader label="Loading your team…" />
 
   const canWrite = me.registrationOpen
 

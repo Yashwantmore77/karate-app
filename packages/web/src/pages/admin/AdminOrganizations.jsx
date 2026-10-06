@@ -9,6 +9,7 @@ import DataTable from '../../components/tms/DataTable'
 import StatusBadge from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import useAction from '../../components/tms/useAction'
+import { useLoading } from '../../components/Loader'
 
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
 
@@ -20,10 +21,11 @@ const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 export default function AdminOrganizations() {
   const action = useAction()
   const [rows, setRows] = useState([])
+  const { loading, refreshing, wrap } = useLoading()
   const [edit, setEdit] = useState(null)
   const [removing, setRemoving] = useState(null)
 
-  const load = () => organizations.list().then(setRows).catch(() => setRows([]))
+  const load = () => wrap(organizations.list().then(setRows).catch(() => setRows([])))
   useEffect(() => { load() }, [])
 
   const save = async () => {
@@ -39,7 +41,7 @@ export default function AdminOrganizations() {
       <Alert severity="info" sx={{ mb: 2 }}>
         Each organisation runs its own tournaments. Give an organisation an admin from the Accounts page; tournaments that admin creates belong to the organisation, and the public site can list them at /tournaments?org=short-name.
       </Alert>
-      <DataTable rows={rows} exportName="organisations" empty="No organisations yet."
+      <DataTable rows={rows} loading={loading} refreshing={refreshing} exportName="organisations" empty="No organisations yet."
         toolbar={<Button variant="contained" startIcon={<Add />} onClick={() => setEdit({ name: '', slug: '', contactEmail: '', contactMobile: '', country: '', active: true })}>Add organisation</Button>}
         columns={[
           { key: 'name', label: 'Name' },

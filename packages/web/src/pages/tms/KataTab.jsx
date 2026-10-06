@@ -7,6 +7,7 @@ import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import KataRoundTable from '../../components/tms/KataRoundTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
+import { PageLoader } from '../../components/Loader'
 
 /**
  * PRD point 19, sections 32-33: kata judged by a panel. The admin opens each
@@ -29,7 +30,7 @@ export default function KataTab({ tournament, version, action }) {
   // Judges' scores arrive as they are given.
   useEffect(() => watchPublicChanges(() => { load(); loadRound() }), [tid, selected])
 
-  if (!divisions) return null
+  if (!divisions) return <PageLoader label="Loading kata categories…" />
   if (tournament.settings?.kataMode === 'bouts') return <Alert severity="info">Kata in this tournament is fought as bouts (flags), on the Matches tab. Switch to panel judging in Settings.</Alert>
   if (!divisions.length) return <Alert severity="info">No kata categories with players yet.</Alert>
 

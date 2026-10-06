@@ -4,6 +4,7 @@ import { WEIGH_IN_STATUS } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
+import { useLoading } from '../../components/Loader'
 
 const ELIGIBLE = new Set(['APPROVED', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'WEIGH_IN_PENDING', 'WEIGH_IN_VERIFIED', 'CATEGORY_CONFIRMED'])
 
@@ -16,8 +17,9 @@ export default function WeighInTab({ tournament, version, action }) {
   const [draft, setDraft] = useState({})
   const [status, setStatus] = useState('')
 
-  const load = () => Promise.all([tms.players.list(tid, { event: 'kumite' }), tms.weightCategories.list(tid), tms.teams.list(tid)])
-    .then(([p, w, t]) => { setPlayers(p.filter((x) => ELIGIBLE.has(x.registrationStatus) || x.weighIn?.status)); setWeights(w); setTeams(t) })
+  const { loading, refreshing, wrap } = useLoading()
+  const load = () => wrap(Promise.all([tms.players.list(tid, { event: 'kumite' }), tms.weightCategories.list(tid), tms.teams.list(tid)])
+    .then(([p, w, t]) => { setPlayers(p.filter((x) => ELIGIBLE.has(x.registrationStatus) || x.weighIn?.status)); setWeights(w); setTeams(t) }))
   useEffect(() => { load() }, [tid, version])
 
   const category = (p) => {
@@ -43,6 +45,7 @@ export default function WeighInTab({ tournament, version, action }) {
       </Typography>
       <DataTable
         rows={rows}
+        loading={loading} refreshing={refreshing}
         empty="No approved kumite players to weigh."
         toolbar={(
           <>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
 import {
-  Container, Box, Typography, Tabs, Tab, Paper, Grid, Stack, TextField, MenuItem, Alert, CircularProgress, Button,
+  Container, Box, Typography, Tabs, Tab, Paper, Grid, Stack, TextField, MenuItem, Alert, Button,
   Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Chip,
 } from '@mui/material'
 import { tms } from '../../data/tms'
@@ -10,6 +10,7 @@ import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import Bracket from '../../components/tms/Bracket'
 import KataRoundTable from '../../components/tms/KataRoundTable'
 import { StandingsTable, MedalList, TallyTable } from '../tms/ResultsTab'
+import { PageLoader } from '../../components/Loader'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
@@ -46,7 +47,7 @@ export default function PublicTournament() {
   const teamName = useMemo(() => Object.fromEntries((data?.teams || []).map((t) => [t.id, t.name])), [data])
 
   if (error) return <Container sx={{ py: 6 }}><Alert severity="error">This tournament is not available.</Alert></Container>
-  if (!data) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+  if (!data) return <PageLoader label="Loading tournament…" />
 
   const t = data.tournament
   const live = data.matches.filter((m) => ['live', 'open'].includes(m.status))

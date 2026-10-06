@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { tms } from '../../data/tms'
 import { tournaments as tournamentStore } from '../../data/domain'
+import { PageLoader } from '../../components/Loader'
 
 const MEDAL_COLOR = { gold: '#B8860B', silver: '#7D7D7D', bronze: '#8C5A2B' }
 const ordinal = (n) => ({ 1: '1st', 2: '2nd', 3: '3rd' }[n] || `${n}th`)
@@ -18,7 +19,7 @@ export default function CertificatesPrint() {
     tms.certificates(tournamentId).then(setRows)
   }, [tournamentId])
 
-  if (!tournament) return null
+  if (!tournament) return <PageLoader label="Preparing certificates…" />
   const date = tournament.endDate || tournament.startDate || tournament.date
 
   return (

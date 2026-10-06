@@ -6,6 +6,7 @@ import { settingsOf } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import { MatchSides } from './MatchesTab'
+import { PageLoader } from '../../components/Loader'
 
 const UPCOMING = 4
 const number = (m) => Number(String(m.matchNumber).replace(/\D/g, '')) || 0
@@ -22,7 +23,7 @@ const ago = (iso) => {
 export default function CallTab({ tournament, version, action }) {
   const tid = tournament.id
   const mats = settingsOf(tournament).mats
-  const [matches, setMatches] = useState([])
+  const [matches, setMatches] = useState(null)
   const [moveTo, setMoveTo] = useState({})
 
   const load = () => tms.matches(tid).then(setMatches).catch(() => {})
@@ -30,15 +31,16 @@ export default function CallTab({ tournament, version, action }) {
   useEffect(() => watchPublicChanges(load), [tid])
 
   const byMat = useMemo(() => {
-    const pending = matches.filter((m) => !boutOutcome(m) && m.status !== 'cancelled' && m.redId && m.blueId).sort((a, b) => number(a) - number(b))
+    const pending = (matches || []).filter((m) => !boutOutcome(m) && m.status !== 'cancelled' && m.redId && m.blueId).sort((a, b) => number(a) - number(b))
     return Array.from({ length: mats }, (_, i) => i + 1).map((mat) => ({
       mat, rows: pending.filter((m) => Number(m.mat || 1) === mat).slice(0, UPCOMING),
     }))
   }, [matches, mats])
-  const finished = useMemo(() => matches.filter((m) => boutOutcome(m)).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))).slice(0, 8), [matches])
+  const finished = useMemo(() => (matches || []).filter((m) => boutOutcome(m)).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))).slice(0, 8), [matches])
 
   const call = (m) => action.run(() => tms.callMatch(tid, m.id, moveTo[m.id] ? Number(moveTo[m.id]) : null), `${m.matchNumber} called to mat ${moveTo[m.id] || m.mat || 1}`).then(load)
 
+  if (!matches) return <PageLoader label="Loading matches…" />
   if (!matches.length) return <Alert severity="info">No matches yet.</Alert>
 
   return (

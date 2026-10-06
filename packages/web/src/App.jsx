@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material'
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { SpeedInsights } from '@vercel/speed-insights/react'
 import { Analytics } from '@vercel/analytics/react'
 import { SessionProvider, useSession } from './state/SessionContext'
@@ -21,6 +21,7 @@ import RequireRole from './routes/RequireRole'
 import { ConnectionProvider } from './state/ConnectionContext'
 import AppStage from './components/AppStage'
 import AppNav from './components/AppNav'
+import { GlobalProgress, PageLoader } from './components/Loader'
 import { AO_LIGHT, AKA_LIGHT, CYAN, INK, GLASS, TEXT } from './theme/tokens'
 
 const theme = createTheme({
@@ -177,15 +178,14 @@ function AppShell() {
       <CssBaseline />
       <ConnectionProvider>
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-          <CircularProgress />
-        </Box>
+        <PageLoader label="Signing you in…" minHeight="100vh" />
       ) : (
         <BrowserRouter>
           <AppStage>
           {/* One header for the whole signed-in app, so the menu survives
               navigation instead of each page drawing its own. */}
           <AppNav user={user} profile={profile} />
+          <GlobalProgress />
           <Routes>
             <Route path="/login" element={<Login />} />
 

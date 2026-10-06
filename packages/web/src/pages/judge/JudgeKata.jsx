@@ -8,6 +8,7 @@ import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import useAction from '../../components/tms/useAction'
 import TournamentSelector from '../../components/tms/TournamentSelector'
+import { PageLoader } from '../../components/Loader'
 
 /**
  * PRD point 19: a kata judge's screen. The judge picks the open round and
@@ -39,7 +40,7 @@ function KataPanel({ tid, seat }) {
   useEffect(() => { if (!roundId && open.length === 1) setRoundId(open[0].id) }, [open, roundId])
 
   if (!seat) return <Container sx={{ py: 4 }}><Alert severity="warning">Your account has no judge seat. Ask the tournament admin to set one (J1 to J7).</Alert></Container>
-  if (!divisions) return null
+  if (!divisions) return <PageLoader label="Loading kata rounds…" />
 
   const performers = round ? [...round.rows].sort((a, b) => a.order - b.order) : []
   const mine = (r) => r.bySeat?.[seat]

@@ -5,6 +5,7 @@ import PageBar from '../../components/PageBar'
 import { isExpired } from '../../utils/dateUtils'
 import { useMatchRecord } from '../../hooks/useMatchRecord'
 import KumiteConsole from '../../features/console/KumiteConsole'
+import { PageLoader } from '../../components/Loader'
 
 // A judge sees the referee's console exactly as the referee does, with every
 // control inert. Same component, so the two cannot drift apart.
@@ -13,7 +14,7 @@ export default function JudgeMatchView({ profile }) {
   const { matchId } = useParams()
   const { match, category, tournament, redComp, blueComp, loading } = useMatchRecord(matchId)
 
-  if (loading) return null
+  if (loading) return <PageLoader label="Loading match…" />
   if (!match || !redComp || !blueComp) return <div>Match not found</div>
 
   return (

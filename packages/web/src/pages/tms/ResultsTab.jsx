@@ -9,6 +9,7 @@ import StatusBadge from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import Bracket from '../../components/tms/Bracket'
 import KataRoundTable from '../../components/tms/KataRoundTable'
+import { PageLoader, useLoading } from '../../components/Loader'
 
 export const MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' }
 
@@ -81,7 +82,8 @@ export default function ResultsTab({ tournament, reload, version, action }) {
   const [divisions, setDivisions] = useState([])
   const [players, setPlayers] = useState([])
 
-  const load = () => Promise.all([tms.results(tid), tms.tally(tid, by)]).then(([r, t]) => { setResults(r); setTally(t) })
+  const { loading, wrap } = useLoading()
+  const load = () => wrap(Promise.all([tms.results(tid), tms.tally(tid, by)]).then(([r, t]) => { setResults(r); setTally(t) }))
   useEffect(() => { load() }, [tid, version, by])
   useEffect(() => { Promise.all([tms.divisions(tid), tms.players.list(tid)]).then(([d, p]) => { setDivisions(d); setPlayers(p) }).catch(() => {}) }, [tid, version])
   const entrants = (key) => {
@@ -114,7 +116,8 @@ export default function ResultsTab({ tournament, reload, version, action }) {
         </Stack>
       </Paper>
 
-      {!results.length && <Alert severity="info">No categories with matches yet.</Alert>}
+      {loading && <PageLoader label="Loading results…" />}
+      {!loading && !results.length && <Alert severity="info">No categories with matches yet.</Alert>}
       {results.map((d) => (
         <Paper key={d.key} sx={{ p: 2 }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', mb: 1 }} spacing={1}>

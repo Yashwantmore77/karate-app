@@ -8,6 +8,7 @@ import { settingsOf } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
+import { useLoading } from '../../components/Loader'
 
 /** Sections 20-25: categorise, lock, draw pools, confirm the draw, generate matches. */
 export default function DrawTab({ tournament, reload, version, action, goTab }) {
@@ -22,8 +23,9 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
   const [moving, setMoving] = useState(null)
   const [confirm, setConfirm] = useState(null)
 
-  const load = () => Promise.all([tms.divisions(tid), tms.pools(tid), tms.players.list(tid), tms.teams.list(tid)])
-    .then(([d, p, pl, t]) => { setDivisions(d); setPools(p); setPlayers(pl); setTeams(t) })
+  const { loading, refreshing, wrap } = useLoading()
+  const load = () => wrap(Promise.all([tms.divisions(tid), tms.pools(tid), tms.players.list(tid), tms.teams.list(tid)])
+    .then(([d, p, pl, t]) => { setDivisions(d); setPools(p); setPlayers(pl); setTeams(t) }))
   useEffect(() => { load() }, [tid, version])
 
   const nameOf = (id) => players.find((p) => p.id === id)?.name || '?'
@@ -69,6 +71,7 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
         {drawLocked && <Alert severity="success" sx={{ mb: 2 }} icon={<Lock />}>The draw is locked. Unlock it on the Dashboard (with a reason) to change pools.</Alert>}
         <DataTable
           rows={divisions}
+          loading={loading} refreshing={refreshing}
           rowKey={(d) => d.key}
           empty="No categorised, approved players yet."
           toolbar={<Button variant="contained" startIcon={<Shuffle />} disabled={!locked || drawLocked || !divisions.length}

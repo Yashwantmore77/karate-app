@@ -12,6 +12,7 @@ import { POOL_MODE_LABEL, POOL_SYSTEM_LABEL } from './SetupTab'
 import DataTable from '../../components/tms/DataTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import StatusBadge from '../../components/tms/StatusBadge'
+import { useLoading } from '../../components/Loader'
 
 const GENDER = { M: 'Boys / Men', F: 'Girls / Women', Mixed: 'Mixed' }
 const num = (v) => (v === '' || v == null ? null : Number(v))
@@ -54,7 +55,8 @@ export default function CategoriesTab({ tournament, version, action }) {
     <IconButton size="small" aria-label="Category rules" title="Category rules (pool size, duration, rounds)" onClick={() => setRules({ kind, row, settings: { ...(row.settings || {}) } })}><Tune fontSize="small" /></IconButton>
   )
 
-  const load = () => Promise.all([tms.ageGroups.list(tid), tms.weightCategories.list(tid)]).then(([g, w]) => { setGroups(g); setWeights(w) })
+  const { loading, refreshing, wrap } = useLoading()
+  const load = () => wrap(Promise.all([tms.ageGroups.list(tid), tms.weightCategories.list(tid)]).then(([g, w]) => { setGroups(g); setWeights(w) }))
   useEffect(() => { load() }, [tid, version])
 
   const save = async () => {
@@ -78,6 +80,7 @@ export default function CategoriesTab({ tournament, version, action }) {
         <Typography variant="h3" gutterBottom>Age groups</Typography>
         <DataTable
           rows={groups}
+          loading={loading} refreshing={refreshing}
           empty="No age groups yet. Add e.g. Boys 12-13."
           toolbar={<Button variant="contained" startIcon={<Add />} disabled={locked} onClick={() => setEditing({ kind: 'group', row: { gender: 'M', minAge: '', maxAge: '', active: true } })}>Add age group</Button>}
           columns={[
@@ -103,6 +106,7 @@ export default function CategoriesTab({ tournament, version, action }) {
         <Typography variant="h3" gutterBottom>Weight categories (Kumite)</Typography>
         <DataTable
           rows={weights}
+          loading={loading} refreshing={refreshing}
           empty="No weight categories yet. Add e.g. -35 KG under Boys 12-13."
           toolbar={<Button variant="contained" startIcon={<Add />} disabled={locked || !groups.length} onClick={() => setEditing({ kind: 'weight', row: { ageGroupId: groups[0]?.id, active: true } })}>Add weight category</Button>}
           columns={[

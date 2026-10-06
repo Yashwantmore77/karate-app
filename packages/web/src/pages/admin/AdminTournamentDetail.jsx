@@ -8,6 +8,7 @@ import PageBar from '../../components/PageBar'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
+import { PageLoader } from '../../components/Loader'
 
 const validationSchema = Yup.object({
   catName: Yup.string().required('Category name required'),
@@ -99,7 +100,7 @@ export default function AdminTournamentDetail({ uid }) {
 
   // Nothing until the read settles: announcing "not found" while it is still in
   // flight would be wrong every time, and only briefly.
-  if (loading) return null
+  if (loading) return <PageLoader label="Loading tournament…" />
   if (!tournament) return <div>Tournament not found</div>
 
   return (

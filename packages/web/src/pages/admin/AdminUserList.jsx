@@ -16,6 +16,7 @@ import * as organizations from '../../data/organizations'
 import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 import * as users from '../../data/users'
 import { tournaments as tournamentStore } from '../../data/domain'
+import { PageLoader } from '../../components/Loader'
 
 // Only on create: an existing account keeps its password unless a new one is
 // typed, so the field is optional when editing.
@@ -160,7 +161,7 @@ export default function AdminUserList({ uid }) {
             </Button>
           </Stack>
 
-          {loading ? null : accounts.length === 0 ? (
+          {loading ? <PageLoader label="Loading accounts…" /> : accounts.length === 0 ? (
             <Paper>
               <NoResults query={search} noun="accounts" />
             </Paper>
