@@ -3,6 +3,7 @@ import { requireAuth, requireCoach } from '../auth/middleware.js'
 import { validate } from '../lib/validate.js'
 import { signCoachToken } from '../auth/jwt.js'
 import { playerBody, withMeta } from './tms.js'
+import { FILE_SCHEMA, sendFile } from './files.js'
 
 const TEAM = {
   name: { type: 'string', required: true, max: 120 },
@@ -50,6 +51,11 @@ export function coachRoutes(tms) {
     await tms.removePlayer(withMeta(req), t(req), req.params.id)
     res.status(204).end()
   })
+
+  router.post('/files', async (req, res) => {
+    res.status(201).json({ file: await tms.uploadFile(withMeta(req), t(req), validate(req.body, FILE_SCHEMA)) })
+  })
+  router.get('/files/:id', async (req, res) => sendFile(res, await tms.readFile(req.user, req.params.id)))
 
   const bulkBody = (req) => validate(req.body, { csv: { type: 'string', required: true, max: 2_000_000, trim: false } })
   router.post('/players/bulk/preview', async (req, res) => res.json(await tms.previewBulk(withMeta(req), t(req), bulkBody(req).csv)))

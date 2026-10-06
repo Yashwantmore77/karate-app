@@ -6,7 +6,9 @@ import {
 import { ArrowUpward, ArrowDownward, Delete, Add, ContentCopy } from '@mui/icons-material'
 import { formFields, FIELD_TYPES } from '@kumite/shared/registration.js'
 import { settingsOf } from '@kumite/shared/tms.js'
-import { tms } from '../../data/tms'
+import { tms, isRemote } from '../../data/tms'
+import { readFileBase64 } from '../../components/tms/download'
+import { checkFile } from '@kumite/shared/files.js'
 
 const DETAIL_FIELDS = [
   ['name', 'Tournament name', 12], ['description', 'Description', 12],
@@ -109,7 +111,30 @@ export default function SetupTab({ tournament, reload, action }) {
             </Grid>
           ))}
         </Grid>
-        <Button size="large" variant="contained" sx={{ mt: 2 }} onClick={saveDetails} disabled={action.busy}>Save details</Button>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2, alignItems: { sm: 'center' } }}>
+          <Button size="large" variant="contained" onClick={saveDetails} disabled={action.busy}>Save details</Button>
+          <Button variant="outlined" component="label">
+            Upload logo
+            <input hidden type="file" accept="image/png,image/jpeg" onChange={async (e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (!file) return
+              const data = await readFileBase64(file)
+              const problem = checkFile({ name: file.name, type: file.type, data })
+              if (problem || file.type === 'application/pdf') return action.notify({ severity: 'error', text: 'Use a PNG or JPEG of at most 2 MB.' })
+              // With a server the logo is a public file; offline it is kept
+              // inline on the tournament, as there is no file server to link to.
+              const logoUrl = isRemote
+                ? tms.publicFileUrl((await action.run(() => tms.uploadFile(tid, { name: file.name, type: file.type, data, purpose: 'logo' })))?.id)
+                : `data:${file.type};base64,${data}`
+              if (!logoUrl) return
+              setDetails((d) => ({ ...d, logoUrl }))
+              await action.run(() => tms.updateTournament(tid, { logoUrl }), 'Logo uploaded')
+              reload()
+            }} />
+          </Button>
+          {details.logoUrl && <Box component="img" src={details.logoUrl} alt="Tournament logo" sx={{ height: 48, borderRadius: 1 }} />}
+        </Stack>
       </Paper>
 
       <Paper sx={{ p: 2 }}>

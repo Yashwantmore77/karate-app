@@ -12,6 +12,7 @@ import DataTable from '../../components/tms/DataTable'
 import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import useAction from '../../components/tms/useAction'
+import { openStoredFile } from '../../components/tms/download'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -199,7 +200,9 @@ export default function RegisterPortal() {
 
       <Dialog open={!!edit} onClose={() => setEdit(null)} maxWidth="md" fullWidth>
         <DialogTitle>{edit?.id ? `Edit ${edit.name}` : 'Add player'}</DialogTitle>
-        <DialogContent><Box sx={{ mt: 1 }}>{edit && <PlayerForm fields={fields} value={edit} onChange={setEdit} errors={errors} />}</Box></DialogContent>
+        <DialogContent><Box sx={{ mt: 1 }}>{edit && <PlayerForm fields={fields} value={edit} onChange={setEdit} errors={errors} disabled={!canWrite}
+          onUpload={(file) => tms.coach.uploadFile(session, file)}
+          onOpenFile={(id) => action.run(() => tms.coach.readFile(session, id).then(openStoredFile))} />}</Box></DialogContent>
         <DialogActions>
           <Button onClick={() => setEdit(null)}>Cancel</Button>
           <Button variant="contained" onClick={save}>Save</Button>

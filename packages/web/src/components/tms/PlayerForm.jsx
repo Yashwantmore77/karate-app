@@ -1,5 +1,8 @@
-import { Grid, TextField, MenuItem, FormControl, FormLabel, RadioGroup, Radio, FormControlLabel, Checkbox, FormGroup, FormHelperText, Button, Typography } from '@mui/material'
+import { Grid, Stack, TextField, MenuItem, FormControl, FormLabel, RadioGroup, Radio, FormControlLabel, Checkbox, FormGroup, FormHelperText, Button, Typography } from '@mui/material'
+import { useState } from 'react'
 import { BUILT_IN_KEYS } from '@kumite/shared/registration.js'
+import { checkFile } from '@kumite/shared/files.js'
+import { readFileBase64 } from './download'
 
 const ACCEPT = 'image/png,image/jpeg,application/pdf'
 const MAX_FILE = 2 * 1024 * 1024
@@ -10,7 +13,9 @@ const valueOf = (value, key) => (BUILT_IN_KEYS.has(key) ? value[key] : value.ext
  * Renders a tournament's registration form (sections 11-12) from its field
  * list, so the admin's form builder and the coach's screen show the same thing.
  */
-export default function PlayerForm({ fields, value, onChange, errors = [], teams = null, disabled = false }) {
+export default function PlayerForm({ fields, value, onChange, errors = [], teams = null, disabled = false, onUpload = null, onOpenFile = null }) {
+  const [uploading, setUploading] = useState(null)
+  const [uploadError, setUploadError] = useState({})
   const set = (key, v) => {
     if (BUILT_IN_KEYS.has(key)) onChange({ ...value, [key]: v })
     else onChange({ ...value, extra: { ...(value.extra || {}), [key]: v } })
@@ -70,26 +75,44 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
             </TextField>
           )
         } else if (field.type === 'file') {
-          // Section 49: only images and PDFs, at most 2 MB. The file name is
-          // recorded; document storage is listed as pending in PRD-CHECKLIST.md.
+          // Section 49: PNG, JPEG or PDF up to 2 MB, checked here for a quick
+          // answer and again by the server against the file's real content.
+          // The player keeps the stored file's id.
+          const fileErr = uploadError[field.key] || err
           input = (
-            <FormControl error={!!err} disabled={disabled}>
+            <FormControl error={!!fileErr} disabled={disabled}>
               <FormLabel>{label}</FormLabel>
-              <Button variant="outlined" component="label" size="small" sx={{ mt: 0.5, alignSelf: 'flex-start' }} disabled={disabled}>
-                {v ? 'Replace file' : 'Choose file'}
-                <input hidden type="file" accept={ACCEPT} onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  if (!ACCEPT.split(',').includes(file.type) || file.size > MAX_FILE) {
-                    set(field.key, '')
-                    window.alert('Only PNG, JPEG or PDF up to 2 MB')
-                    return
-                  }
-                  set(field.key, file.name)
-                }} />
-              </Button>
-              {v && <Typography variant="body2" color="text.secondary">{v}</Typography>}
-              {err && <FormHelperText>{err}</FormHelperText>}
+              <Stack direction="row" spacing={1} sx={{ mt: 0.5, alignItems: 'center' }}>
+                <Button variant="outlined" component="label" size="small" disabled={disabled || !onUpload || uploading === field.key}>
+                  {uploading === field.key ? 'Uploading…' : v ? 'Replace file' : 'Upload file'}
+                  <input hidden type="file" accept={ACCEPT} onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!file) return
+                    if (!ACCEPT.split(',').includes(file.type) || file.size > MAX_FILE) {
+                      setUploadError((x) => ({ ...x, [field.key]: 'Only PNG, JPEG or PDF up to 2 MB' }))
+                      return
+                    }
+                    setUploading(field.key)
+                    try {
+                      const data = await readFileBase64(file)
+                      const problem = checkFile({ name: file.name, type: file.type, data })
+                      if (problem) throw Object.assign(new Error(problem), { code: problem })
+                      const stored = await onUpload({ name: file.name, type: file.type, data })
+                      setUploadError((x) => ({ ...x, [field.key]: null }))
+                      set(field.key, stored.id)
+                    } catch (error) {
+                      setUploadError((x) => ({ ...x, [field.key]: error?.code === 'content_does_not_match_type' ? 'That file is not really a PNG, JPEG or PDF' : 'Upload failed' }))
+                    } finally {
+                      setUploading(null)
+                    }
+                  }} />
+                </Button>
+                {v && onOpenFile && <Button size="small" onClick={() => onOpenFile(v)}>View</Button>}
+                {v && <Typography variant="body2" color="text.secondary">✓ Attached</Typography>}
+              </Stack>
+              {!onUpload && <FormHelperText>Uploads are available once the player is being registered online.</FormHelperText>}
+              {fileErr && <FormHelperText>{fileErr}</FormHelperText>}
             </FormControl>
           )
         } else {

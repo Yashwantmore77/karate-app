@@ -3,7 +3,8 @@ import { requireAuth, requirePermission, tournamentAccess } from '../auth/middle
 import { findUserRecord } from '../auth/users.js'
 import { validate } from '../lib/validate.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
-import { PERMISSION as P } from '@kumite/shared/permissions.js'
+import { PERMISSION as P, can } from '@kumite/shared/permissions.js'
+import { FILE_SCHEMA } from './files.js'
 import { TOURNAMENT_STATUS, REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
 import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES } from '@kumite/shared/tms.js'
 
@@ -294,6 +295,14 @@ export function tmsRoutes(tms) {
   router.get('/:tid/certificates', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => res.json({ certificates: await tms.listCertificates(tid(req)) }))
   router.post('/:tid/certificates/generate', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
     res.status(201).json(await tms.generateCertificates(withMeta(req), tid(req)))
+  })
+
+  // --- files (sections 5, 12, 17) ---------------------------------------------
+
+  router.post('/:tid/files', requirePermission(P.PLAYER_EDIT), async (req, res) => {
+    const body = validate(req.body, FILE_SCHEMA)
+    if (body.purpose === 'logo' && !can(req.user.role, P.TOURNAMENT_MANAGE)) return res.status(403).json({ error: 'forbidden' })
+    res.status(201).json({ file: await tms.uploadFile(withMeta(req), tid(req), body) })
   })
 
   // --- link, dashboard, notifications, audit --------------------------------

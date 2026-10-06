@@ -28,6 +28,7 @@ import {
   publicPlayer, publicTeam,
 } from './registration.js'
 import { hashSecret, verifySecret, randomToken } from './secret.js'
+import { checkFile, base64Size, safeFileName, FILE_PURPOSES } from './files.js'
 
 const R = REGISTRATION_STATUS
 const T = TOURNAMENT_STATUS
@@ -1273,9 +1274,44 @@ export function createTms(stores, { now = () => new Date() } = {}) {
     }
   }
 
+  // --- files (sections 5, 12, 17, 49) ------------------------------------------
+
+  const fileMeta = ({ data, ...meta }) => meta
+
+  /** Stores an upload. Logos are public; everything else is private (Rule 8). */
+  async function uploadFile(actor, tournamentId, { name, type, data, purpose = 'player' }) {
+    const tournament = await tournamentOf(tournamentId)
+    if (!FILE_PURPOSES.includes(purpose)) throw invalid('invalid_purpose')
+    if (purpose === 'logo' && isCoach(actor)) throw denied()
+    if (isCoach(actor)) assertCoachMayWrite(actor, tournament)
+    const problem = checkFile({ name, type, data })
+    if (problem) throw invalid(problem)
+    const row = await stores.files.insert({
+      tournamentId, purpose, public: purpose === 'logo', name: safeFileName(name), type, size: base64Size(data), data,
+      uploadedBy: actor?.uid || null, teamId: isCoach(actor) ? actor.teamId : null, at: iso(),
+    })
+    return fileMeta(row)
+  }
+
+  /**
+   * Who may open a file: anyone for a public logo; staff who can see
+   * registrations; a coach for their own team's uploads.
+   */
+  async function readFile(actor, fileId, { canViewRegistrations = false } = {}) {
+    const file = await load('files', fileId)
+    if (file.public) return file
+    if (!actor) throw denied()
+    if (isCoach(actor)) {
+      if (actor.tournamentId === file.tournamentId && file.teamId && file.teamId === actor.teamId) return file
+      throw denied()
+    }
+    if (canViewRegistrations) return file
+    throw denied()
+  }
+
   /** Cascade for a deleted tournament: nothing it owned may be left behind. */
   async function purgeTournament(tournamentId) {
-    for (const name of ['ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals', 'certificates', 'registrationLinks', 'notifications']) {
+    for (const name of ['ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals', 'certificates', 'registrationLinks', 'notifications', 'files']) {
       await stores[name].removeWhere({ tournamentId })
     }
   }
@@ -1298,12 +1334,14 @@ export function createTms(stores, { now = () => new Date() } = {}) {
     // public, dashboard, audit
     publicList, publicView, publicTournament, dashboard, listNotifications, markNotificationsRead,
     auditTrail: (tournamentId) => audit.forTournament(tournamentId),
+    // files
+    uploadFile, readFile,
   }
 }
 
 export const TMS_COLLECTIONS = [
   'ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals',
-  'certificates', 'registrationLinks', 'notifications', 'auditLog',
+  'certificates', 'registrationLinks', 'notifications', 'auditLog', 'files',
 ]
 
 export { DomainError, poolName }

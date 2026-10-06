@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { validate } from '../lib/validate.js'
 import { rateLimit } from '../lib/rateLimit.js'
 import { signCoachToken } from '../auth/jwt.js'
+import { sendFile } from './files.js'
 
 /**
  * PRD sections 39 and 54, and the registration link of section 14. No sign-in,
@@ -25,6 +26,9 @@ export function publicRoutes(tms) {
     res.setHeader('Cache-Control', 'no-store')
     res.json(await tms.publicView(req.params.idOrSlug))
   })
+
+  // Only files marked public (tournament logos); anything else is refused.
+  router.get('/files/:id', async (req, res) => sendFile(res, await tms.readFile(null, req.params.id)))
 
   router.get('/register/:token', async (req, res) => res.json(await tms.linkInfo(req.params.token)))
 

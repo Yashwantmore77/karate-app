@@ -215,6 +215,10 @@ export const tms = {
   notifications: (tid) => s.listNotifications(tid, 'admin'),
   markRead: (tid) => s.markNotificationsRead(tid, 'admin'),
   audit: (tid) => s.auditTrail(tid),
+  uploadFile: (tid, file) => s.uploadFile(me(), tid, file),
+  // Offline, staff at this browser can open what this browser stored.
+  readFile: (_tid, id) => s.readFile(me(), id, { canViewRegistrations: true }),
+  publicFileUrl: () => null,
 
   public: {
     list: () => s.publicList(),
@@ -240,5 +244,7 @@ export const tms = {
     removePlayer(session, id) { return s.removePlayer(this.actor(session), session.tournamentId, id) },
     bulkPreview(session, csv) { return s.previewBulk(this.actor(session), session.tournamentId, csv) },
     bulkImport(session, csv) { return s.importBulk(this.actor(session), session.tournamentId, csv) },
+    uploadFile(session, file) { return s.uploadFile(this.actor(session), session.tournamentId, file) },
+    readFile(session, id) { return s.readFile(this.actor(session), id) },
   },
 }

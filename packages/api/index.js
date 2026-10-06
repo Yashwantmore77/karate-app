@@ -18,6 +18,7 @@ import { displayRoutes } from './routes/display.js'
 import { tmsRoutes } from './routes/tms.js'
 import { publicRoutes } from './routes/public.js'
 import { coachRoutes } from './routes/coach.js'
+import { fileRoutes } from './routes/files.js'
 import { createTms } from '@kumite/shared/tms.js'
 
 const EXPIRY_SWEEP_MS = 250
@@ -47,6 +48,8 @@ export function createApp() {
   // that needs no credentials.
   // A bulk player upload is the one body that is legitimately large.
   app.use(/\/players\/bulk/, express.json({ limit: '2mb' }))
+  // An upload is a 2 MB file as base64, about 2.7 MB of JSON.
+  app.use(/\/files$/, express.json({ limit: '4mb' }))
   app.use(express.json({ limit: '32kb' }))
   app.use(security({ allowedOrigin: process.env.CORS_ORIGIN || '*' }))
 
@@ -74,6 +77,7 @@ export function createApp() {
   // Public APIs are kept apart from the admin ones (section 56).
   app.use(`${API_BASE}/public`, publicRoutes(tms))
   app.use(`${API_BASE}/coach`, coachRoutes(tms))
+  app.use(`${API_BASE}/files`, fileRoutes(tms))
   app.use(`${API_BASE}/categories`, categories.flat)
   app.use(`${API_BASE}/competitors`, competitors.flat)
   app.use(`${API_BASE}/matches`, matches.flat)

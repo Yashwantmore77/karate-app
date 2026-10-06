@@ -174,4 +174,26 @@ describe('PRD tournament management over HTTP', () => {
     const listed = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.referee)).body.matches
     expect(listed.find((m) => m.id === m1.id).resultType).toBe('WALKOVER')
   })
+
+  it('stores uploads, serves private ones only to those allowed, and logos to anyone', async () => {
+    const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+    const { t, link } = await setUpTournament()
+    const coach = await openCoach(link)
+    const up = await call('POST', '/coach/files', { name: 'id.png', type: 'image/png', data: PNG }, coach)
+    expect(up.status).toBe(201)
+    const spoof = await call('POST', '/coach/files', { name: 'x.pdf', type: 'application/pdf', data: PNG }, coach)
+    expect(spoof.body.error).toBe('content_does_not_match_type')
+
+    const raw = (path, token) => fetch(`http://localhost:${port}/api/v1${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} })
+    const asStaff = await raw(`/files/${up.body.file.id}`, tokens.registrar)
+    expect(asStaff.status).toBe(200)
+    expect(asStaff.headers.get('content-type')).toBe('image/png')
+    expect(asStaff.headers.get('content-security-policy')).toMatch(/sandbox/)
+    expect((await raw(`/files/${up.body.file.id}`, tokens.referee)).status).toBe(403)
+    expect((await raw(`/public/files/${up.body.file.id}`)).status).toBe(403)
+
+    expect((await call('POST', `/tournaments/${t}/files`, { name: 'l.png', type: 'image/png', data: PNG, purpose: 'logo' }, tokens.registrar)).status).toBe(403)
+    const logo = await call('POST', `/tournaments/${t}/files`, { name: 'l.png', type: 'image/png', data: PNG, purpose: 'logo' }, tokens.admin)
+    expect((await raw(`/public/files/${logo.body.file.id}`)).status).toBe(200)
+  })
 })

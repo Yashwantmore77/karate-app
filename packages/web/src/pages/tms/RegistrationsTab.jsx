@@ -14,6 +14,7 @@ import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import PlayerForm from '../../components/tms/PlayerForm'
 import BulkUpload from '../../components/tms/BulkUpload'
+import { openStoredFile } from '../../components/tms/download'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -246,7 +247,9 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         <DialogTitle>{playerEdit?.id ? `Edit ${playerEdit.name}` : 'Add player'}</DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 1 }}>
-            {playerEdit && <PlayerForm fields={fields} value={playerEdit} onChange={setPlayerEdit} errors={playerErrors} teams={teams} />}
+            {playerEdit && <PlayerForm fields={fields} value={playerEdit} onChange={setPlayerEdit} errors={playerErrors} teams={teams}
+              onUpload={(file) => tms.uploadFile(tid, { ...file, purpose: 'player' })}
+              onOpenFile={(id) => action.run(() => tms.readFile(tid, id).then(openStoredFile))} />}
             {playerEdit && (
               <TextField sx={{ mt: 2 }} type="number" label="Seed (optional, 1 = strongest)" value={playerEdit.seed ?? ''}
                 onChange={(e) => setPlayerEdit({ ...playerEdit, seed: e.target.value === '' ? null : Number(e.target.value) })} helperText="Used by the seeded draw" />

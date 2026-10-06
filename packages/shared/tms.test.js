@@ -392,3 +392,39 @@ describe('tournament rules on the console (section 29) and result types (section
     expect(poolComplete([{ status: 'completed', winner: 'red' }, { status: 'cancelled' }])).toBe(true)
   })
 })
+
+describe('file uploads (sections 12, 17, 49)', () => {
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+  const PDF = 'JVBERi0xLjQKJcOkw7zDtsOfCg=='
+
+  it('accepts a file only when its content matches its type', async () => {
+    const { checkFile } = await import('./files.js')
+    expect(checkFile({ name: 'a.png', type: 'image/png', data: PNG })).toBeNull()
+    expect(checkFile({ name: 'a.pdf', type: 'application/pdf', data: PDF })).toBeNull()
+    expect(checkFile({ name: 'a.png', type: 'image/png', data: PDF })).toBe('content_does_not_match_type')
+    expect(checkFile({ name: 'a.exe', type: 'application/x-msdownload', data: PDF })).toBe('unsupported_type')
+    expect(checkFile({ name: 'big.pdf', type: 'application/pdf', data: `JVBERi0${'A'.repeat(3_000_000)}` })).toBe('file_too_large')
+  })
+
+  it('keeps ID proofs private and logos public', async () => {
+    const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
+    const tms = createTms(stores)
+    const t = await stores.tournaments.insert({ name: 'T', masterAgeDate: '2027-01-01', lifecycleStatus: 'REGISTRATION_OPEN' })
+    const team = await tms.teams.create(admin, t.id, { name: 'A' })
+    const coach = { uid: 'coach:x', role: 'coach', tournamentId: t.id, teamId: team.id }
+    const proof = await tms.uploadFile(coach, t.id, { name: 'id.pdf', type: 'application/pdf', data: PDF })
+    expect(proof).not.toHaveProperty('data')
+    await expect(tms.readFile(null, proof.id)).rejects.toMatchObject({ code: 'forbidden' })
+    await expect(tms.readFile({ ...coach, teamId: 'other' }, proof.id)).rejects.toMatchObject({ code: 'forbidden' })
+    expect((await tms.readFile(coach, proof.id)).data).toBe(PDF)
+    expect((await tms.readFile(admin, proof.id, { canViewRegistrations: true })).type).toBe('application/pdf')
+    await expect(tms.uploadFile(coach, t.id, { name: 'logo.png', type: 'image/png', data: PNG, purpose: 'logo' })).rejects.toMatchObject({ code: 'forbidden' })
+    const logo = await tms.uploadFile(admin, t.id, { name: 'logo.png', type: 'image/png', data: PNG, purpose: 'logo' })
+    expect((await tms.readFile(null, logo.id)).public).toBe(true)
+
+    const player = await tms.createPlayer(coach, t.id, { name: 'P', dob: '2014-01-01', gender: 'M', events: ['kata'], idProof: proof.id })
+    expect(player.idProof).toBe(proof.id)
+    await expect(tms.createPlayer(coach, t.id, { name: 'Q', dob: '2014-01-01', gender: 'M', events: ['kata'], idProof: '../../etc/passwd' }))
+      .rejects.toMatchObject({ code: 'invalid_player' })
+  })
+})

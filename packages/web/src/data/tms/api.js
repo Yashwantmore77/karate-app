@@ -1,4 +1,12 @@
 import { request } from '../http'
+import { apiUrl, getToken } from '../session'
+
+// Files come back as bytes, not JSON; read them with the caller's token.
+async function fetchFile(path, token) {
+  const res = await fetch(apiUrl(path), { headers: token ? { authorization: `Bearer ${token}` } : {} })
+  if (!res.ok) throw Object.assign(new Error('file'), { status: res.status, code: res.status === 403 ? 'forbidden' : 'not_found' })
+  return { blob: await res.blob(), type: res.headers.get('content-type') }
+}
 
 // The same surface as ./local, over the REST API of PRD section 56.
 
@@ -65,6 +73,9 @@ export const tms = {
   notifications: async (tid) => (await get(`${T(tid)}/notifications`)).notifications,
   markRead: (tid) => send('POST', `${T(tid)}/notifications/read`, {}),
   audit: async (tid) => (await get(`${T(tid)}/audit`)).audit,
+  uploadFile: async (tid, file) => (await send('POST', `${T(tid)}/files`, file)).file,
+  readFile: (_tid, id) => fetchFile(`/files/${id}`, getToken()),
+  publicFileUrl: (id) => apiUrl(`/public/files/${id}`),
 
   public: {
     list: async () => (await get('/public/tournaments', { anonymous: true })).tournaments,
@@ -89,5 +100,7 @@ export const tms = {
     removePlayer: (session, id) => send('DELETE', `/coach/players/${id}`, undefined, { token: session.token }),
     bulkPreview: (session, csv) => send('POST', '/coach/players/bulk/preview', { csv }, { token: session.token }),
     bulkImport: (session, csv) => send('POST', '/coach/players/bulk', { csv }, { token: session.token }),
+    uploadFile: async (session, file) => (await send('POST', '/coach/files', file, { token: session.token })).file,
+    readFile: (session, id) => fetchFile(`/coach/files/${id}`, session.token),
   },
 }

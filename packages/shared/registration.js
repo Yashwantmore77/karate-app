@@ -162,6 +162,10 @@ export function validatePlayer(input, fields = DEFAULT_FIELDS) {
     } else if ((field.type === 'dropdown' || field.type === 'radio') && field.options?.length) {
       if (!field.options.includes(String(value))) errors.push({ field: field.key, message: `${field.label} must be one of ${field.options.join(', ')}` })
       else set(field.key, String(value))
+    } else if (field.type === 'file') {
+      // The id of an uploaded file (see files.js), never the bytes themselves.
+      if (!/^[A-Za-z0-9_-]{2,80}$/.test(String(value))) errors.push({ field: field.key, message: `${field.label} must be an uploaded file` })
+      else set(field.key, String(value))
     } else if (field.type === 'checkbox' && field.key !== 'events') {
       set(field.key, Array.isArray(value) ? value.map(String) : value === true || value === 'true' || value === 'yes')
     } else {

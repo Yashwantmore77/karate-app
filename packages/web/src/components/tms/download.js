@@ -22,3 +22,22 @@ export const readFileText = (file) => new Promise((resolve, reject) => {
   reader.onerror = () => reject(reader.error)
   reader.readAsText(file)
 })
+
+/** Reads a chosen file as base64 (no data: prefix) for upload. */
+export const readFileBase64 = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+  reader.onerror = () => reject(reader.error)
+  reader.readAsDataURL(file)
+})
+
+/**
+ * Opens a stored file in a new tab. Accepts what either side returns: the
+ * offline service's record (base64) or the API's blob.
+ */
+export function openStoredFile(file) {
+  const blob = file.blob || new Blob([Uint8Array.from(atob(file.data), (c) => c.charCodeAt(0))], { type: file.type })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank', 'noopener')
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
