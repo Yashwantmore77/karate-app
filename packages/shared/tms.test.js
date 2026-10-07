@@ -9,6 +9,11 @@ import { can, PERMISSION } from './permissions.js'
 
 const LEGACY = ['tournaments', 'categories', 'competitors', 'matches']
 const admin = { uid: 'admin-1', role: 'admin' }
+// What PRD v1 §6 needs before registration opens.
+const READY = {
+  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2027-01-16',
+  registrationStart: '2026-11-01', registrationClose: '2026-12-31', contactMobile: '+91 98765 43210', contactEmail: 'office@example.com', country: 'India',
+}
 
 describe('pools (Rules 3-4)', () => {
   it('uses the configured size and splits evenly', () => {
@@ -100,10 +105,11 @@ describe('results', () => {
       { round: 1, aka: 'b', ao: 'c', status: 'completed', winner: 'blue' },
       { round: 2, aka: 'a', ao: 'c', status: 'completed', winner: 'blue' },
     ])
-    expect(medals).toEqual([
+    expect(medals.map(({ id, rank, medal }) => ({ id, rank, medal }))).toEqual([
       { id: 'c', rank: 1, medal: 'gold' }, { id: 'a', rank: 2, medal: 'silver' },
       { id: 'd', rank: 3, medal: 'bronze' }, { id: 'b', rank: 3, medal: 'bronze' },
     ])
+    expect(medals[0].reason).toBe('Won the final')
   })
 
   it('tallies by club, gold first', () => {
@@ -117,17 +123,20 @@ describe('results', () => {
 
 describe('registration form and bulk upload', () => {
   it('normalises a player and reports what is wrong', () => {
-    const ok = validatePlayer({ name: 'Rahul', dob: '15/06/2014', gender: 'Boy', events: 'Kata + Kumite', weight: '34.5' })
+    const ok = validatePlayer({ name: 'Rahul', dob: '15/06/2014', gender: 'Boy', events: 'Kata + Kumite', weight: '34.5', club: 'ABC', country: 'india' })
     expect(ok.errors).toEqual([])
-    expect(ok.player).toMatchObject({ dob: '2014-06-15', gender: 'M', events: ['kata', 'kumite'], weight: 34.5 })
+    expect(ok.player).toMatchObject({ dob: '2014-06-15', gender: 'M', events: ['kata', 'kumite'], weight: 34.5, country: 'India' })
 
-    const bad = validatePlayer({ name: '', dob: '31/02/2014', gender: 'x', events: 'judo', email: 'nope' })
-    expect(bad.errors.map((e) => e.field).sort()).toEqual(['dob', 'email', 'events', 'gender', 'name'])
+    const bad = validatePlayer({ name: '', dob: '31/02/2014', gender: 'x', events: 'judo', email: 'nope', club: 'ABC', country: 'Narnia' })
+    expect(bad.errors.map((e) => e.field).sort()).toEqual(['country', 'dob', 'email', 'events', 'gender', 'name'])
+    // PRD v1 §7: full name 2-100 characters.
+    expect(validatePlayer({ name: 'R', dob: '2014-01-01', gender: 'M', events: ['kata'], club: 'ABC', country: 'India' }).errors[0].message).toMatch(/at least 2/)
   })
 
   it('needs a weight for kumite only', () => {
-    expect(validatePlayer({ name: 'A', dob: '2014-01-01', gender: 'M', events: ['kata'] }).errors).toEqual([])
-    expect(validatePlayer({ name: 'A', dob: '2014-01-01', gender: 'M', events: ['kumite'] }).errors[0].field).toBe('weight')
+    const base = { name: 'Asha', dob: '2014-01-01', gender: 'M', club: 'ABC', country: 'India' }
+    expect(validatePlayer({ ...base, events: ['kata'] }).errors).toEqual([])
+    expect(validatePlayer({ ...base, events: ['kumite'] }).errors[0].field).toBe('weight')
   })
 
   it('keeps system fields in an edited form', () => {
@@ -139,9 +148,12 @@ describe('registration form and bulk upload', () => {
 
   it('previews a CSV with row-level errors and duplicates', () => {
     const csv = 'Team,Player Name,DOB,Gender,Event,Weight (kg)\nABC,Rahul,2014-06-15,M,kumite,34\nABC,Rahul,2014-06-15,M,kumite,34\nNOPE,Amit,bad,M,kata,\n'
-    const { valid, errors } = validateBulkRows(parseCsv(csv), { teams: [{ id: 't1', name: 'ABC' }] })
+    const { valid, errors, warnings } = validateBulkRows(parseCsv(csv), { teams: [{ id: 't1', name: 'ABC' }], defaultCountry: 'India', existing: [{ id: 'old', name: 'RAHUL ', dob: '2014-06-15', playerNumber: 'P-0009' }] })
     expect(valid).toHaveLength(1)
-    expect(errors.map((e) => `${e.row}:${e.field}`)).toEqual(['3:name', '4:dob', '4:team'])
+    // club comes from the team; an unknown team leaves it empty
+    expect(errors.map((e) => `${e.row}:${e.field}`)).toEqual(['3:name', '4:dob', '4:club', '4:team'])
+    // already registered: a warning to review, not an error (PRD v1 §28)
+    expect(warnings.map((w) => w.row)).toEqual([2, 3])
   })
 
   it('parses quoted CSV cells', () => {
@@ -180,11 +192,11 @@ describe('section 64 core flow', () => {
   beforeEach(async () => {
     stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
     tms = createTms(stores, { now: () => new Date('2026-12-01T10:00:00Z') })
-    tournament = await stores.tournaments.insert({ name: 'State Open', location: 'Pune', date: '2027-01-15', template: 'kumite', status: 'draft' })
+    tournament = await stores.tournaments.insert({ name: 'State Open', location: 'Pune', date: '2027-01-15', template: 'kumite', status: 'draft', ...READY })
   })
 
   const setUp = async () => {
-    await tms.updateTournament(admin, tournament.id, { masterAgeDate: '2027-01-01', type: 'kumite', settings: { poolSize: 8 } })
+    await tms.updateTournament(admin, tournament.id, { masterAgeDate: '2027-01-01', type: 'kumite', settings: { poolSize: 8, requireWeighInForDraw: false } })
     ageGroup = await tms.ageGroups.create(admin, tournament.id, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 })
     w35 = await tms.weightCategories.create(admin, tournament.id, { ageGroupId: ageGroup.id, name: '-35 KG', maxWeight: 35 })
     await tms.weightCategories.create(admin, tournament.id, { ageGroupId: ageGroup.id, name: '-40 KG', minWeight: 35, maxWeight: 40 })
@@ -307,7 +319,7 @@ describe('section 64 core flow', () => {
     const team = await setUp()
     const other = await tms.teams.create(admin, tournament.id, { name: 'XYZ Dojo' })
     const [player] = await tms.listPlayers(tournament.id, { teamId: team.id })
-    await expect(tms.createPlayer({ ...coach, teamId: other.id }, tournament.id, { name: 'X', dob: '2014-01-01', gender: 'M', events: ['kata'] }))
+    await expect(tms.createPlayer({ ...coach, teamId: other.id }, tournament.id, { name: 'Xavier', dob: '2014-01-01', gender: 'M', events: ['kata'] }))
       .resolves.toBeTruthy()
     await expect(tms.updatePlayer({ ...coach, teamId: other.id }, tournament.id, player.id, { name: 'Hijack' }))
       .rejects.toMatchObject({ code: 'not_your_team' })
@@ -409,7 +421,7 @@ describe('file uploads (sections 12, 17, 49)', () => {
   it('keeps ID proofs private and logos public', async () => {
     const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
     const tms = createTms(stores)
-    const t = await stores.tournaments.insert({ name: 'T', masterAgeDate: '2027-01-01', lifecycleStatus: 'REGISTRATION_OPEN' })
+    const t = await stores.tournaments.insert({ name: 'T', masterAgeDate: '2027-01-01', lifecycleStatus: 'REGISTRATION_OPEN', country: 'India' })
     const team = await tms.teams.create(admin, t.id, { name: 'A' })
     const coach = { uid: 'coach:x', role: 'coach', tournamentId: t.id, teamId: team.id }
     const proof = await tms.uploadFile(coach, t.id, { name: 'id.pdf', type: 'application/pdf', data: PDF })
@@ -422,9 +434,9 @@ describe('file uploads (sections 12, 17, 49)', () => {
     const logo = await tms.uploadFile(admin, t.id, { name: 'logo.png', type: 'image/png', data: PNG, purpose: 'logo' })
     expect((await tms.readFile(null, logo.id)).public).toBe(true)
 
-    const player = await tms.createPlayer(coach, t.id, { name: 'P', dob: '2014-01-01', gender: 'M', events: ['kata'], idProof: proof.id })
+    const player = await tms.createPlayer(coach, t.id, { name: 'Priya', dob: '2014-01-01', gender: 'M', events: ['kata'], idProof: proof.id })
     expect(player.idProof).toBe(proof.id)
-    await expect(tms.createPlayer(coach, t.id, { name: 'Q', dob: '2014-01-01', gender: 'M', events: ['kata'], idProof: '../../etc/passwd' }))
+    await expect(tms.createPlayer(coach, t.id, { name: 'Quinn', dob: '2014-01-01', gender: 'M', events: ['kata'], idProof: '../../etc/passwd' }))
       .rejects.toMatchObject({ code: 'invalid_player' })
   })
 })
@@ -433,7 +445,7 @@ describe('server-side paging (section 62)', () => {
   it('pages players and the audit log with totals', async () => {
     const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
     const tms = createTms(stores)
-    const t = await stores.tournaments.insert({ name: 'T', masterAgeDate: '2027-01-01' })
+    const t = await stores.tournaments.insert({ name: 'T', masterAgeDate: '2027-01-01', country: 'India' })
     const team = await tms.teams.create(admin, t.id, { name: 'A' })
     for (let i = 0; i < 25; i += 1) {
       await tms.createPlayer(admin, t.id, { teamId: team.id, name: `Player ${String(i).padStart(2, '0')}`, dob: '2014-01-01', gender: 'M', events: ['kata'] })
@@ -456,7 +468,7 @@ describe('gap features: scoring rules, draw options, kata panel, medal override'
   const setup = async ({ settings = {}, groupSettings = {}, kumite = 10, kata = 0 } = {}) => {
     const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
     const tms = createTms(stores)
-    const t = await stores.tournaments.insert({ name: 'Gap Cup', masterAgeDate: '2027-01-01', settings })
+    const t = await stores.tournaments.insert({ name: 'Gap Cup', masterAgeDate: '2027-01-01', country: 'India', settings: { requireWeighInForDraw: false, ...settings } })
     const g = await tms.ageGroups.create(admin, t.id, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13, settings: groupSettings })
     await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-35 KG', maxWeight: 35 })
     const team = await tms.teams.create(admin, t.id, { name: 'A' })
@@ -565,7 +577,7 @@ describe('gap features: scoring rules, draw options, kata panel, medal override'
     const { tms, t } = await setup({ settings: { kataJudges: 3, kataQualifiers: 3, kataRounds: 2 }, kumite: 0, kata: 5 })
     const [division] = await tms.kataDivisions(t.id)
     expect(division).toMatchObject({ judges: 3, count: 5 })
-    await expect(tms.generatePools(admin, t.id)).resolves.toEqual([]) // kata is not drawn into pools
+    expect(await tms.generatePools(admin, t.id)).toHaveLength(0) // kata is not drawn into pools
     await tms.setDrawLock(admin, t.id, true)
 
     const scoreAll = async (round, base) => {
@@ -578,7 +590,11 @@ describe('gap features: scoring rules, draw options, kata panel, medal override'
       return view
     }
     const r1 = await tms.createKataRound(admin, t.id, division.key, { seed: 4 })
-    expect(r1).toMatchObject({ name: 'Round 1', judges: 3 })
+    expect(r1).toMatchObject({ name: 'Round 1', judges: 3, status: 'pending' })
+    // PRD v1 §14 step 4: nobody scores before the round starts
+    await expect(tms.submitKataScore({ uid: 'j1', role: 'judge', seat: 1 }, t.id, r1.id, { playerId: r1.performerIds[0], score: 8 }))
+      .rejects.toMatchObject({ code: 'round_not_started' })
+    await tms.startKataRound(admin, t.id, r1.id)
     await expect(tms.completeKataRound(admin, t.id, r1.id)).rejects.toMatchObject({ code: 'scores_missing' })
     await expect(tms.submitKataScore({ uid: 'j9', role: 'judge', seat: 4 }, t.id, r1.id, { playerId: r1.performerIds[0], score: 8 }))
       .rejects.toMatchObject({ code: 'invalid_seat' })
@@ -587,7 +603,7 @@ describe('gap features: scoring rules, draw options, kata panel, medal override'
     await expect(tms.submitKataScore({ uid: 'j1', role: 'judge', seat: 1 }, t.id, r1.id, { playerId: r1.performerIds[0], score: 9 }))
       .rejects.toMatchObject({ code: 'round_closed' })
 
-    const final = await tms.createKataRound(admin, t.id, division.key)
+    const final = await tms.createKataRound(admin, t.id, division.key, { start: true })
     expect(final.name).toBe('Final')
     expect(final.performerIds).toEqual(v1.rows.slice(0, 3).map((r) => r.playerId).reverse())
     const vf = await scoreAll(final, 9.0)

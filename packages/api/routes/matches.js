@@ -8,7 +8,10 @@ import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { slotMinutesFor, endOfSlot, clashingPeople } from '../lib/schedule.js'
 import { roundRobinPairs, pairKey } from '../lib/draw.js'
 import { validate } from '../lib/validate.js'
-import { findUser } from '../auth/users.js'
+import { findUser, findUserRecord } from '../auth/users.js'
+import { can, roleIn, PERMISSION as P } from '@kumite/shared/permissions.js'
+import { matchLifecycle, EXCEPTIONAL_RESULTS } from '@kumite/shared/lifecycle.js'
+import { forbidden } from '../lib/errors.js'
 
 // Used when a tournament predates the setting, so an older record still gets a
 // sensible panel size instead of no limit at all.
@@ -22,7 +25,8 @@ export const MAX_ROUND_ROBIN = 32
 const MATCH_SCHEMA = {
   redId: { type: 'string', max: 60, nullable: true },
   blueId: { type: 'string', max: 60, nullable: true },
-  status: { type: 'enum', values: ['scheduled', 'open', 'live', 'completed', 'cancelled'], default: 'open' },
+  // PRD v1 §13: scheduled → called → ready → live ⇄ paused → completed.
+  status: { type: 'enum', values: ['scheduled', 'called', 'ready', 'open', 'live', 'paused', 'completed', 'cancelled'], default: 'open' },
   // Both vocabularies are accepted because both exist in this system: kata
   // scores red against blue, kumite runs ao against aka.
   winner: { type: 'enum', values: ['red', 'blue', 'tie', 'ao', 'aka', 'draw'], nullable: true },
@@ -366,6 +370,20 @@ export function matchRoutes(stores, tms = null) {
     // A judges' average is a 0-10 score. Kumite bouts from a PRD draw store
     // points here instead, and points have no such ceiling (11-3 is a result).
     const category = await categories.get(existing.categoryId)
+    const account = await findUserRecord(req.user.uid)
+    const role = roleIn(account, category?.tournamentId) || req.user.role
+    // PRD v1 §4: correcting a completed score is an explicit privilege, and a
+    // published result needs the result-override privilege too (§16).
+    if (correcting) {
+      if (!can(role, P.SCORE_CORRECT)) throw forbidden('score_correction_forbidden')
+      if (tms && category?.divisionKey) await tms.assertResultEditable({ ...req.user, role }, category.tournamentId, category.divisionKey, correctionReason)
+    }
+    // PRD v1 §13: only the transitions the match lifecycle allows.
+    const from = existing.status || 'scheduled'
+    if (patch.status && patch.status !== from && !correcting && !matchLifecycle.can(from, patch.status)) throw conflict('invalid_transition', { from, to: patch.status })
+    // An exceptional ending carries its finish reason (PRD v1 §13).
+    const resultType = patch.result?.type
+    if (resultType && EXCEPTIONAL_RESULTS.includes(resultType) && resultType !== 'CANCELLED' && !patch.result.finishReason && !correctionReason && !patch.result.method) throw badRequest('finish_reason_required')
     for (const side of ['avgRed', 'avgBlue']) {
       if (category?.event !== 'kumite' && patch[side] > 10) throw badRequest(`invalid_${side}`)
     }
@@ -383,7 +401,7 @@ export function matchRoutes(stores, tms = null) {
       })
     }
     // A knockout result decides who fights next (section 36).
-    if (tms && category?.divisionKey && match.stage === 'knockout') {
+    if (tms && category?.divisionKey && ['knockout', 'pool'].includes(match.stage)) {
       await tms.syncBracket(category.tournamentId, category.divisionKey)
     }
     res.json({ match })

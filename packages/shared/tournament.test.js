@@ -182,7 +182,8 @@ describe('lifecycles', () => {
   })
 
   it('lets a completed match be reopened, which Rule 6 then makes auditable', () => {
-    expect(matchLifecycle.can(MATCH_STATUS.COMPLETED, MATCH_STATUS.IN_PROGRESS)).toBe(true)
-    expect(matchLifecycle.next(MATCH_STATUS.WALKOVER)).toEqual([])
+    expect(matchLifecycle.can(MATCH_STATUS.COMPLETED, MATCH_STATUS.LIVE)).toBe(true)
+    expect(matchLifecycle.can(MATCH_STATUS.LIVE, MATCH_STATUS.SCHEDULED)).toBe(false)
+    expect(matchLifecycle.next(MATCH_STATUS.CALLED)).toContain(MATCH_STATUS.READY)
   })
 })

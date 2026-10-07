@@ -20,7 +20,7 @@ const ORGANIZATION_SCHEMA = {
 
 const superAdminOnly = (req, _res, next) => next(req.user?.role === 'super_admin' ? undefined : forbidden())
 
-export function organizationRoutes(stores) {
+export function organizationRoutes(stores, { audit = async () => {} } = {}) {
   const router = Router()
   const orgs = stores.organizations
   router.use(requireAuth)
@@ -46,7 +46,10 @@ export function organizationRoutes(stores) {
   router.post('/', superAdminOnly, async (req, res) => {
     const doc = validate(req.body, ORGANIZATION_SCHEMA)
     if ((await orgs.list({ slug: doc.slug })).length) throw conflict('slug_taken')
-    res.status(201).json({ organization: await orgs.insert(doc) })
+    const organization = await orgs.insert(doc)
+    // PRD v1 §22: organisation changes are audited like account changes.
+    await audit(req.user, { action: 'organization.changed', entity: 'organization', entityId: organization.id, after: doc, reason: 'created' })
+    res.status(201).json({ organization })
   })
 
   router.patch('/:id', superAdminOnly, async (req, res) => {
@@ -54,7 +57,10 @@ export function organizationRoutes(stores) {
     if (!before) throw notFound()
     const patch = validate(req.body, ORGANIZATION_SCHEMA, { partial: true })
     if (patch.slug && patch.slug !== before.slug && (await orgs.list({ slug: patch.slug })).length) throw conflict('slug_taken')
-    res.json({ organization: await orgs.update(req.params.id, patch) })
+    const organization = await orgs.update(req.params.id, patch)
+    const before_ = Object.fromEntries(Object.keys(patch).map((k) => [k, before[k] ?? null]))
+    await audit(req.user, { action: 'organization.changed', entity: 'organization', entityId: before.id, before: before_, after: patch })
+    res.json({ organization })
   })
 
   router.delete('/:id', superAdminOnly, async (req, res) => {
@@ -64,6 +70,7 @@ export function organizationRoutes(stores) {
     const { tournaments, accounts } = await withCounts(org)
     if (tournaments || accounts) throw conflict('organization_in_use')
     await orgs.remove(org.id)
+    await audit(req.user, { action: 'organization.changed', entity: 'organization', entityId: org.id, before: { name: org.name, slug: org.slug }, reason: 'deleted' })
     res.status(204).end()
   })
 

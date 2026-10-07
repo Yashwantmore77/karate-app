@@ -3,6 +3,7 @@ import { validate } from '../lib/validate.js'
 import { rateLimit } from '../lib/rateLimit.js'
 import { signCoachToken } from '../auth/jwt.js'
 import { sendFile } from './files.js'
+import { certificatesPdf } from '../lib/pdf.js'
 
 /**
  * PRD sections 39 and 54, and the registration link of section 14. No sign-in,
@@ -28,6 +29,30 @@ export function publicRoutes(tms) {
   router.get('/tournaments/:idOrSlug', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     res.json(await tms.publicView(req.params.idOrSlug))
+  })
+
+  // PRD v1 §18: the QR on a certificate opens this. Only what the
+  // certificate itself already shows.
+  const lookups = rateLimit({ windowMs: 60_000, max: 60, code: 'too_many_attempts' })
+  router.get('/certificates/:certificateId', lookups, async (req, res) => {
+    res.json({ certificate: await tms.verifyCertificate(req.params.certificateId) })
+  })
+
+  // PRD v1 §17 "Certificates if enabled": search by name, download your own.
+  router.get('/tournaments/:idOrSlug/certificates', lookups, async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 80) : ''
+    res.json({ certificates: await tms.publicCertificates(req.params.idOrSlug, q) })
+  })
+  router.get('/tournaments/:idOrSlug/certificates/:certificateId.pdf', lookups, async (req, res) => {
+    const view = await tms.publicView(req.params.idOrSlug)
+    if (!view.tournament.publicCertificates) return res.status(404).json({ error: 'certificates_not_public' })
+    const cert = await tms.verifyCertificate(req.params.certificateId)
+    if (cert.tournament?.name !== view.tournament.name || ['coach', 'official'].includes(cert.type)) return res.status(404).json({ error: 'certificate_not_found' })
+    const full = { certificateId: cert.certificateId, name: cert.name, club: cert.club, category: cert.category, medal: cert.medal, type: cert.type, title: cert.title, award: cert.award, rank: cert.medal === 'gold' ? 1 : cert.medal === 'silver' ? 2 : cert.medal === 'bronze' ? 3 : null }
+    const buffer = await certificatesPdf(view.tournament, [full], { verifyBase: process.env.APP_URL || null })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${cert.certificateId}.pdf"`)
+    res.send(buffer)
   })
 
   // Only files marked public (tournament logos); anything else is refused.

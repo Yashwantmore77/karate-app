@@ -10,23 +10,31 @@ export const EVENTS = { KATA: 'kata', KUMITE: 'kumite' }
  * A weight class is open-ended at one side when the other bound is absent:
  * "-35 KG" has only a maximum, "+45 KG" only a minimum.
  */
-export function matchesWeight(category, weight) {
+// PRD v1 §10: boundaries are configurable. By default the upper bound is
+// inclusive ("-35 KG" takes 35.0) and the lower bound exclusive; with
+// `upperInclusive: false` it is the other way round.
+export function matchesWeight(category, weight, { upperInclusive = true } = {}) {
   if (weight == null) return false
-  if (category.minWeight != null && weight <= category.minWeight) return false
-  if (category.maxWeight != null && weight > category.maxWeight) return false
+  if (upperInclusive) {
+    if (category.minWeight != null && weight <= category.minWeight) return false
+    if (category.maxWeight != null && weight > category.maxWeight) return false
+  } else {
+    if (category.minWeight != null && weight < category.minWeight) return false
+    if (category.maxWeight != null && weight >= category.maxWeight) return false
+  }
   return true
 }
 
-export function eligibleWeightCategories(weight, ageGroupId, weightCategories = []) {
+export function eligibleWeightCategories(weight, ageGroupId, weightCategories = [], options = {}) {
   return weightCategories.filter((category) =>
     category.active !== false
     && (!ageGroupId || category.ageGroupId === ageGroupId)
-    && matchesWeight(category, weight)
+    && matchesWeight(category, weight, options)
   )
 }
 
-export const suggestWeightCategory = (weight, ageGroupId, weightCategories) =>
-  eligibleWeightCategories(weight, ageGroupId, weightCategories)[0] || null
+export const suggestWeightCategory = (weight, ageGroupId, weightCategories, options = {}) =>
+  eligibleWeightCategories(weight, ageGroupId, weightCategories, options)[0] || null
 
 /**
  * Suggests where a player belongs, and says why when it cannot decide. Kata
@@ -36,7 +44,7 @@ export const suggestWeightCategory = (weight, ageGroupId, weightCategories) =>
  * override is expected to reach the audit log.
  */
 export function categorizePlayer(player, event, config = {}) {
-  const { masterAgeDate, ageGroups = [], weightCategories = [] } = config
+  const { masterAgeDate, ageGroups = [], weightCategories = [], weightUpperInclusive = true } = config
   const issues = []
 
   const age = calculateAge(player.dob, masterAgeDate)
@@ -59,7 +67,7 @@ export function categorizePlayer(player, event, config = {}) {
   if (weight == null) issues.push('Weight is required for kumite')
 
   const weightCategory = ageGroup
-    ? suggestWeightCategory(weight, ageGroup.id, weightCategories)
+    ? suggestWeightCategory(weight, ageGroup.id, weightCategories, { upperInclusive: weightUpperInclusive })
     : null
   if (ageGroup && weight != null && !weightCategory) {
     issues.push(`No weight category in ${ageGroup.name} covers ${weight} kg`)

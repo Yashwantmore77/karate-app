@@ -17,6 +17,13 @@ const call = async (method, path, body, token) => {
   return { status: res.status, body: payload }
 }
 
+// PRD v1 §6: what a tournament needs before registration opens. The window
+// is wide because these tests run against the real clock.
+const READY = {
+  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2027-01-16',
+  registrationStart: '2020-01-01', registrationClose: '2099-12-31', contactMobile: '+91 98765 43210', contactEmail: 'office@open.example', country: 'India',
+}
+
 const login = async (email) => (await call('POST', '/auth/login', { email, password: 'test123' })).body.token
 
 beforeEach(async () => {
@@ -34,11 +41,13 @@ afterEach(() => new Promise((resolve) => http.close(resolve)))
 const setUpTournament = async () => {
   const { body: { tournament } } = await call('POST', '/tournaments', {
     name: 'State Open', location: 'Pune', date: '2027-01-15', template: 'kumite',
-    masterAgeDate: '2027-01-01', type: 'kumite', slug: 'state-open',
+    masterAgeDate: '2027-01-01', type: 'kumite', slug: 'state-open', ...READY,
   }, tokens.admin)
   const t = tournament.id
   const { body: { ageGroup } } = await call('POST', `/tournaments/${t}/age-groups`, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 }, tokens.admin)
   await call('POST', `/tournaments/${t}/weight-categories`, { ageGroupId: ageGroup.id, name: '-35 KG', maxWeight: 35 }, tokens.admin)
+  // These flows draw from registered weights; the verified weigh-in gate has its own tests.
+  await call('PATCH', `/tournaments/${t}/settings`, { requireWeighInForDraw: false }, tokens.admin)
   await call('POST', `/tournaments/${t}/lifecycle`, { to: 'REGISTRATION_OPEN' }, tokens.admin)
   const { body: { link } } = await call('PUT', `/tournaments/${t}/registration-link`, { password: 'dojo-pass' }, tokens.admin)
   return { t, link, ageGroup }
@@ -59,8 +68,8 @@ describe('PRD tournament management over HTTP', () => {
 
     const coach = await openCoach(link)
     for (let i = 0; i < 10; i += 1) {
-      const res = await call('POST', '/coach/players', { name: `Player ${i}`, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 30 + (i % 5) + i / 100 }, coach)
-      expect(res.status).toBe(201)
+      const res = await call('POST', '/coach/players', { name: `Player ${i}`, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 30 + (i % 5) + i / 10 }, coach)
+      expect(res.status, JSON.stringify(res.body)).toBe(201)
     }
     const me = (await call('GET', '/coach/me', undefined, coach)).body
     expect(me.players).toHaveLength(10)
@@ -99,7 +108,9 @@ describe('PRD tournament management over HTTP', () => {
     }
     // Rule 6: changing a completed result needs a reason, and is audited
     expect((await call('PATCH', `/matches/${matches[0].id}`, { winner: 'blue' }, tokens.referee)).body.error).toBe('correction_reason_required')
-    expect((await call('PATCH', `/matches/${matches[0].id}`, { winner: 'blue', correctionReason: 'Scoring table error' }, tokens.referee)).status).toBe(200)
+    // PRD v1 §5: correcting a decided bout is a sensitive privilege the referee lacks
+    expect((await call('PATCH', `/matches/${matches[0].id}`, { winner: 'blue', correctionReason: 'Scoring table error' }, tokens.referee)).status).toBe(403)
+    expect((await call('PATCH', `/matches/${matches[0].id}`, { winner: 'blue', correctionReason: 'Scoring table error' }, tokens.admin)).status).toBe(200)
 
     const results = (await call('GET', `/tournaments/${t}/results`, undefined, tokens.admin)).body.results
     expect(results[0].canGenerateBracket).toBe(true)
@@ -134,7 +145,7 @@ describe('PRD tournament management over HTTP', () => {
     expect(JSON.stringify(view.body)).not.toMatch(/"dob"|"mobile"|"email"|passwordHash|"weighIn"/)
 
     const audit = (await call('GET', `/tournaments/${t}/audit`, undefined, tokens.admin)).body.audit
-    expect(audit.some((a) => a.action === 'match.result_changed' && a.reason === 'Scoring table error' && a.actorRole === 'referee')).toBe(true)
+    expect(audit.some((a) => a.action === 'match.result_changed' && a.reason === 'Scoring table error' && a.actorRole === 'admin')).toBe(true)
     expect((await call('GET', `/tournaments/${t}/audit`, undefined, tokens.referee)).status).toBe(403)
   })
 
@@ -155,13 +166,13 @@ describe('PRD tournament management over HTTP', () => {
     expect((await call('POST', `/tournaments/${t}/age-groups`, { name: 'X', gender: 'M', minAge: 1, maxAge: 2, role: 'admin' }, tokens.admin)).body.error).toBe('unknown_field')
     const coach = await openCoach(link)
     expect((await call('POST', '/coach/players', { name: 'X', dob: '2014-01-01', gender: 'M', events: ['kata'], registrationStatus: 'APPROVED' }, coach)).body.error).toBe('unknown_field')
-    const preview = await call('POST', '/coach/players/bulk/preview', { csv: 'Player Name,DOB,Gender,Event\nA,2014-01-01,M,kata\nB,not-a-date,M,kata\n' }, coach)
+    const preview = await call('POST', '/coach/players/bulk/preview', { csv: 'Player Name,DOB,Gender,Event\nAsha Rao,2014-01-01,M,kata\nBina Rao,not-a-date,M,kata\n' }, coach)
     expect(preview.body.errors).toEqual([{ row: 3, field: 'dob', message: 'DOB is not a valid date' }])
     expect((await call('POST', '/coach/players/bulk', { csv: 'Player Name,DOB,Gender,Event\nB,not-a-date,M,kata\n' }, coach)).body.error).toBe('bulk_has_errors')
   })
 
   it('hides draft tournaments from the public', async () => {
-    const { body: { tournament } } = await call('POST', '/tournaments', { name: 'Draft Cup', location: 'X', date: '2027-01-01', template: 'kumite' }, tokens.admin)
+    const { body: { tournament } } = await call('POST', '/tournaments', { name: 'Draft Cup', location: 'Pune', date: '2027-01-01', template: 'kumite' }, tokens.admin)
     expect((await call('GET', `/public/tournaments/${tournament.id}`)).status).toBe(404)
   })
 
@@ -185,8 +196,8 @@ describe('PRD tournament management over HTTP', () => {
     // the same referee cannot be on a second bout at the same time
     expect((await call('PATCH', `/matches/${m2.id}`, { scheduledAt: '2027-01-15T09:00:00Z', refereeId: 'ref-uid-001' }, tokens.admin)).body.error).toBe('schedule_conflict')
 
-    const wo = await call('POST', `/tournaments/${t}/matches/${m1.id}/correct`, { winner: 'red', resultType: 'WALKOVER' }, tokens.admin)
-    expect(wo.body.match).toMatchObject({ status: 'completed', winner: 'red', result: { type: 'WALKOVER' } })
+    const wo = await call('POST', `/tournaments/${t}/matches/${m1.id}/correct`, { winner: 'red', resultType: 'WALKOVER', finishReason: 'Opponent did not report' }, tokens.admin)
+    expect(wo.body.match, JSON.stringify(wo.body)).toMatchObject({ status: 'completed', winner: 'red', result: { type: 'WALKOVER' } })
     const cancelled = await call('POST', `/tournaments/${t}/matches/${m2.id}/correct`, { resultType: 'CANCELLED' }, tokens.admin)
     expect(cancelled.body.match).toMatchObject({ status: 'cancelled', winner: null })
     const listed = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.referee)).body.matches
@@ -260,13 +271,18 @@ describe('gap features over HTTP', () => {
     await registerApproved(t, link, [1, 2, 3, 4].map((i) => ({ name: `Kata ${i}`, events: ['kata'], weight: 30 })))
     const judges = await Promise.all([1, 2, 3].map((n) => login(`judge${n}@kata.local`)))
 
-    const { body: { divisions } } = await call('GET', `/tournaments/${t}/kata/divisions`, undefined, judges[0])
+    const { body: { divisions } } = await call('GET', `/tournaments/${t}/kata/divisions`, undefined, tokens.admin)
     expect(divisions).toHaveLength(1)
+    // PRD v1 §15: a judge sees only the rounds they sit on
+    expect((await call('GET', `/tournaments/${t}/kata/divisions`, undefined, judges[0])).body.divisions).toHaveLength(0)
     expect((await call('POST', `/tournaments/${t}/kata/rounds`, { divisionKey: divisions[0].key }, tokens.admin)).body.error).toBe('entries_not_locked')
     await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
     expect((await call('POST', `/tournaments/${t}/kata/rounds`, { divisionKey: divisions[0].key }, judges[0])).status).toBe(403)
     const { body: { round } } = await call('POST', `/tournaments/${t}/kata/rounds`, { divisionKey: divisions[0].key, seed: 3 }, tokens.admin)
-    expect(round).toMatchObject({ name: 'Final', judges: 3 })
+    expect(round).toMatchObject({ name: 'Final', judges: 3, status: 'pending' })
+    expect((await call('POST', `/tournaments/${t}/kata/rounds/${round.id}/scores`, { playerId: round.performerIds[0], score: 7 }, judges[0])).body.error).toBe('round_not_started')
+    await call('POST', `/tournaments/${t}/kata/rounds/${round.id}/start`, {}, tokens.admin)
+    expect((await call('GET', `/tournaments/${t}/kata/divisions`, undefined, judges[0])).body.divisions).toHaveLength(1)
 
     for (const [i, playerId] of round.performerIds.entries()) {
       for (const [seat, token] of judges.entries()) {

@@ -2,14 +2,14 @@ import { scrypt, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import { isMongoConfigured, getDb } from '../db/mongo.js'
 import { validate } from '../lib/validate.js'
-import { conflict, notFound } from '../lib/errors.js'
+import { conflict, notFound, badRequest } from '../lib/errors.js'
 
 const scryptAsync = promisify(scrypt)
 const KEY_LEN = 64
 const COLLECTION = 'users'
 // PRD section 3. Coaches are not accounts: they arrive through a registration
 // link (see signCoachToken), and the public needs no sign-in at all.
-export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer', 'announcer', 'viewer']
+export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer', 'announcer', 'scoreboard_operator', 'viewer']
 
 // Deliberately loose: the point is to catch a transposed field, not to arbitrate
 // what a valid address is. Anything stricter rejects real addresses.
@@ -29,6 +29,23 @@ const USER_SCHEMA = {
   // PRD point 33 (SaaS): the organisation this account belongs to. Absent
   // means none, which is how every existing account behaves.
   organizationId: { type: 'string', max: 80, nullable: true },
+  // PRD v1 §4: a different role inside particular tournaments, e.g. admin of
+  // one event and referee everywhere else. { tournamentId: role }.
+  tournamentRoles: { type: 'object', nullable: true },
+}
+
+/** Keeps only well-formed tournament roles; anything else is refused. */
+function cleanTournamentRoles(value) {
+  if (value == null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) throw badRequest('invalid_tournamentRoles')
+  const entries = Object.entries(value)
+  if (entries.length > 200) throw badRequest('invalid_tournamentRoles')
+  const out = {}
+  for (const [tid, role] of entries) {
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(tid) || !ROLES.includes(role) || role === 'super_admin') throw badRequest('invalid_tournamentRoles')
+    out[tid] = role
+  }
+  return Object.keys(out).length ? out : null
 }
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
@@ -66,6 +83,8 @@ const SEED = [
   { uid: 'registrar-uid', email: 'registrar@kata.local', role: 'registration_officer', password: 'test123' },
   { uid: 'weighin-uid', email: 'weighin@kata.local', role: 'weighin_officer', password: 'test123' },
   { uid: 'announcer-uid', email: 'announcer@kata.local', role: 'announcer', password: 'test123' },
+  { uid: 'scoreboard-uid', email: 'scoreboard@kata.local', role: 'scoreboard_operator', password: 'test123' },
+  { uid: 'superadmin-uid', email: 'superadmin@kata.local', role: 'super_admin', password: 'test123' },
   { uid: 'viewer-uid', email: 'viewer@kata.local', role: 'viewer', password: 'test123' },
 ]
 
@@ -97,7 +116,8 @@ async function listMemoryUsers() {
 }
 
 async function createMemoryUser(input) {
-  const { email, password, role, seat, tournamentIds, organizationId } = validate(input, USER_SCHEMA)
+  const { email, password, role, seat, tournamentIds, organizationId, tournamentRoles: rawRoles } = validate(input, USER_SCHEMA)
+  const tournamentRoles = cleanTournamentRoles(rawRoles)
   const users = await loadMemoryUsers()
   if (users.has(email)) throw conflict('email_taken')
   const user = {
@@ -107,6 +127,7 @@ async function createMemoryUser(input) {
     ...(seat !== null && seat !== undefined ? { seat } : {}),
     ...(tournamentIds?.length ? { tournamentIds } : {}),
     ...(organizationId ? { organizationId } : {}),
+    ...(tournamentRoles ? { tournamentRoles } : {}),
     passwordHash: await hashPassword(password),
   }
   users.set(email, user)
@@ -130,6 +151,11 @@ async function updateMemoryUser(uid, patch) {
   if (fields.organizationId !== undefined) {
     if (fields.organizationId) next.organizationId = fields.organizationId
     else delete next.organizationId
+  }
+  if (fields.tournamentRoles !== undefined) {
+    const roles = cleanTournamentRoles(fields.tournamentRoles)
+    if (roles) next.tournamentRoles = roles
+    else delete next.tournamentRoles
   }
   if (fields.password) next.passwordHash = await hashPassword(fields.password)
 
@@ -186,7 +212,8 @@ async function listMongoUsers() {
 }
 
 async function createMongoUser(input) {
-  const { email, password, role, seat, tournamentIds, organizationId } = validate(input, USER_SCHEMA)
+  const { email, password, role, seat, tournamentIds, organizationId, tournamentRoles: rawRoles } = validate(input, USER_SCHEMA)
+  const tournamentRoles = cleanTournamentRoles(rawRoles)
   const collection = await usersCollection()
   const doc = {
     uid: randomUUID(),
@@ -195,6 +222,7 @@ async function createMongoUser(input) {
     ...(seat !== null && seat !== undefined ? { seat } : {}),
     ...(tournamentIds?.length ? { tournamentIds } : {}),
     ...(organizationId ? { organizationId } : {}),
+    ...(tournamentRoles ? { tournamentRoles } : {}),
     passwordHash: await hashPassword(password),
   }
   try {
@@ -226,6 +254,11 @@ async function updateMongoUser(uid, patch) {
   if (fields.organizationId !== undefined) {
     if (fields.organizationId) $set.organizationId = fields.organizationId
     else $unset.organizationId = ''
+  }
+  if (fields.tournamentRoles !== undefined) {
+    const roles = cleanTournamentRoles(fields.tournamentRoles)
+    if (roles) $set.tournamentRoles = roles
+    else $unset.tournamentRoles = ''
   }
   if (fields.password) $set.passwordHash = await hashPassword(fields.password)
 
@@ -321,7 +354,7 @@ export async function findUser(uid) {
  * while splitting the search rules across two implementations.
  */
 export async function listUsers({ q = '', page = 1, limit = 25, organizationId = null } = {}) {
-  const all = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
+  const all = (await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())).filter((u) => u.role !== 'coach')
   const users = organizationId ? all.filter((u) => u.organizationId === organizationId) : all
   const needle = q.trim().toLowerCase()
 
@@ -350,6 +383,29 @@ export async function listAssignableOfficials() {
     .filter((user) => ROLES.includes(user.role))
     .map(({ uid, email, role, seat }) => ({ uid, email, role, ...(seat === undefined ? {} : { seat }) }))
     .sort((a, b) => a.role.localeCompare(b.role) || String(a.email).localeCompare(String(b.email)))
+}
+
+/**
+ * PRD v1 §7 "Team manager login": a coach who registered through the link may
+ * keep a login for their team, so they can come back without the link
+ * password. A coach account belongs to one tournament and one team.
+ */
+export async function createCoachAccount({ email, password, tournamentId, teamId }) {
+  const fields = validate({ email, password }, { email: USER_SCHEMA.email, password: USER_SCHEMA.password })
+  const doc = { uid: randomUUID(), email: fields.email, role: 'coach', tournamentId, teamId, passwordHash: await hashPassword(fields.password) }
+  if (isMongoConfigured()) {
+    try {
+      await (await usersCollection()).insertOne({ ...doc })
+    } catch (err) {
+      if (err?.code === 11000) throw conflict('email_taken')
+      throw err
+    }
+  } else {
+    const users = await loadMemoryUsers()
+    if (users.has(doc.email)) throw conflict('email_taken')
+    users.set(doc.email, doc)
+  }
+  return { uid: doc.uid, email: doc.email, role: 'coach', tournamentId, teamId }
 }
 
 export async function createUser(input) {

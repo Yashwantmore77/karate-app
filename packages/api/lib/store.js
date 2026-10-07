@@ -20,7 +20,7 @@ const stampBatch = (docs) => {
   return docs.map((doc, i) => ({
     ...doc,
     id: doc.id ?? randomUUID(),
-    createdAt: new Date(start + i).toISOString(),
+    createdAt: doc.createdAt ?? new Date(start + i).toISOString(),
   }))
 }
 
@@ -261,10 +261,13 @@ export const INDEXES = {
   auditLog: [[{ tournamentId: 1, at: -1 }], [{ entity: 1, entityId: 1 }]],
   files: [[{ tournamentId: 1 }]],
   kataRounds: [[{ tournamentId: 1, divisionKey: 1 }]],
-  kataScores: [[{ roundId: 1, playerId: 1, seat: 1 }]],
+  kataScores: [[{ roundId: 1, playerId: 1, seat: 1 }], [{ roundId: 1, submissionId: 1 }, { sparse: true }]],
   medalOverrides: [[{ tournamentId: 1, divisionKey: 1 }]],
   matchEvents: [[{ tournamentId: 1, matchId: 1, seq: 1 }]],
   organizations: [[{ slug: 1 }, { unique: true, sparse: true }]],
+  rulesets: [[{ family: 1, version: 1 }]],
+  divisionResults: [[{ tournamentId: 1, divisionKey: 1 }]],
+  apiKeys: [[{ tournamentId: 1 }]],
 }
 
 export async function ensureIndexes(collection, name) {
@@ -272,7 +275,7 @@ export async function ensureIndexes(collection, name) {
   for (const [keys, options = {}] of INDEXES[name] || []) await collection.createIndex(keys, options)
 }
 
-export const COLLECTIONS = ['tournaments', 'categories', 'competitors', 'matches', 'display', ...TMS_COLLECTIONS]
+export const COLLECTIONS = ['tournaments', 'categories', 'competitors', 'matches', 'display', 'apiKeys', ...TMS_COLLECTIONS]
 
 /**
  * Builds the stores for one application instance.

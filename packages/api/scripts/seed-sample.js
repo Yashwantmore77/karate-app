@@ -214,7 +214,7 @@ export async function seedSample(stores, { reset = false, log = console.log } = 
   const [kata] = await tms.kataDivisions(tid)
   if (kata) {
     for (let guard = 0; guard < 5; guard += 1) {
-      const round = await tms.createKataRound(admin, tid, kata.key, { seed: 2027 }).catch(() => null)
+      const round = await tms.createKataRound(admin, tid, kata.key, { seed: 2027, start: true }).catch(() => null)
       if (!round) break
       for (const playerId of round.performerIds) {
         const base = 7 + random() * 1.5

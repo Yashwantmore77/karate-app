@@ -4,8 +4,13 @@ import { findUserRecord } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { DEFAULT_SLOT_MINUTES, SLOT_MIN_MINUTES, SLOT_MAX_MINUTES } from '../lib/schedule.js'
+import { tournamentProblems } from '@kumite/shared/tms.js'
+import { badRequest } from '../lib/errors.js'
 
 const DAY = { type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/, max: 10, nullable: true }
+// PRD v1 §6: registration opens and closes at a date and time, read in the
+// tournament's own time zone. A bare date still works (start / end of day).
+const LOCAL_TIME = { type: 'string', pattern: /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/, max: 16, nullable: true }
 
 const TOURNAMENT_SCHEMA = {
   name: { type: 'string', required: true, min: 3, max: 120 },
@@ -52,8 +57,9 @@ const TOURNAMENT_SCHEMA = {
   contactPerson: { type: 'string', max: 120, nullable: true },
   contactMobile: { type: 'string', max: 30, nullable: true },
   contactEmail: { type: 'string', max: 200, nullable: true },
-  registrationStart: { ...DAY },
-  registrationClose: { ...DAY },
+  registrationStart: { ...LOCAL_TIME },
+  registrationClose: { ...LOCAL_TIME },
+  timezone: { type: 'string', max: 60, nullable: true },
   weighInDate: { ...DAY },
   startDate: { ...DAY },
   endDate: { ...DAY },
@@ -104,11 +110,17 @@ export function tournamentRoutes(stores, tms) {
     const org = account?.organizationId || (req.user.role === 'super_admin' && typeof organizationId === 'string' ? organizationId.slice(0, 80) : null)
     if (org && stores.organizations && !(await stores.organizations.get(org))) return res.status(400).json({ error: 'invalid_organizationId' })
     const doc = body.forCreate(rest)
+    // PRD v1 §6 field rules (lengths, dates in order, a real time zone).
+    const problems = tournamentProblems(doc)
+    if (problems.length) throw badRequest('invalid_tournament', { problems })
     res.status(201).json({ tournament: await tournaments.insert(org ? { ...doc, organizationId: org } : doc) })
   })
 
   router.patch('/:id', requireRole('admin'), async (req, res) => {
-    const patch = body.forPatch(req.body)
+    // confirmImpact acknowledges a master-date change that re-ages players
+    // (PRD v1 §9); it is an instruction, not a field.
+    const { confirmImpact, ...fields } = req.body || {}
+    const patch = { ...body.forPatch(fields), ...(confirmImpact === true ? { confirmImpact: true } : {}) }
     await loadOrFail(tournaments, req.params.id)
     // Through the service, so a master-date change re-ages every player and is
     // refused once entries are locked.

@@ -81,7 +81,7 @@ describe('GET /matches across the event', () => {
   })
 
   it('refuses a status that is not one', async () => {
-    const res = await call('GET', '/matches?status=paused', { token: tokens.referee })
+    const res = await call('GET', '/matches?status=finished', { token: tokens.referee })
     expect(res.status).toBe(400)
     expect(res.payload.error).toBe('invalid_status')
   })

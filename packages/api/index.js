@@ -21,6 +21,12 @@ import { publicRoutes } from './routes/public.js'
 import { coachRoutes } from './routes/coach.js'
 import { fileRoutes } from './routes/files.js'
 import { organizationRoutes } from './routes/organizations.js'
+import { rulesetRoutes } from './routes/rulesets.js'
+import { systemRoutes } from './routes/system.js'
+import { partnerRoutes } from './routes/partner.js'
+import { idempotency } from './lib/idempotency.js'
+import { rateLimit } from './lib/rateLimit.js'
+import { isMongoConfigured } from './db/mongo.js'
 import { emailNotifier } from './lib/emailNotifier.js'
 import { createTms } from '@kumite/shared/tms.js'
 
@@ -56,7 +62,14 @@ export function createApp() {
   app.use(express.json({ limit: '32kb' }))
   app.use(security({ allowedOrigin: process.env.CORS_ORIGIN || '*' }))
 
-  app.get('/health', (_req, res) => res.json({ ok: true, now: serverNow() }))
+  // PRD v1 §23 observability: a health check that says what it runs on.
+  const startedAt = Date.now()
+  app.get('/health', (_req, res) => res.json({ ok: true, now: serverNow(), storage: isMongoConfigured() ? 'mongodb' : 'memory', uptimeSec: Math.round((Date.now() - startedAt) / 1000) }))
+
+  // PRD v1 §22 rate limiting for the whole API (logins have their own, tighter one).
+  app.use(API_BASE, rateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT) || 1200, code: 'too_many_requests' }))
+  // PRD v1 §15/§25: a retried write with the same Idempotency-Key happens once.
+  app.use(API_BASE, idempotency())
 
   // Built per instance and announced over the socket, so a device that is
   // already looking at a list finds out it changed without polling for it.
@@ -74,9 +87,14 @@ export function createApp() {
   const competitors = competitorRoutes(stores)
   const matches = matchRoutes(stores, tms)
 
-  app.use(`${API_BASE}/auth`, authRoutes())
-  app.use(`${API_BASE}/users`, userRoutes())
-  app.use(`${API_BASE}/organizations`, organizationRoutes(stores))
+  // System-level events (no tournament) go to the same audit log.
+  const systemAudit = (actor, { meta, ...entry }) => tms.record(actor ? { ...actor, meta } : { uid: null, role: null, meta }, { tournamentId: null, ...entry })
+  app.use(`${API_BASE}/auth`, authRoutes({ audit: systemAudit }))
+  app.use(`${API_BASE}/users`, userRoutes({ audit: systemAudit }))
+  app.use(`${API_BASE}/organizations`, organizationRoutes(stores, { audit: systemAudit }))
+  app.use(`${API_BASE}/rulesets`, rulesetRoutes(tms))
+  app.use(`${API_BASE}/system`, systemRoutes(stores, tms))
+  app.use(`${API_BASE}/partner`, partnerRoutes(tms, stores))
   app.use(`${API_BASE}/officials`, officialRoutes())
   app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores, tms))
   app.use(`${API_BASE}/tournaments`, tmsRoutes(tms, stores))
@@ -148,9 +166,15 @@ export function createApp() {
       else socket.emit('time:pong', reply)
     })
 
-    socket.on('match:join', ({ matchId, control } = {}, ack) => {
+    socket.on('match:join', async ({ matchId, control } = {}, ack) => {
       if (!matchId) return
       const room = roomFor(matchId)
+      // A bout interrupted by a restart picks up where it was.
+      if (!room.restored) {
+        room.restored = true
+        const saved = await tms.loadLiveState(matchId).catch(() => null)
+        if (saved && room.seq === 0) room.restore(saved)
+      }
       socket.join(matchId)
       // A judge may ask for control; only a referee or admin is given it.
       if (control && canControlMat(socket.user)) room.claim(socket.id)
@@ -183,22 +207,40 @@ export function createApp() {
       ack?.({ ok: true, controllerId: room.controllerId })
     })
 
+    // Commands that change nothing about the score are allowed on a decided bout.
+    const HARMLESS = new Set(['FIELD_NUMBER', 'SCOREBOARD'])
+
     socket.on('match:cmd', ({ matchId, cmd, payload, clientEventId } = {}, ack) => {
       const room = rooms.get(matchId)
       if (!room) return ack?.({ error: 'unknown_match' })
       if (!canControlMat(socket.user)) return ack?.({ error: 'forbidden' })
-      try {
-        const before = room.state
-        const event = room.apply(cmd, payload, socket.id)
-        if (event) {
-          broadcast(matchId, { ...event, matchId, clientEventId })
-          // PRD point 33: every live change is logged, corrections audited.
-          tms.recordLiveEvent(socket.user, matchId, { seq: event.seq, cmd, payload, before, after: event.state, at: event.at }).catch(() => {})
+      room.queue = room.queue.then(async () => {
+        // PRD v1 §15 idempotency: a network retry is applied once.
+        const already = room.duplicateOf(clientEventId)
+        if (already !== undefined) return ack?.({ ok: true, seq: already, duplicate: true })
+        // PRD v1 §21 "score sent to completed match: block and audit".
+        if (!HARMLESS.has(cmd)) {
+          const blocked = await tms.liveCommandBlock(matchId).catch(() => null)
+          if (blocked) {
+            tms.recordBlockedCommand(socket.user, matchId, cmd, blocked).catch(() => {})
+            return ack?.({ error: blocked })
+          }
         }
-        ack?.({ ok: true, seq: room.seq })
-      } catch (err) {
-        ack?.({ error: err.code || 'rejected' })
-      }
+        try {
+          const before = room.state
+          const event = room.apply(cmd, payload, socket.id)
+          if (event) {
+            room.remember(clientEventId, event.seq)
+            broadcast(matchId, { ...event, matchId, clientEventId })
+            // PRD point 33: every live change is logged, corrections audited.
+            tms.recordLiveEvent(socket.user, matchId, { seq: event.seq, cmd, payload, before, after: event.state, at: event.at }).catch(() => {})
+            tms.saveLiveState(matchId, { seq: room.seq, state: room.state, history: room.history }).catch(() => {})
+          }
+          ack?.({ ok: true, seq: room.seq })
+        } catch (err) {
+          ack?.({ error: err.code || 'rejected' })
+        }
+      }).catch(() => {})
     })
 
     socket.on('disconnect', () => {

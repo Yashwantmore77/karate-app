@@ -13,7 +13,7 @@ import { readPageQuery, pageMeta } from '../lib/pagination.js'
  * organisation's accounts, and every account they create joins it. Only a
  * super admin moves accounts between organisations or makes super admins.
  */
-export function userRoutes() {
+export function userRoutes({ audit = async () => {} } = {}) {
   const router = Router()
   router.use(requireAuth, requireRole('admin'))
 
@@ -45,7 +45,10 @@ export function userRoutes() {
   })
 
   router.post('/', async (req, res) => {
-    res.status(201).json({ user: await createUser(scopedBody(req.body, await scopeOf(req))) })
+    const user = await createUser(scopedBody(req.body, await scopeOf(req)))
+    // PRD v1 §22 audit: account and role changes.
+    await audit(req.user, { action: 'user.changed', entity: 'user', entityId: user.uid, after: { email: user.email, role: user.role, tournamentRoles: user.tournamentRoles || null, organizationId: user.organizationId || null }, reason: 'created' })
+    res.status(201).json({ user })
   })
 
   router.patch('/:uid', async (req, res) => {
@@ -53,7 +56,11 @@ export function userRoutes() {
     await assertInScope(req.params.uid, org)
     const body = scopedBody(req.body, org)
     if (org && req.body?.organizationId === undefined) delete body.organizationId
-    res.json({ user: await updateUser(req.params.uid, body) })
+    const before = await findUser(req.params.uid)
+    const user = await updateUser(req.params.uid, body)
+    const pick = (u) => ({ email: u?.email, role: u?.role, seat: u?.seat ?? null, tournamentIds: u?.tournamentIds || [], tournamentRoles: u?.tournamentRoles || null, organizationId: u?.organizationId || null })
+    await audit(req.user, { action: 'user.changed', entity: 'user', entityId: user.uid, before: pick(before), after: pick(user), reason: body.password ? 'password changed' : null })
+    res.json({ user })
   })
 
   router.delete('/:uid', async (req, res) => {
@@ -61,7 +68,9 @@ export function userRoutes() {
     // you were the only administrator, and there is no way back in from here.
     if (req.params.uid === req.user.uid) throw badRequest('cannot_delete_self')
     await assertInScope(req.params.uid, await scopeOf(req))
+    const before = await findUser(req.params.uid)
     await deleteUser(req.params.uid)
+    await audit(req.user, { action: 'user.changed', entity: 'user', entityId: req.params.uid, before: { email: before?.email, role: before?.role }, reason: 'deleted' })
     res.status(204).end()
   })
 
