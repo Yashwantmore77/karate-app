@@ -10,14 +10,22 @@ import KumiteConsole from '../../features/console/KumiteConsole'
 import { settingsOf } from '@kumite/shared/tms.js'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { tms } from '../../data/tms'
+import { PageLoader } from '../../components/Loader'
 
 // A bout from a PRD draw, or any tournament with its own rules configured,
 // is scored under those rules (PRD section 29); older matches keep the
 // console's defaults.
-export function matchRules(tournament, match) {
-  if (!tournament || !(tournament.settings || match?.stage)) return null
-  const s = settingsOf(tournament)
-  return { durationMs: s.matchDurationSec * 1000, pointGap: s.pointGap }
+export function matchRules(tournament, match, category = null) {
+  if (!tournament || !(tournament.settings || match?.stage || category?.rules)) return null
+  // A category's own rules (PRD point 3), written when its bouts were made,
+  // win over the tournament's.
+  const s = { ...settingsOf(tournament), ...(category?.rules || {}) }
+  // PRD v1 §6: overtime, senshu and the penalty ladder come from the tournament's ruleset too.
+  return {
+    durationMs: s.matchDurationSec * 1000, pointGap: s.pointGap, points: s.points,
+    senshu: s.senshu !== false, overtime: s.overtime, extraTimeMs: (s.extraTimeSec || 60) * 1000,
+    penaltyCategories: s.penaltyCategories, penaltyLadder: Array.isArray(s.penaltyLadder) ? s.penaltyLadder : undefined,
+  }
 }
 
 /**
@@ -55,7 +63,7 @@ export default function RefereeMatchControl() {
 
   // Nothing until the read settles, rather than a "not found" that flashes up
   // on every load before the match arrives.
-  if (loading) return null
+  if (loading) return <PageLoader label="Loading match…" />
   if (!match || !redComp || !blueComp) return <div>Match not found</div>
 
   const tournamentExpired = !!tournament && isExpired(tournament.date)
@@ -87,7 +95,7 @@ export default function RefereeMatchControl() {
         tournamentExpired={tournamentExpired}
         onBack={() => navigate(-1)}
         onFinalize={updateMatchRecord}
-        rules={matchRules(tournament, match)}
+        rules={matchRules(tournament, match, category)}
         displayInfo={displayInfo}
       />
     </Box>

@@ -71,6 +71,21 @@ npm run dev
 With no `MONGODB_URI` the API keeps everything in memory and forgets it on
 restart. Its seeded accounts are listed in `packages/api/auth/users.js`.
 
+### Sample data
+
+```bash
+npm run seed:sample -w @kumite/api              # add the sample tournament
+npm run seed:sample -w @kumite/api -- --reset   # rebuild it from scratch
+```
+
+Writes to the database in `packages/api/.env` (`MONGODB_URI`): one tournament,
+"Sample State Open 2027" (`/tournament/sample-open-2027`), carried from setup to
+live — age groups and weight categories, 6 teams, 62 players, pools, scheduled
+bouts on 3 mats, results, a final stage, published medals and certificates —
+plus the registration and weigh-in officer accounts if they are missing. It
+never touches other tournaments, and running it twice does not duplicate
+anything.
+
 ## Configuration
 
 **Front end** (`packages/web/.env`, or Vercel project settings):

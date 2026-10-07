@@ -6,6 +6,7 @@ import PageBar from '../../components/PageBar'
 import { competitors as competitorStore, matches as matchStore } from '../../data/domain'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
+import { PageLoader } from '../../components/Loader'
 
 export default function JudgeMatchList({ uid, profile }) {
   const navigate = useNavigate()
@@ -71,7 +72,7 @@ export default function JudgeMatchList({ uid, profile }) {
           <TableSearch value={search} onChange={setSearch} placeholder="Search status or winner" />
         </Box>
 
-        {loading ? null : matches.length === 0 ? (
+        {loading ? <PageLoader label="Loading matches…" /> : matches.length === 0 ? (
           <Paper elevation={0} sx={{ border: '1px dashed', borderColor: 'divider' }}>
             <NoResults query={search} noun="open matches" />
           </Paper>

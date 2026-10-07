@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Container, Box, Toolbar, Typography, IconButton, Tabs, Tab, CircularProgress, Alert, Stack } from '@mui/material'
+import { Container, Box, Toolbar, Typography, IconButton, Tabs, Tab, Alert, Stack } from '@mui/material'
 import { ArrowBack, Lock, LockOpen } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import StatusBadge from '../../components/tms/StatusBadge'
@@ -14,10 +14,15 @@ import RegistrationsTab from './RegistrationsTab'
 import WeighInTab from './WeighInTab'
 import DrawTab from './DrawTab'
 import MatchesTab from './MatchesTab'
+import KataTab from './KataTab'
+import CallTab from './CallTab'
 import ResultsTab from './ResultsTab'
 import CertificatesTab from './CertificatesTab'
 import ReportsTab from './ReportsTab'
 import AuditTab from './AuditTab'
+import { PageLoader } from '../../components/Loader'
+import { ExportAuditContext } from '../../components/tms/exportAudit'
+import { tms } from '../../data/tms'
 
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
 // only when the signed-in role holds its permission (section 3).
@@ -29,6 +34,8 @@ export const TABS = [
   { key: 'weighin', label: 'Weigh-in', perm: P.WEIGHIN_RECORD, Component: WeighInTab },
   { key: 'draw', label: 'Draw / Pools', perm: P.POOL_MANAGE, Component: DrawTab },
   { key: 'matches', label: 'Matches', perm: P.MATCH_GENERATE, Component: MatchesTab },
+  { key: 'kata', label: 'Kata panel', perm: P.MATCH_GENERATE, Component: KataTab },
+  { key: 'call', label: 'Call matches', perm: P.MATCH_CALL, Component: CallTab },
   { key: 'results', label: 'Results', perm: P.RESULT_MANAGE, Component: ResultsTab },
   { key: 'certificates', label: 'Certificates', perm: P.CERTIFICATE_GENERATE, Component: CertificatesTab },
   { key: 'reports', label: 'Reports', perm: P.REPORT_EXPORT, Component: ReportsTab },
@@ -43,7 +50,9 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   const [missing, setMissing] = useState(false)
   const [version, setVersion] = useState(0)
   const action = useAction()
-  const role = profile?.role || 'admin'
+  // PRD v1 §4: an account may hold a different role inside this one tournament.
+  const role = profile?.tournamentRoles?.[tournamentId] || profile?.role || 'admin'
+  const logExport = useCallback((entry) => tms.logExport(tournamentId, entry), [tournamentId])
 
   const reload = useCallback(async () => {
     const t = await tournamentStore.get(tournamentId)
@@ -59,7 +68,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   const current = tabs.find((t) => t.key === params.get('tab')) || tabs[0]
 
   if (missing) return <Container sx={{ py: 4 }}><Alert severity="error">Tournament not found.</Alert></Container>
-  if (!tournament) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+  if (!tournament) return <PageLoader label="Loading tournament…" />
 
   const Current = current?.Component
   const status = tournament.lifecycleStatus || 'DRAFT'
@@ -81,6 +90,8 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
             <StatusBadge status={status} />
             <StatusBadge status={tournament.entriesLocked ? 'COMPLETED' : 'DRAFT'} label={tournament.entriesLocked ? 'Entries locked' : 'Entries open'} />
             <StatusBadge status={tournament.drawLocked ? 'COMPLETED' : 'DRAFT'} label={tournament.drawLocked ? 'Draw locked' : 'Draw open'} />
+            {tournament.softLocked && !tournament.entriesLocked && <StatusBadge status="PENDING_VERIFICATION" label="Coach entries closed" />}
+            {tournament.weighInClosed && <StatusBadge status="COMPLETED" label="Weigh-in closed" />}
           </Stack>
         </Toolbar>
         <Tabs value={current?.key || false} onChange={(_e, key) => setParams({ tab: key })} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ px: 1 }}>
@@ -88,7 +99,9 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
         </Tabs>
       </PageBar>
       <Container maxWidth="xl" sx={{ py: 3 }}>
-        {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} goTab={(key) => setParams({ tab: key })} />}
+        <ExportAuditContext.Provider value={logExport}>
+          {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} goTab={(key) => setParams({ tab: key })} />}
+        </ExportAuditContext.Provider>
       </Container>
       {action.feedback}
     </Box>

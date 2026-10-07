@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Typography, Box } from '@mui/material'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
+import { useLoading } from '../../components/Loader'
 
 const show = (v) => (v == null ? '∅' : typeof v === 'object' ? JSON.stringify(v).slice(0, 80) : String(v))
 
@@ -10,11 +11,12 @@ export default function AuditTab({ tournament, version }) {
   const [result, setResult] = useState({ rows: [], total: 0, page: 0, pageSize: 25 })
   const [query, setQuery] = useState({ page: 0, pageSize: 25, q: '' })
 
-  const load = useCallback(() => tms.auditPage(tournament.id, query).then(setResult), [tournament.id, query])
+  const { loading, refreshing, wrap } = useLoading()
+  const load = useCallback(() => wrap(tms.auditPage(tournament.id, query).then(setResult)), [tournament.id, query, wrap])
   useEffect(() => { load() }, [load, version])
 
   return (
-    <DataTable rows={result.rows} searchPlaceholder="Search action, user, entity, reason" empty="Nothing recorded yet."
+    <DataTable rows={result.rows} loading={loading} refreshing={refreshing} searchPlaceholder="Search action, user, entity, reason" empty="Nothing recorded yet."
       server={{ ...result, onChange: (next) => setQuery((q) => ({ ...q, ...next })) }}
       columns={[
         { key: 'at', label: 'When', sortable: false, render: (a) => new Date(a.at).toLocaleString() },

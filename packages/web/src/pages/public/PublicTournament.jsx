@@ -1,20 +1,49 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
 import {
-  Container, Box, Typography, Tabs, Tab, Paper, Grid, Stack, TextField, MenuItem, Alert, CircularProgress, Button,
+  Container, Box, Typography, Tabs, Tab, Paper, Grid, Stack, TextField, MenuItem, Alert, Button,
   Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Chip,
 } from '@mui/material'
 import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import Bracket from '../../components/tms/Bracket'
+import KataRoundTable from '../../components/tms/KataRoundTable'
 import { StandingsTable, MedalList, TallyTable } from '../tms/ResultsTab'
+import { PageLoader } from '../../components/Loader'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
 
-const SECTIONS = ['info', 'categories', 'teams', 'players', 'draw', 'live', 'results', 'medals']
-const LABEL = { info: 'Tournament', categories: 'Categories', teams: 'Teams', players: 'Players', draw: 'Draw', live: 'Live matches', results: 'Results', medals: 'Medal tally' }
+const SECTIONS = ['info', 'categories', 'teams', 'players', 'draw', 'live', 'results', 'medals', 'certificates']
+const LABEL = { info: 'Tournament', categories: 'Categories', teams: 'Teams', players: 'Players', draw: 'Draw', live: 'Live matches', results: 'Results', medals: 'Medal tally', certificates: 'Certificates' }
+const FEE_LABEL = { kata: 'Kata', kumite: 'Kumite', both: 'Kata + Kumite', team: 'Team' }
+
+/** PRD v1 §17: a player finds their certificate by name and downloads it. */
+function PublicCertificates({ tournament }) {
+  const [q, setQ] = useState('')
+  const [rows, setRows] = useState(null)
+  const search = () => q.trim().length >= 2 && tms.public.certificates(tournament.slug || tournament.id, q.trim()).then(setRows).catch(() => setRows([]))
+  return (
+    <Paper sx={{ p: 2 }}>
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+        <TextField size="small" fullWidth label="Your name" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} />
+        <Button variant="contained" onClick={search} disabled={q.trim().length < 2}>Find</Button>
+      </Stack>
+      {rows && !rows.length && <Typography color="text.secondary">No certificate found for that name.</Typography>}
+      {rows?.map((c) => (
+        <Stack key={c.certificateId} direction="row" spacing={2} sx={{ alignItems: 'center', py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ flex: 1 }}>
+            <Typography><b>{c.name}</b>{c.club ? ` · ${c.club}` : ''}</Typography>
+            <Typography variant="body2" color="text.secondary">{[c.medal && c.medal.toUpperCase(), c.category, c.award, c.certificateId].filter(Boolean).join(' · ')}</Typography>
+          </Box>
+          <Button size="small" variant="outlined" href={tms.public.certificatePdfUrl(tournament.slug || tournament.id, c.certificateId)}>Download</Button>
+          <Button size="small" component={RouterLink} to={`/verify/${encodeURIComponent(c.certificateId)}`}>Verify</Button>
+        </Stack>
+      ))}
+    </Paper>
+  )
+}
 
 /**
  * PRD sections 38-41 and 54: the public tournament page. Reads only the public
@@ -28,6 +57,7 @@ export default function PublicTournament() {
   const [tab, setTab] = useState('info')
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
+  const [district, setDistrict] = useState('')
   const [by, setBy] = useState('club')
 
   useEffect(() => {
@@ -44,13 +74,17 @@ export default function PublicTournament() {
   const teamName = useMemo(() => Object.fromEntries((data?.teams || []).map((t) => [t.id, t.name])), [data])
 
   if (error) return <Container sx={{ py: 6 }}><Alert severity="error">This tournament is not available.</Alert></Container>
-  if (!data) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+  if (!data) return <PageLoader label="Loading tournament…" />
 
   const t = data.tournament
-  const live = data.matches.filter((m) => ['live', 'open'].includes(m.status))
-  const upcoming = data.matches.filter((m) => !['live', 'open', 'completed'].includes(m.status))
+  const live = data.matches.filter((m) => ['live', 'open', 'paused'].includes(m.status))
+  const upcoming = data.matches.filter((m) => !['live', 'open', 'paused', 'completed', 'cancelled'].includes(m.status))
   const done = data.matches.filter((m) => m.status === 'completed')
   const inCategory = (key) => !category || key === category
+  const teamDistrict = Object.fromEntries(data.teams.map((tm) => [tm.id, tm.district]))
+  const districtOf = (p) => p.district || teamDistrict[p.teamId] || ''
+  const districts = [...new Set([...data.players.map(districtOf), ...data.teams.map((tm) => tm.district)].filter(Boolean))].sort()
+  const inDistrict = (value) => !district || value === district
 
   const MatchRow = ({ m }) => (
     <TableRow>
@@ -83,6 +117,13 @@ export default function PublicTournament() {
         <MenuItem value="">All categories</MenuItem>
         {data.categories.map((c) => <MenuItem key={c.key} value={c.key}>{c.label}</MenuItem>)}
       </TextField>
+      {/* PRD point 26: find players and teams by district. */}
+      {districts.length > 0 && (
+        <TextField select size="small" label="District" value={district} onChange={(e) => setDistrict(e.target.value)} sx={{ minWidth: 180 }}>
+          <MenuItem value="">All districts</MenuItem>
+          {districts.map((d) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+        </TextField>
+      )}
     </Stack>
   )
 
@@ -100,9 +141,10 @@ export default function PublicTournament() {
           <StatusBadge status={t.lifecycleStatus} />
           {live.length > 0 && <Chip color="error" size="small" label={`● ${live.length} live`} />}
           <Button size="small" component={RouterLink} to="/tournaments">All tournaments</Button>
+          <Button size="small" component={RouterLink} to={`/live?t=${encodeURIComponent(t.slug || t.id)}`}>Live board</Button>
         </Stack>
         <Tabs value={tab} onChange={(_e, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 3 }}>
-          {SECTIONS.map((s) => <Tab key={s} value={s} label={LABEL[s]} />)}
+          {SECTIONS.filter((s) => s !== 'certificates' || t.publicCertificates).map((s) => <Tab key={s} value={s} label={LABEL[s]} />)}
         </Tabs>
 
         {tab === 'info' && (
@@ -115,8 +157,30 @@ export default function PublicTournament() {
                   <Typography key={k}><b>{k}:</b> {v}</Typography>
                 ))}
               </Paper>
+              {[['Rules', t.rules], ['Terms & conditions', t.terms]].filter(([, v]) => v).map(([k, v]) => (
+                <Paper key={k} sx={{ p: 2, mt: 2 }}>
+                  <Typography variant="h4" gutterBottom>{k}</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>{v}</Typography>
+                </Paper>
+              ))}
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
+              {/* PRD v1 §17: registration information. */}
+              <Paper sx={{ p: 2, mb: 2 }}>
+                <Typography variant="h4" gutterBottom>Registration</Typography>
+                <Chip size="small" color={t.registrationOpen ? 'success' : 'default'} label={t.registrationOpen ? 'Open' : 'Closed'} sx={{ mb: 1 }} />
+                {[['Opens', t.registrationStart], ['Closes', t.registrationClose], ['Weigh-in', t.weighInDate]].filter(([, v]) => v).map(([k, v]) => (
+                  <Typography key={k} variant="body2"><b>{k}:</b> {String(v).replace('T', ' ')}{k !== 'Weigh-in' && t.timezone ? ` (${t.timezone})` : ''}</Typography>
+                ))}
+                {t.fees && Object.entries(t.fees).some(([, v]) => Number(v) > 0) && (
+                  <Typography variant="body2" sx={{ mt: 1 }}><b>Fees:</b> {Object.entries(t.fees).filter(([, v]) => Number(v) > 0).map(([k, v]) => `${FEE_LABEL[k] || k} ₹${v}`).join(' · ')}</Typography>
+                )}
+                {(t.contactPerson || t.contactEmail || t.contactMobile) && (
+                  <Typography variant="body2" sx={{ mt: 1 }}><b>Contact:</b> {[t.contactPerson, t.contactMobile, t.contactEmail].filter(Boolean).join(' · ')}</Typography>
+                )}
+                {t.rulesetName && <Typography variant="body2" sx={{ mt: 1 }}><b>Rules:</b> {t.rulesetName}</Typography>}
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Coaches register through the link the organisers send.</Typography>
+              </Paper>
               <Paper sx={{ p: 2 }}>
                 <Typography><b>{data.categories.length}</b> categories</Typography>
                 <Typography><b>{data.teams.length}</b> teams</Typography>
@@ -139,17 +203,20 @@ export default function PublicTournament() {
         )}
 
         {tab === 'teams' && (
+          <>
+          {filters}
           <TableContainer component={Paper}>
             <Table size="small">
-              <TableHead><TableRow><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>State</TableCell><TableCell>Country</TableCell><TableCell align="right">Players</TableCell></TableRow></TableHead>
+              <TableHead><TableRow><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>District</TableCell><TableCell>State</TableCell><TableCell>Country</TableCell><TableCell align="right">Players</TableCell></TableRow></TableHead>
               <TableBody>
-                {data.teams.map((tm) => (
-                  <TableRow key={tm.id}><TableCell>{tm.name}</TableCell><TableCell>{tm.club || '—'}</TableCell><TableCell>{tm.state || '—'}</TableCell><TableCell>{tm.country || '—'}</TableCell>
+                {data.teams.filter((tm) => matchesQuery(tm.name, tm.club) && inDistrict(tm.district)).map((tm) => (
+                  <TableRow key={tm.id}><TableCell>{tm.name}</TableCell><TableCell>{tm.club || '—'}</TableCell><TableCell>{tm.district || '—'}</TableCell><TableCell>{tm.state || '—'}</TableCell><TableCell>{tm.country || '—'}</TableCell>
                     <TableCell align="right">{data.players.filter((p) => p.teamId === tm.id).length}</TableCell></TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
+          </>
         )}
 
         {tab === 'players' && (
@@ -157,10 +224,10 @@ export default function PublicTournament() {
             {filters}
             <TableContainer component={Paper}>
               <Table size="small">
-                <TableHead><TableRow><TableCell>Player</TableCell><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>State</TableCell><TableCell>Categories</TableCell></TableRow></TableHead>
+                <TableHead><TableRow><TableCell>Player</TableCell><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>District</TableCell><TableCell>State</TableCell><TableCell>Categories</TableCell></TableRow></TableHead>
                 <TableBody>
-                  {data.players.filter((p) => matchesQuery(p.name, p.id, teamName[p.teamId], p.club) && (!category || p.categories.includes(data.categories.find((c) => c.key === category)?.label))).map((p) => (
-                    <TableRow key={p.id}><TableCell>{p.name}</TableCell><TableCell>{teamName[p.teamId] || '—'}</TableCell><TableCell>{p.club || '—'}</TableCell><TableCell>{p.state || '—'}</TableCell><TableCell>{p.categories.join(', ')}</TableCell></TableRow>
+                  {data.players.filter((p) => matchesQuery(p.name, p.id, teamName[p.teamId], p.club, districtOf(p)) && inDistrict(districtOf(p)) && (!category || p.categories.includes(data.categories.find((c) => c.key === category)?.label))).map((p) => (
+                    <TableRow key={p.id}><TableCell>{p.name}</TableCell><TableCell>{teamName[p.teamId] || '—'}</TableCell><TableCell>{p.club || '—'}</TableCell><TableCell>{districtOf(p) || '—'}</TableCell><TableCell>{p.state || '—'}</TableCell><TableCell>{p.categories.join(', ')}</TableCell></TableRow>
                   ))}
                 </TableBody>
               </Table>
@@ -223,6 +290,18 @@ export default function PublicTournament() {
                 <Typography variant="h3" gutterBottom>{d.label}</Typography>
                 <MedalList medals={d.medals} />
                 {d.bracket && <Box sx={{ mt: 2 }}><Bracket rounds={d.bracket.rounds} /></Box>}
+                {d.masterPool && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="h4" sx={{ mb: 1 }}>Final pool</Typography>
+                    <StandingsTable standings={d.masterPool.standings} />
+                  </Box>
+                )}
+                {[...(d.kata?.rounds || [])].reverse().map((r) => (
+                  <Box key={r.name} sx={{ mt: 2 }}>
+                    <Typography variant="h4" sx={{ mb: 1 }}>Kata · {r.name}</Typography>
+                    <KataRoundTable round={r} />
+                  </Box>
+                ))}
                 {d.pools.map((p) => (
                   <Box key={p.pool} sx={{ mt: 2 }}>
                     <Typography variant="h4" sx={{ mb: 1 }}>Pool {p.pool}</Typography>
@@ -233,6 +312,8 @@ export default function PublicTournament() {
             ))}
           </>
         )}
+
+        {tab === 'certificates' && t.publicCertificates && <PublicCertificates tournament={t} />}
 
         {tab === 'medals' && (
           <Paper sx={{ p: 2 }}>

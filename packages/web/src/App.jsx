@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material'
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { SpeedInsights } from '@vercel/speed-insights/react'
 import { Analytics } from '@vercel/analytics/react'
 import { SessionProvider, useSession } from './state/SessionContext'
@@ -15,11 +15,16 @@ import RegisterPortal from './pages/public/RegisterPortal'
 import PasswordReset from './pages/account/PasswordReset'
 import MyAccount from './pages/account/MyAccount'
 import DisplayScoreboard from './pages/DisplayScoreboard'
+import LiveBoard from './pages/public/LiveBoard'
+import VerifyCertificate from './pages/public/VerifyCertificate'
+import ScoreboardOperator from './pages/ScoreboardOperator'
+import { getToken } from './data/session'
 import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
 import { ConnectionProvider } from './state/ConnectionContext'
 import AppStage from './components/AppStage'
 import AppNav from './components/AppNav'
+import { GlobalProgress, PageLoader } from './components/Loader'
 import { AO_LIGHT, AKA_LIGHT, CYAN, INK, GLASS, TEXT } from './theme/tokens'
 
 const theme = createTheme({
@@ -161,7 +166,7 @@ export default function App() {
 // provider itself picks the API or the local mock, and everything below this
 // line is identical either way.
 function AppShell() {
-  const { user, profile, loading } = useSession()
+  const { user, profile, loading, logout } = useSession()
   const isPortal = new URLSearchParams(location.search).has('portal')
 
   if (isPortal) return <ConnectionProvider><DisplayScoreboard /></ConnectionProvider>
@@ -176,25 +181,47 @@ function AppShell() {
       <CssBaseline />
       <ConnectionProvider>
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-          <CircularProgress />
-        </Box>
+        <PageLoader label="Signing you in…" minHeight="100vh" />
       ) : (
         <BrowserRouter>
           <AppStage>
           {/* One header for the whole signed-in app, so the menu survives
               navigation instead of each page drawing its own. */}
           <AppNav user={user} profile={profile} />
+          <GlobalProgress />
           <Routes>
             <Route path="/login" element={<Login />} />
 
             {/* Public: a hall screen, no sign-in */}
             <Route path="/display" element={<DisplayScoreboard />} />
+            {/* PRD point 22: the hall board — every mat, what is next, brackets. */}
+            <Route path="/live" element={<LiveBoard />} />
 
             {/* Public website and the coach registration link (PRD 14, 39, 54) */}
             <Route path="/tournaments" element={<PublicTournamentList />} />
             <Route path="/tournament/:slug" element={<PublicTournament />} />
             <Route path="/register/:token" element={<RegisterPortal />} />
+            {/* PRD v1 §18: where a certificate's QR code points. */}
+            <Route path="/verify" element={<VerifyCertificate />} />
+            <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
+            {/* PRD v1 §7: a team manager's own login opens their team panel. */}
+            <Route
+              path="/coach/*"
+              element={
+                <RequireAuth user={user}>
+                  <RequireRole role="coach" profile={profile}><RegisterPortal accountToken={getToken()} onSignOut={logout} /></RequireRole>
+                </RequireAuth>
+              }
+            />
+            {/* PRD v1 §4: the scoreboard operator runs the hall screens. */}
+            <Route
+              path="/scoreboard_operator/*"
+              element={
+                <RequireAuth user={user}>
+                  <RequireRole role="scoreboard_operator" profile={profile}><ScoreboardOperator /></RequireRole>
+                </RequireAuth>
+              }
+            />
             <Route path="/forgot-password" element={<PasswordReset />} />
             <Route path="/reset-password" element={<PasswordReset />} />
             <Route path="/account" element={<RequireAuth user={user}><MyAccount /></RequireAuth>} />
@@ -253,6 +280,30 @@ function AppShell() {
                     <Navigate to="/no-role" replace />
                   ) : (
                     <RequireRole role="registration_officer" profile={profile}><StaffRouter uid={user.uid} profile={profile} /></RequireRole>
+                  )}
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/announcer/*"
+              element={
+                <RequireAuth user={user}>
+                  {!profile ? (
+                    <Navigate to="/no-role" replace />
+                  ) : (
+                    <RequireRole role="announcer" profile={profile}><StaffRouter uid={user.uid} profile={profile} /></RequireRole>
+                  )}
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/viewer/*"
+              element={
+                <RequireAuth user={user}>
+                  {!profile ? (
+                    <Navigate to="/no-role" replace />
+                  ) : (
+                    <RequireRole role="viewer" profile={profile}><StaffRouter uid={user.uid} profile={profile} /></RequireRole>
                   )}
                 </RequireAuth>
               }

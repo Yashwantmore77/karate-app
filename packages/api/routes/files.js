@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, mayAccessTournament } from '../auth/middleware.js'
+import { requireAuth, mayAccessTournament, tournamentFor } from '../auth/middleware.js'
 import { findUserRecord } from '../auth/users.js'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 
@@ -24,7 +24,7 @@ export function fileRoutes(tms) {
     if (req.user.role === 'coach') return sendFile(res, await tms.readFile(req.user, req.params.id))
     const account = await findUserRecord(req.user.uid)
     const file = await tms.readFile(req.user, req.params.id, { canViewRegistrations: can(account?.role, P.REGISTRATION_VIEW) })
-    if (!file.public && !mayAccessTournament(account, file.tournamentId)) return res.status(403).json({ error: 'tournament_forbidden' })
+    if (!file.public && !mayAccessTournament(account, file.tournamentId, account?.organizationId ? await tournamentFor(file.tournamentId) : null)) return res.status(403).json({ error: 'tournament_forbidden' })
     return sendFile(res, file)
   })
   return router

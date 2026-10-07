@@ -1,16 +1,20 @@
 import { Router } from 'express'
 import { requireAuth, requirePermission, tournamentAccess } from '../auth/middleware.js'
-import { findUserRecord } from '../auth/users.js'
+import { findUserRecord, listAssignableOfficials } from '../auth/users.js'
+import { mayAccessTournament } from '../auth/middleware.js'
 import { validate } from '../lib/validate.js'
 import { notFound } from '../lib/errors.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { PERMISSION as P, can } from '@kumite/shared/permissions.js'
 import { FILE_SCHEMA } from './files.js'
+import { partnerKeyHash, newPartnerKey } from './partner.js'
 import { certificatesPdf, tablePdf } from '../lib/pdf.js'
-import { REPORT_KEYS, REPORT_TITLE, loadReportData, buildReport } from '@kumite/shared/reports.js'
-import { TOURNAMENT_STATUS, REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES } from '@kumite/shared/tms.js'
+import { REPORT_KEYS, REPORT_TITLE, REPORT_FILTERS, loadReportData, buildReport } from '@kumite/shared/reports.js'
+import { TOURNAMENT_STATUS, REGISTRATION_STATUS, MATCH_STATUS } from '@kumite/shared/lifecycle.js'
+import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES, POOL_SYSTEMS, KATA_METHODS, SETTING_CHOICES } from '@kumite/shared/tms.js'
+import { OVERTIME_MODES, KATA_TIE_BREAKS } from '@kumite/shared/rulesets.js'
+import { POOL_MODES } from '@kumite/shared/pools.js'
 
 // PRD section 56: everything a tournament owns, under /tournaments/:tid/...
 // Each route checks a permission from the shared table, validates its body,
@@ -27,6 +31,11 @@ const AGE_GROUP = {
   minAge: { type: 'integer', required: true, min: 0, max: 99 },
   maxAge: { type: 'integer', required: true, min: 0, max: 99 },
   active: { type: 'boolean', default: true },
+  // PRD v1 §9: overlapping categories only on purpose.
+  allowOverlap: { type: 'boolean' },
+  // PRD point 3: this category's own pool size, rules and rounds. The
+  // service checks each key; anything left out inherits.
+  settings: { type: 'object', nullable: true },
 }
 
 const WEIGHT_CATEGORY = {
@@ -36,6 +45,8 @@ const WEIGHT_CATEGORY = {
   minWeight: { type: 'number', min: 0, max: 300, nullable: true },
   maxWeight: { type: 'number', min: 0, max: 300, nullable: true },
   active: { type: 'boolean', default: true },
+  allowOverlap: { type: 'boolean' },
+  settings: { type: 'object', nullable: true },
 }
 
 const TEAM = {
@@ -50,6 +61,8 @@ const TEAM = {
   district: { type: 'string', max: 80, nullable: true },
   state: { type: 'string', max: 80, nullable: true },
   country: { type: 'string', max: 80, nullable: true },
+  // PRD v1 §21: only an active team takes entries (organisers only).
+  active: { type: 'boolean' },
 }
 
 /**
@@ -73,6 +86,7 @@ export function playerBody(body) {
       continue
     }
     if (key === 'events' && Array.isArray(value)) { out.events = value.slice(0, 4).map(String); continue }
+    if (key === 'confirmDuplicate') { out.confirmDuplicate = value === true; continue }
     if (value !== null && typeof value === 'object') return validate({ [key]: value }, { [key]: { type: 'string' } })
     out[key] = typeof value === 'string' ? value.slice(0, 500) : value
   }
@@ -91,10 +105,73 @@ const TOURNAMENT_SETTINGS = {
   weighInAutoMove: { type: 'boolean' },
   emailNotifications: { type: 'boolean' },
   fees: { type: 'object' },
+  points: { type: 'object' },
+  poolMode: { type: 'enum', values: POOL_MODES },
+  poolSystem: { type: 'enum', values: POOL_SYSTEMS },
+  ruleset: { type: 'string', max: 60 },
+  kataMode: { type: 'enum', values: ['panel', 'bouts'] },
+  kataJudges: { type: 'integer', min: 3, max: 7 },
+  kataMethod: { type: 'enum', values: KATA_METHODS },
+  kataQualifiers: { type: 'integer', min: 1, max: 64 },
+  kataRounds: { type: 'integer', min: 1, max: 5 },
+  officialsSeeAssignedOnly: { type: 'boolean' },
+  // PRD v1 §6 tournament settings
+  allowUnevenPools: { type: 'boolean' },
+  allowByes: { type: 'boolean' },
+  allowSeeding: { type: 'boolean' },
+  drawMethod: { type: 'enum', values: SETTING_CHOICES.drawMethod },
+  thirdPlaceMatch: { type: 'boolean' },
+  overtime: { type: 'enum', values: OVERTIME_MODES },
+  extraTimeSec: { type: 'integer', min: 10, max: 300 },
+  senshu: { type: 'boolean' },
+  penaltyCategories: { type: 'integer', min: 1, max: 2 },
+  penaltyLadder: { type: 'array', items: { type: 'string', max: 6 }, maxItems: 6 },
+  qualificationMode: { type: 'enum', values: SETTING_CHOICES.qualificationMode },
+  qualificationPoints: { type: 'integer', min: 0, max: 100 },
+  finalStage: { type: 'enum', values: SETTING_CHOICES.finalStage },
+  resultPublishing: { type: 'enum', values: SETTING_CHOICES.resultPublishing },
+  publicVisibility: { type: 'enum', values: SETTING_CHOICES.publicVisibility },
+  publicCertificates: { type: 'boolean' },
+  entryLockAt: { type: 'string', max: 16, nullable: true, pattern: /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/ },
+  certificate: { type: 'object' },
+  requireWeighInForDraw: { type: 'boolean' },
+  weightPrecision: { type: 'integer', min: 0, max: 3 },
+  weightUpperInclusive: { type: 'boolean' },
+  singlePlayerPolicy: { type: 'enum', values: SETTING_CHOICES.singlePlayerPolicy },
+  groupByDivision: { type: 'boolean' },
+  allowDuplicatePlayers: { type: 'boolean' },
+  attendanceEnabled: { type: 'boolean' },
+  notificationChannels: { type: 'object' },
+  kataMinScore: { type: 'number', min: 0, max: 100 },
+  kataMaxScore: { type: 'number', min: 1, max: 100 },
+  kataPrecision: { type: 'integer', min: 0, max: 2 },
+  kataComponents: { type: 'boolean' },
+  kataTechnicalWeight: { type: 'number', min: 0.05, max: 0.95 },
+  kataTieBreak: { type: 'enum', values: KATA_TIE_BREAKS },
+}
+
+const CERTIFICATE_SETTINGS = {
+  template: { type: 'enum', values: SETTING_CHOICES.certificateTemplate },
+  title: { type: 'string', max: 80 },
+  signatory1: { type: 'string', max: 60 },
+  signatory2: { type: 'string', max: 60 },
+  footer: { type: 'string', max: 160, nullable: true },
+}
+const CHANNEL_SETTINGS = { inApp: { type: 'boolean' }, email: { type: 'boolean' }, sms: { type: 'boolean' }, whatsapp: { type: 'boolean' } }
+
+/** PRD point 16: what each score is worth, 1 to 10 points apiece. */
+function pointValues(points) {
+  if (points === undefined) return undefined
+  const out = validate(points, {
+    yuko: { type: 'integer', min: 1, max: 10, required: true },
+    wazaAri: { type: 'integer', min: 1, max: 10, required: true },
+    ippon: { type: 'integer', min: 1, max: 10, required: true },
+  })
+  return out
 }
 
 // The actor is always the authenticated caller; the request adds where from.
-export const withMeta = (req) => ({ ...req.user, meta: { ip: clientIp(req), userAgent: userAgent(req) } })
+export const withMeta = (req) => ({ ...req.user, role: req.tournamentRole || req.user.role, meta: { ip: clientIp(req), userAgent: userAgent(req) } })
 
 export function tmsRoutes(tms, stores) {
   const loadTournament = async (id) => {
@@ -113,6 +190,10 @@ export function tmsRoutes(tms, stores) {
 
   router.patch('/:tid/settings', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
     const settings = validate(req.body, TOURNAMENT_SETTINGS, { partial: true })
+    if (settings.points !== undefined) settings.points = pointValues(settings.points)
+    if (settings.certificate !== undefined) settings.certificate = validate(settings.certificate, CERTIFICATE_SETTINGS, { partial: true })
+    if (settings.notificationChannels !== undefined) settings.notificationChannels = validate(settings.notificationChannels, CHANNEL_SETTINGS, { partial: true })
+    if (settings.kataMinScore != null && settings.kataMaxScore != null && settings.kataMaxScore <= settings.kataMinScore) return res.status(400).json({ error: 'invalid_kataMaxScore' })
     res.json(reply('tournament')(await tms.updateTournament(withMeta(req), tid(req), { settings })))
   })
 
@@ -121,11 +202,52 @@ export function tmsRoutes(tms, stores) {
     res.json(reply('tournament')(await tms.setLifecycle(withMeta(req), tid(req), to, reason)))
   })
 
-  router.post('/:tid/locks/:which', requirePermission(P.POOL_MANAGE), async (req, res) => {
+  // entries (hard lock), soft (coaches only), draw, weighin (PRD v1 §10-11).
+  router.post('/:tid/locks/:which', async (req, res, next) => {
+    const perm = req.params.which === 'weighin' ? P.WEIGHIN_RECORD : req.params.which === 'soft' ? P.REGISTRATION_MANAGE : P.POOL_MANAGE
+    return requirePermission(perm)(req, res, next)
+  }, async (req, res) => {
     const { locked, reason } = validate(req.body, { locked: { type: 'boolean', required: true }, reason: REASON })
-    const set = req.params.which === 'draw' ? tms.setDrawLock : req.params.which === 'entries' ? tms.setEntriesLock : null
+    const set = { draw: tms.setDrawLock, entries: tms.setEntriesLock, soft: tms.setSoftLock, weighin: tms.setWeighInClosed }[req.params.which]
     if (!set) return res.status(404).json({ error: 'route_not_found' })
     res.json(reply('tournament')(await set(withMeta(req), tid(req), locked, reason)))
+  })
+
+  // PRD v1 §7 partner API: issue (or rotate) and revoke the tournament's key.
+  // The key is returned once; only a hash is kept, outside the tournament.
+  router.get('/:tid/partner-key', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
+    const [row] = await stores.apiKeys.list({ tournamentId: tid(req) })
+    res.json({ partnerKey: row ? { hint: row.hint, createdAt: row.createdAt } : null })
+  })
+  router.post('/:tid/partner-key', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
+    await loadTournament(tid(req))
+    const key = newPartnerKey()
+    await stores.apiKeys.removeWhere({ tournamentId: tid(req) })
+    const row = await stores.apiKeys.insert({ tournamentId: tid(req), keyHash: partnerKeyHash(key), hint: key.slice(-4) })
+    await tms.record(withMeta(req), { tournamentId: tid(req), action: 'tournament.updated', entity: 'tournament', entityId: tid(req), reason: 'partner API key issued' })
+    res.status(201).json({ key, partnerKey: { hint: row.hint, createdAt: row.createdAt } })
+  })
+  router.delete('/:tid/partner-key', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
+    await stores.apiKeys.removeWhere({ tournamentId: tid(req) })
+    await tms.record(withMeta(req), { tournamentId: tid(req), action: 'tournament.updated', entity: 'tournament', entityId: tid(req), reason: 'partner API key revoked' })
+    res.status(204).end()
+  })
+
+  // PRD v1 §6/§11: is registration open for coaches right now, and why not.
+  router.get('/:tid/registration-window', requirePermission(P.REGISTRATION_VIEW), async (req, res) => {
+    res.json({ window: tms.registrationWindow(await loadTournament(tid(req))) })
+  })
+
+  // PRD v1 §9: what changing the Master Age Date would do.
+  router.post('/:tid/master-date/preview', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
+    const { masterAgeDate } = validate(req.body, { masterAgeDate: { type: 'string', required: true, pattern: DATE, max: 10 } })
+    res.json({ preview: await tms.previewMasterDateChange(tid(req), masterAgeDate) })
+  })
+
+  // PRD v1 §6: apply a versioned ruleset to this tournament.
+  router.post('/:tid/ruleset', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
+    const { rulesetId } = validate(req.body, { rulesetId: { ...ID, required: true } })
+    res.json(reply('tournament')(await tms.applyRuleset(withMeta(req), tid(req), rulesetId)))
   })
 
   router.put('/:tid/registration-form', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
@@ -147,7 +269,7 @@ export function tmsRoutes(tms, stores) {
     router.patch(`/:tid/${path}/:id`, requirePermission(P.CATEGORY_CONFIGURE), async (req, res) => {
       res.json({ [key]: await crud.update(withMeta(req), tid(req), req.params.id, validate(req.body, schema, { partial: true })) })
     })
-    router.delete(`/:tid/${path}/:id`, requirePermission(P.CATEGORY_CONFIGURE), async (req, res) => {
+    router.delete(`/:tid/${path}/:id`, requirePermission(P.RECORD_DELETE), async (req, res) => {
       await crud.remove(withMeta(req), tid(req), req.params.id)
       res.status(204).end()
     })
@@ -162,7 +284,7 @@ export function tmsRoutes(tms, stores) {
   router.patch('/:tid/teams/:id', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
     res.json({ team: await tms.teams.update(withMeta(req), tid(req), req.params.id, validate(req.body, TEAM, { partial: true })) })
   })
-  router.delete('/:tid/teams/:id', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
+  router.delete('/:tid/teams/:id', requirePermission(P.RECORD_DELETE), async (req, res) => {
     await tms.teams.remove(withMeta(req), tid(req), req.params.id)
     res.status(204).end()
   })
@@ -188,21 +310,21 @@ export function tmsRoutes(tms, stores) {
   router.patch('/:tid/players/:id', requirePermission(P.PLAYER_EDIT), async (req, res) => {
     res.json({ player: await tms.updatePlayer(withMeta(req), tid(req), req.params.id, playerBody(req.body)) })
   })
-  router.delete('/:tid/players/:id', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
+  router.delete('/:tid/players/:id', requirePermission(P.RECORD_DELETE), async (req, res) => {
     await tms.removePlayer(withMeta(req), tid(req), req.params.id)
     res.status(204).end()
   })
 
   // Section 15. The CSV travels as text; the body limit for this route is
   // raised where it is mounted.
-  const bulkBody = (req) => validate(req.body, { csv: { type: 'string', required: true, max: 2_000_000, trim: false }, teamId: { ...ID, nullable: true } })
+  const bulkBody = (req) => validate(req.body, { csv: { type: 'string', required: true, max: 2_000_000, trim: false }, teamId: { ...ID, nullable: true }, confirmDuplicates: { type: 'boolean' } })
   router.post('/:tid/players/bulk/preview', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
     const { csv, teamId } = bulkBody(req)
     res.json(await tms.previewBulk(withMeta(req), tid(req), csv, { teamId }))
   })
   router.post('/:tid/players/bulk', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
-    const { csv, teamId } = bulkBody(req)
-    res.status(201).json(await tms.importBulk(withMeta(req), tid(req), csv, { teamId }))
+    const { csv, teamId, confirmDuplicates } = bulkBody(req)
+    res.status(201).json(await tms.importBulk(withMeta(req), tid(req), csv, { teamId, confirmDuplicates }))
   })
 
   router.post('/:tid/players/:id/registration', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
@@ -211,6 +333,12 @@ export function tmsRoutes(tms, stores) {
       reason: REASON,
     })
     res.json({ player: await tms.setRegistrationStatus(withMeta(req), tid(req), req.params.id, action, reason) })
+  })
+
+  // PRD v1 §28: withdrawal after the draw, history kept.
+  router.post('/:tid/players/:id/withdraw', requirePermission(P.RESULT_MANAGE), async (req, res) => {
+    const { reason } = validate(req.body, { reason: { type: 'string', required: true, max: 300 } })
+    res.json({ player: await tms.withdrawPlayer(withMeta(req), tid(req), req.params.id, reason) })
   })
 
   router.put('/:tid/players/:id/payment', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
@@ -253,21 +381,46 @@ export function tmsRoutes(tms, stores) {
   router.post('/:tid/pools/generate', requirePermission(P.POOL_MANAGE), async (req, res) => {
     const body = validate(req.body, {
       divisionKey: { type: 'string', max: 200, nullable: true },
-      method: { type: 'enum', values: ['random', 'seeded'], default: 'random' },
+      method: { type: 'enum', values: ['random', 'seeded'], nullable: true },
       poolSize: { type: 'integer', min: 2, max: 64, nullable: true },
       seed: { type: 'integer', min: 0, max: 2147483647, nullable: true },
+      confirm: { type: 'boolean' },
     })
-    res.status(201).json({ pools: await tms.generatePools(withMeta(req), tid(req), body) })
+    const pools = await tms.generatePools(withMeta(req), tid(req), body)
+    res.status(201).json({ pools: [...pools], excluded: pools.excluded || [], singles: pools.singles || [] })
+  })
+  // PRD v1 §28: what a redraw would throw away, before it happens.
+  router.get('/:tid/draw/impact', requirePermission(P.POOL_MANAGE), async (req, res) => {
+    res.json({ impact: await tms.drawImpact(tid(req), typeof req.query.divisionKey === 'string' ? req.query.divisionKey : null) })
   })
   router.post('/:tid/pools/move', requirePermission(P.POOL_MANAGE), async (req, res) => {
-    const body = validate(req.body, { playerId: { ...ID, required: true }, fromPoolId: { ...ID, required: true }, toPoolId: { ...ID, required: true }, reason: REASON })
+    const body = validate(req.body, { playerId: { ...ID, required: true }, fromPoolId: { ...ID, required: true }, toPoolId: { ...ID, required: true }, reason: REASON, force: { type: 'boolean' } })
     res.json({ pools: await tms.movePlayer(withMeta(req), tid(req), body) })
+  })
+  // PRD v1 §12 explicit qualification.
+  router.post('/:tid/pools/:id/qualifiers', requirePermission(P.RESULT_MANAGE), async (req, res) => {
+    const { playerIds, reason } = validate(req.body, { playerIds: { type: 'array', required: true, items: ID, maxItems: 64, unique: true }, reason: REASON })
+    res.json({ pool: await tms.setQualifiers(withMeta(req), tid(req), req.params.id, playerIds, reason) })
+  })
+  // PRD v1 §28: one player in a category.
+  router.post('/:tid/divisions/single-entry', requirePermission(P.RESULT_MANAGE), async (req, res) => {
+    const { divisionKey, decision, reason } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, decision: { type: 'enum', values: ['award', 'no_competition'], required: true }, reason: REASON })
+    res.json(await tms.decideSingleEntry(withMeta(req), tid(req), divisionKey, decision, reason))
   })
 
   router.get('/:tid/matches', async (req, res) => {
     const filter = {}
     for (const key of ['status', 'mat', 'divisionKey']) if (typeof req.query[key] === 'string') filter[key] = req.query[key]
-    res.json({ matches: await tms.listMatches(tid(req), filter) })
+    // PRD point 20: `?mine=1` for anyone; a referee or judge is held to their
+    // own bouts when the tournament says so.
+    const t = await loadTournament(tid(req))
+    const role = req.tournamentRole || req.user.role
+    const official = ['referee', 'judge'].includes(role)
+    if (req.query.mine === '1' || (official && t.settings?.officialsSeeAssignedOnly)) filter.officialId = req.user.uid
+    let matches = await tms.listMatches(tid(req), filter)
+    // PRD v1 §15: a referee sees assigned or open (unassigned) bouts by default.
+    if (official && !filter.officialId && req.query.all !== '1') matches = matches.filter((m) => role === 'judge' || !m.refereeId || m.refereeId === req.user.uid)
+    res.json({ matches })
   })
   router.post('/:tid/matches/generate', requirePermission(P.MATCH_GENERATE), async (req, res) => {
     const body = validate(req.body || {}, { divisionKey: { type: 'string', max: 200, nullable: true } })
@@ -279,14 +432,122 @@ export function tmsRoutes(tms, stores) {
       resultType: { type: 'enum', values: RESULT_TYPES, default: 'COMPLETED' },
       avgRed: { type: 'number', min: 0, max: 99, nullable: true },
       avgBlue: { type: 'number', min: 0, max: 99, nullable: true },
+      finishReason: { type: 'string', max: 300, nullable: true },
       reason: REASON,
     })
     res.json({ match: await tms.correctResult(withMeta(req), tid(req), req.params.id, result, reason) })
   })
 
+  // PRD v1 §13 match states: called / ready / live / paused.
+  router.post('/:tid/matches/:id/status', async (req, res, next) => {
+    const role = req.tournamentRole || req.user.role
+    return (can(role, P.MATCH_SCORE) || can(role, P.MATCH_CALL) ? next() : res.status(403).json({ error: 'forbidden' }))
+  }, async (req, res) => {
+    const { status, reason } = validate(req.body, { status: { type: 'enum', values: Object.values(MATCH_STATUS), required: true }, reason: REASON })
+    res.json({ match: await tms.setMatchStatus(withMeta(req), tid(req), req.params.id, status, reason) })
+  })
+  // PRD v1 §4 announcer: attendance.
+  router.post('/:tid/matches/:id/attendance', requirePermission(P.ATTENDANCE_MARK), async (req, res) => {
+    const { side, present } = validate(req.body, { side: { type: 'enum', values: ['aka', 'ao'], required: true }, present: { type: 'boolean', nullable: true } })
+    res.json({ match: await tms.markAttendance(withMeta(req), tid(req), req.params.id, side, present ?? null) })
+  })
+
+  router.post('/:tid/matches/:id/call', requirePermission(P.MATCH_CALL), async (req, res) => {
+    const { mat } = validate(req.body || {}, { mat: { type: 'integer', min: 1, max: 20, nullable: true } })
+    res.json({ match: await tms.callMatch(withMeta(req), tid(req), req.params.id, { mat }) })
+  })
+  router.get('/:tid/matches/:id/events', requirePermission(P.AUDIT_VIEW), async (req, res) => res.json({ events: await tms.liveEvents(tid(req), req.params.id) }))
+
+  // PRD point 15: put the players in the other corners before the bout.
+  router.post('/:tid/matches/:id/swap-corners', requirePermission(P.MATCH_GENERATE), async (req, res) => {
+    const { reason } = validate(req.body || {}, { reason: REASON })
+    res.json({ match: await tms.swapCorners(withMeta(req), tid(req), req.params.id, reason) })
+  })
+
+  // --- kata panel (PRD point 19, sections 32-33) ---------------------------
+
+  // Accounts that may sit on this tournament's panels, by seat.
+  const panelJudges = async (tournamentId) => (await Promise.all((await listAssignableOfficials())
+    .filter((o) => o.role === 'judge' && o.seat)
+    .map(async (o) => ({ o, account: await findUserRecord(o.uid) }))))
+    .filter(({ account }) => mayAccessTournament(account, tournamentId))
+    .map(({ o }) => ({ seat: o.seat, uid: o.uid, email: o.email }))
+
+  router.get('/:tid/kata/divisions', requirePermission(P.KATA_SCORE), async (req, res) => {
+    const role = req.tournamentRole || req.user.role
+    // A judge sees the rounds they are assigned to (PRD v1 AC-16).
+    res.json({ divisions: await tms.kataDivisions(tid(req), role === 'judge' ? { judgeUid: req.user.uid } : {}) })
+  })
+  router.get('/:tid/kata/judges', requirePermission(P.MATCH_GENERATE), async (req, res) => res.json({ judges: await panelJudges(tid(req)) }))
+  router.post('/:tid/kata/rounds', requirePermission(P.MATCH_GENERATE), async (req, res) => {
+    const { divisionKey, seed, judges, start } = validate(req.body, {
+      divisionKey: { type: 'string', required: true, max: 200 }, seed: { type: 'integer', min: 0, max: 2147483647, nullable: true },
+      judges: { type: 'array', items: { type: 'object' }, maxItems: 9, nullable: true }, start: { type: 'boolean' },
+    })
+    // Judges default to the accounts holding each seat for this tournament.
+    const assignments = judges ?? (await panelJudges(tid(req))).map(({ seat, uid }) => ({ seat, uid }))
+    res.status(201).json({ round: await tms.createKataRound(withMeta(req), tid(req), divisionKey, { seed, judges: assignments, start: !!start }) })
+  })
+  router.get('/:tid/kata/rounds/:id', requirePermission(P.KATA_SCORE), async (req, res) => res.json({ round: await tms.kataRoundView(tid(req), req.params.id) }))
+  router.post('/:tid/kata/rounds/:id/judges', requirePermission(P.MATCH_GENERATE), async (req, res) => {
+    const { judges } = validate(req.body, { judges: { type: 'array', required: true, items: { type: 'object' }, maxItems: 9 } })
+    await tms.assignKataJudges(withMeta(req), tid(req), req.params.id, judges)
+    res.json({ round: await tms.kataRoundView(tid(req), req.params.id) })
+  })
+  router.post('/:tid/kata/rounds/:id/start', requirePermission(P.MATCH_GENERATE), async (req, res) => {
+    await tms.startKataRound(withMeta(req), tid(req), req.params.id)
+    res.json({ round: await tms.kataRoundView(tid(req), req.params.id) })
+  })
+  router.post('/:tid/kata/rounds/:id/scores', requirePermission(P.KATA_SCORE), async (req, res) => {
+    const body = validate(req.body, {
+      playerId: { ...ID, required: true },
+      score: { type: 'number', min: 0, max: 100, nullable: true },
+      technical: { type: 'number', min: 0, max: 100, nullable: true },
+      athletic: { type: 'number', min: 0, max: 100, nullable: true },
+      seat: { type: 'integer', min: 1, max: 9, nullable: true },
+      submissionId: { type: 'string', max: 80, nullable: true },
+    })
+    // A judge always scores from their assigned seat, never a seat named in the body.
+    const score = await tms.submitKataScore(withMeta(req), tid(req), req.params.id, body)
+    res.json({ score, round: await tms.kataRoundView(tid(req), req.params.id) })
+  })
+  router.post('/:tid/kata/rounds/:id/penalties', requirePermission(P.RESULT_MANAGE), async (req, res) => {
+    const { playerId, deduction, reason } = validate(req.body, { playerId: { ...ID, required: true }, deduction: { type: 'number', required: true, min: 0, max: 10 }, reason: REASON })
+    res.json({ round: await tms.setKataPenalty(withMeta(req), tid(req), req.params.id, playerId, deduction, reason) })
+  })
+  router.post('/:tid/kata/rounds/:id/override', requirePermission(P.RESULT_OVERRIDE), async (req, res) => {
+    const { reason, ...body } = validate(req.body, {
+      playerId: { ...ID, required: true }, seat: { type: 'integer', required: true, min: 1, max: 9 },
+      score: { type: 'number', min: 0, max: 100, nullable: true }, technical: { type: 'number', min: 0, max: 100, nullable: true }, athletic: { type: 'number', min: 0, max: 100, nullable: true },
+      reason: { type: 'string', required: true, max: 300 },
+    })
+    res.json({ round: await tms.overrideKataScore(withMeta(req), tid(req), req.params.id, body, reason) })
+  })
+  router.post('/:tid/kata/rounds/:id/complete', requirePermission(P.RESULT_MANAGE), async (req, res) => {
+    res.json({ round: await tms.completeKataRound(withMeta(req), tid(req), req.params.id) })
+  })
+
   // --- results, brackets, medals, certificates (sections 34-36, 42-44) ---
 
+  // PRD point 21: medals set by hand, always with a reason; `medals: null` clears.
+  router.post('/:tid/results/medals/override', requirePermission(P.RESULT_OVERRIDE), async (req, res) => {
+    const body = req.body || {}
+    const { divisionKey, reason } = validate({ divisionKey: body.divisionKey, reason: body.reason }, {
+      divisionKey: { type: 'string', required: true, max: 200 },
+      reason: { type: 'string', required: true, max: 300 },
+    })
+    const medals = body.medals === null ? null : validate({ medals: body.medals }, {
+      medals: { type: 'array', required: true, maxItems: 8, items: { type: 'object' } },
+    }).medals.map((m) => validate(m, { playerId: { ...ID, required: true }, medal: { type: 'enum', values: ['gold', 'silver', 'bronze'], required: true } }))
+    res.json(await tms.overrideMedals(withMeta(req), tid(req), divisionKey, medals, reason))
+  })
+
   router.get('/:tid/results', async (req, res) => res.json({ results: await tms.results(tid(req)) }))
+  // PRD v1 §16: an official verifies a category's provisional result.
+  router.post('/:tid/results/verify', requirePermission(P.RESULT_MANAGE), async (req, res) => {
+    const { divisionKey, verified } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, verified: { type: 'boolean', default: true } })
+    res.json(await tms.verifyResult(withMeta(req), tid(req), divisionKey, verified))
+  })
   router.post('/:tid/brackets/generate', requirePermission(P.MATCH_GENERATE), async (req, res) => {
     const { divisionKey } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 } })
     res.status(201).json({ bracket: await tms.generateBracket(withMeta(req), tid(req), divisionKey) })
@@ -300,7 +561,9 @@ export function tmsRoutes(tms, stores) {
     const by = ['club', 'district', 'state', 'country'].includes(req.query.by) ? req.query.by : 'club'
     res.json({ tally: await tms.tally(tid(req), by) })
   })
-  router.get('/:tid/certificates', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => res.json({ certificates: await tms.listCertificates(tid(req)) }))
+  router.get('/:tid/certificates', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
+    res.json({ certificates: await tms.listCertificates(tid(req), { type: typeof req.query.type === 'string' ? req.query.type : null }) })
+  })
   const sendPdf = (res, buffer, filename) => {
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
@@ -309,25 +572,73 @@ export function tmsRoutes(tms, stores) {
   }
   const slugOf = (t) => String(t.slug || t.name || 'tournament').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
-  // Section 44: the certificates as one downloadable PDF, built on the server.
+  const logoOf = async (tournament) => {
+    const logoId = String(tournament.logoUrl || '').match(/\/public\/files\/([A-Za-z0-9_-]+)$/)?.[1]
+    return logoId ? tms.readFile(null, logoId).then((f) => Buffer.from(f.data, 'base64')).catch(() => null) : null
+  }
+  const verifyBase = () => process.env.APP_URL || null
+
+  // Section 44 / PRD v1 §18: the certificates as one PDF, built on the server,
+  // each with its QR verification link. ?type= narrows to one kind.
   router.get('/:tid/certificates.pdf', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
     const tournament = await loadTournament(tid(req))
-    const logoId = String(tournament.logoUrl || '').match(/\/public\/files\/([A-Za-z0-9_-]+)$/)?.[1]
-    const logo = logoId ? await tms.readFile(null, logoId).then((f) => Buffer.from(f.data, 'base64')).catch(() => null) : null
-    sendPdf(res, await certificatesPdf(tournament, await tms.listCertificates(tid(req)), { logo }), `${slugOf(tournament)}-certificates.pdf`)
+    const type = typeof req.query.type === 'string' ? req.query.type : null
+    const certificates = await tms.listCertificates(tid(req), { type })
+    await tms.record(withMeta(req), { tournamentId: tid(req), action: 'certificate.downloaded', entity: 'certificates', entityId: type || 'all', after: { count: certificates.length } })
+    sendPdf(res, await certificatesPdf(tournament, certificates, { logo: await logoOf(tournament), verifyBase: verifyBase(), settings: tournament.settings?.certificate }), `${slugOf(tournament)}-certificates.pdf`)
+  })
+  // One certificate, reprinted with the same number.
+  router.get('/:tid/certificates/:certificateId.pdf', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
+    const tournament = await loadTournament(tid(req))
+    const cert = (await tms.listCertificates(tid(req))).find((c) => c.certificateId === req.params.certificateId)
+    if (!cert) return res.status(404).json({ error: 'certificate_not_found' })
+    await tms.record(withMeta(req), { tournamentId: tid(req), action: 'certificate.downloaded', entity: 'certificate', entityId: cert.certificateId })
+    sendPdf(res, await certificatesPdf(tournament, [cert], { logo: await logoOf(tournament), verifyBase: verifyBase(), settings: tournament.settings?.certificate }), `${cert.certificateId}.pdf`)
   })
 
-  // Section 45: any report as a PDF table.
+  const reportFilters = (query) => Object.fromEntries(REPORT_FILTERS.filter((k) => typeof query[k] === 'string' && query[k]).map((k) => [k, query[k].slice(0, 200)]))
+
+  // Section 45: any report as a PDF table, with the PRD v1 §19 filters.
   router.get('/:tid/reports/:key.pdf', requirePermission(P.REPORT_EXPORT), async (req, res) => {
     if (!REPORT_KEYS.includes(req.params.key)) return res.status(404).json({ error: 'route_not_found' })
+    const role = req.tournamentRole || req.user.role
+    if (req.params.key === 'audit' && !can(role, P.AUDIT_VIEW)) return res.status(403).json({ error: 'forbidden' })
     const tournament = await loadTournament(tid(req))
-    const rows = buildReport(req.params.key, await loadReportData(tms, tid(req)))
+    const filters = reportFilters(req.query)
+    const rows = buildReport(req.params.key, await loadReportData(tms, tid(req), { audit: req.params.key === 'audit' }), filters)
+    await tms.logExport(withMeta(req), tid(req), { report: req.params.key, format: 'pdf', rows: rows.length - 1, filters })
     const title = `${tournament.name} — ${REPORT_TITLE[req.params.key]} report`
-    sendPdf(res, await tablePdf(title, rows, { subtitle: `Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · ${rows.length - 1} rows` }), `${slugOf(tournament)}-${req.params.key}.pdf`)
+    sendPdf(res, await tablePdf(title, rows, { subtitle: `Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · ${rows.length - 1} rows${Object.keys(filters).length ? ` · filtered` : ''}` }), `${slugOf(tournament)}-${req.params.key}.pdf`)
+  })
+  // The same rows as data, for Excel/CSV in the browser.
+  router.get('/:tid/reports/:key', requirePermission(P.REPORT_EXPORT), async (req, res) => {
+    if (!REPORT_KEYS.includes(req.params.key)) return res.status(404).json({ error: 'route_not_found' })
+    const role = req.tournamentRole || req.user.role
+    if (req.params.key === 'audit' && !can(role, P.AUDIT_VIEW)) return res.status(403).json({ error: 'forbidden' })
+    res.json({ rows: buildReport(req.params.key, await loadReportData(tms, tid(req), { audit: req.params.key === 'audit' }), reportFilters(req.query)) })
+  })
+  // PRD v1 §22: an export made in the browser is still an audit event.
+  router.post('/:tid/exports', requirePermission(P.REGISTRATION_VIEW), async (req, res) => {
+    const body = validate(req.body, { report: { type: 'string', required: true, max: 60 }, format: { type: 'enum', values: ['xlsx', 'csv', 'pdf'], required: true }, rows: { type: 'integer', min: 0, max: 10_000_000, nullable: true }, filters: { type: 'object', nullable: true } })
+    await tms.logExport(withMeta(req), tid(req), body)
+    res.status(204).end()
   })
 
   router.post('/:tid/certificates/generate', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
-    res.status(201).json(await tms.generateCertificates(withMeta(req), tid(req)))
+    const { types } = validate(req.body || {}, { types: { type: 'array', items: { type: 'enum', values: ['medal', 'participation', 'coach', 'official'] }, maxItems: 4, nullable: true } })
+    // Officials: the referees and judges who worked this tournament's bouts and panels.
+    let officials = []
+    if ((types || []).includes('official')) {
+      const worked = new Set()
+      for (const m of await tms.listMatches(tid(req))) { if (m.refereeId) worked.add(m.refereeId); (m.judgeIds || []).forEach((j) => worked.add(j)) }
+      for (const r of await tms.kataRounds(tid(req))) Object.values(r.judgeAssignments || {}).forEach((uid) => worked.add(uid))
+      officials = (await listAssignableOfficials()).filter((o) => worked.has(o.uid)).map((o) => ({ uid: o.uid, name: o.email.split('@')[0].replace(/[._-]+/g, ' '), role: o.role }))
+    }
+    res.status(201).json(await tms.generateCertificates(withMeta(req), tid(req), { types: types || ['medal'], officials }))
+  })
+  router.post('/:tid/certificates/custom', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
+    const body = validate(req.body, { name: { type: 'string', required: true, max: 120 }, title: { type: 'string', max: 120, nullable: true }, award: { type: 'string', max: 120, nullable: true }, club: { type: 'string', max: 120, nullable: true }, category: { type: 'string', max: 120, nullable: true }, playerId: { ...ID, nullable: true } })
+    res.status(201).json({ certificate: await tms.issueCustomCertificate(withMeta(req), tid(req), body) })
   })
 
   // --- files (sections 5, 12, 17) ---------------------------------------------

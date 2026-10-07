@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid, IconButton, Tooltip,
-  Typography, Box, ToggleButtonGroup, ToggleButton, Alert,
+  Typography, Box, ToggleButtonGroup, ToggleButton, Alert, Switch, FormControlLabel, Chip,
 } from '@mui/material'
-import { Add, Edit, Delete, Check, Close, Undo, Payments, Category } from '@mui/icons-material'
+import { Add, Edit, Delete, Check, Close, Undo, Payments, Category, DirectionsWalk } from '@mui/icons-material'
 import { formFields } from '@kumite/shared/registration.js'
 import { REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
 import { PAYMENT_STATUS } from '@kumite/shared/tms.js'
@@ -15,6 +15,7 @@ import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import PlayerForm from '../../components/tms/PlayerForm'
 import BulkUpload from '../../components/tms/BulkUpload'
 import { openStoredFile } from '../../components/tms/download'
+import { useLoading } from '../../components/Loader'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -38,22 +39,38 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const players = paged.rows
   const [groups, setGroups] = useState([])
   const [weights, setWeights] = useState([])
-  const [filter, setFilter] = useState({ registrationStatus: '', teamId: '', gender: '', event: '', paymentStatus: '' })
+  const [filter, setFilter] = useState({ registrationStatus: '', teamId: '', gender: '', event: '', paymentStatus: '', ageGroupId: '', weightCategoryId: '', district: '', state: '' })
+  const [places, setPlaces] = useState({ district: [], state: [] })
   const [teamEdit, setTeamEdit] = useState(null)
   const [playerEdit, setPlayerEdit] = useState(null)
   const [playerErrors, setPlayerErrors] = useState([])
   const [confirm, setConfirm] = useState(null)
   const [payment, setPayment] = useState(null)
   const [override, setOverride] = useState(null)
+  const [duplicates, setDuplicates] = useState(null)
+  const [dupeRows, setDupeRows] = useState([])
   const manage = can(role, P.REGISTRATION_MANAGE)
   const locked = !!tournament.entriesLocked
 
-  const load = () => Promise.all([
+  const { loading, refreshing, wrap } = useLoading()
+  const load = () => wrap(Promise.all([
     tms.teams.list(tid), tms.players.page(tid, clean({ ...filter, q: pageQuery.q }), pageQuery), tms.ageGroups.list(tid), tms.weightCategories.list(tid),
-  ]).then(([t, p, g, w]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w) })
+  ]).then(([t, p, g, w]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w) }))
   useEffect(() => { load() }, [tid, version, JSON.stringify(filter), JSON.stringify(pageQuery)])
   // A filter change starts again from the first page.
   useEffect(() => { setPageQuery((q) => ({ ...q, page: 0 })) }, [JSON.stringify(filter)])
+  // District and state choices come from the players registered so far.
+  useEffect(() => {
+    tms.players.list(tid).then((all) => {
+      const distinct = (key) => [...new Set(all.map((p) => p[key]).filter(Boolean))].sort()
+      setPlaces({ district: distinct('district'), state: distinct('state') })
+    }).catch(() => {})
+  }, [tid, version])
+  // PRD v1 §21: players registered although they looked like someone already entered.
+  useEffect(() => {
+    if (view !== 'duplicates') return
+    tms.players.list(tid).then((all) => setDupeRows(all.filter((p) => p.duplicateOf?.length).map((p) => ({ ...p, of: p.duplicateOf.map((id) => all.find((x) => x.id === id)).filter(Boolean) }))))
+  }, [view, tid, version])
   useEffect(() => {
     if (view !== 'teams') return
     tms.players.list(tid).then((all) => setTeamCounts(all.reduce((m, p) => ({ ...m, [p.teamId]: (m[p.teamId] || 0) + 1 }), {})))
@@ -77,18 +94,23 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
     })
   }
 
-  const savePlayer = async () => {
+  const SERVER_KEYS = ['tournamentId', 'createdAt', 'updatedAt', 'registrationStatus', 'entries', 'payment', 'weighIn', 'age', 'playerNumber', 'rejectionReason',
+    'categoryIssues', 'duplicateOf', 'withdrawnAt', 'withdrawalReason', 'statusBeforeWithdrawal', 'notices']
+  const savePlayer = async (confirmDuplicate = false) => {
     const { id, ...doc } = playerEdit
-    const body = Object.fromEntries(Object.entries(doc).filter(([k]) => !['tournamentId', 'createdAt', 'updatedAt', 'registrationStatus', 'entries', 'payment', 'weighIn', 'age', 'playerNumber', 'rejectionReason', 'categoryIssues'].includes(k)))
+    const body = Object.fromEntries(Object.entries(doc).filter(([k]) => !SERVER_KEYS.includes(k)))
     for (const k of Object.keys(body)) if (body[k] === '') delete body[k]
+    if (confirmDuplicate) body.confirmDuplicate = true
     try {
-      if (id) await tms.players.update(tid, id, body)
-      else await tms.players.create(tid, body)
+      const saved = id ? await tms.players.update(tid, id, body) : await tms.players.create(tid, body)
       setPlayerEdit(null)
       setPlayerErrors([])
-      action.notify({ severity: 'success', text: 'Player saved' })
+      setDuplicates(null)
+      action.notify({ severity: saved?.notices?.length ? 'warning' : 'success', text: saved?.notices?.length ? `Player saved. ${saved.notices.join(' ')}` : 'Player saved' })
       load()
     } catch (err) {
+      // PRD v1 §21: a possible duplicate is shown for review, then saved only if confirmed.
+      if (err?.code === 'possible_duplicate') return setDuplicates(err.details?.matches || [])
       setPlayerErrors(err?.details?.errors || [])
       action.run(() => Promise.reject(err))
     }
@@ -128,14 +150,29 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         <MenuItem value="">All</MenuItem>
         {teams.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
       </TextField>
+      <TextField select size="small" label="Age group" value={filter.ageGroupId} sx={{ minWidth: 150 }} onChange={(e) => setFilter({ ...filter, ageGroupId: e.target.value, weightCategoryId: '' })}>
+        <MenuItem value="">All</MenuItem>
+        {groups.map((g) => <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>)}
+      </TextField>
+      <TextField select size="small" label="Weight" value={filter.weightCategoryId} sx={{ minWidth: 130 }} onChange={(e) => setFilter({ ...filter, weightCategoryId: e.target.value })}>
+        <MenuItem value="">All</MenuItem>
+        {weights.filter((w) => !filter.ageGroupId || w.ageGroupId === filter.ageGroupId).map((w) => <MenuItem key={w.id} value={w.id}>{w.label || w.name}</MenuItem>)}
+      </TextField>
+      {['district', 'state'].map((key) => (
+        <TextField key={key} select size="small" label={key === 'district' ? 'District' : 'State'} value={filter[key]} sx={{ minWidth: 130 }} onChange={(e) => setFilter({ ...filter, [key]: e.target.value })}>
+          <MenuItem value="">All</MenuItem>
+          {places[key].map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+        </TextField>
+      ))}
     </>
   )
 
   return (
     <Stack spacing={2}>
       <ToggleButtonGroup exclusive value={view} onChange={(_e, v) => v && setView(v)} size="small">
-        <ToggleButton value="players">Players ({paged.total})</ToggleButton>
-        <ToggleButton value="teams">Teams ({teams.length})</ToggleButton>
+        <ToggleButton value="players">Players ({loading ? '…' : paged.total})</ToggleButton>
+        <ToggleButton value="teams">Teams ({loading ? '…' : teams.length})</ToggleButton>
+        <ToggleButton value="duplicates">Possible duplicates</ToggleButton>
         {manage && <ToggleButton value="bulk">Bulk upload</ToggleButton>}
       </ToggleButtonGroup>
 
@@ -144,12 +181,21 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
       {view === 'teams' && (
         <DataTable
           rows={teams}
+          loading={loading} refreshing={refreshing}
+          exportName={`${tournament.slug || 'tournament'}-teams`} exportTitle={`${tournament.name} — Teams`}
+          filters={[{ key: 'district', label: 'District' }, { key: 'state', label: 'State' }]}
           empty="No teams yet. Coaches register through the registration link, or add one here."
           toolbar={manage && <Button variant="contained" startIcon={<Add />} disabled={locked} onClick={() => setTeamEdit({})}>Add team</Button>}
           columns={[
+            { key: 'teamNumber', label: 'Ref' },
             { key: 'name', label: 'Team' }, { key: 'club', label: 'Club' }, { key: 'code', label: 'Code' }, { key: 'coachName', label: 'Coach' },
             { key: 'mobile', label: 'Mobile' }, { key: 'state', label: 'State' },
             { key: 'players', label: 'Players', value: (t) => teamCounts[t.id] || 0, render: (t) => teamCounts[t.id] || 0 },
+            // PRD v1 §7: an inactive team cannot add players.
+            { key: 'active', label: 'Active', value: (t) => (t.active === false ? 'No' : 'Yes'), render: (t) => (manage
+              ? <Switch size="small" checked={t.active !== false} slotProps={{ input: { 'aria-label': `${t.name} active` } }}
+                onChange={(e) => action.run(() => tms.teams.update(tid, t.id, { active: e.target.checked }), e.target.checked ? 'Team activated' : 'Team deactivated').then(load)} />
+              : (t.active === false ? 'No' : 'Yes')) },
             { key: 'actions', label: '', sortable: false, render: (t) => manage && (
               <Stack direction="row">
                 <IconButton size="small" aria-label="Edit team" onClick={() => setTeamEdit(t)}><Edit fontSize="small" /></IconButton>
@@ -163,10 +209,34 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         />
       )}
 
+      {view === 'duplicates' && (
+        <DataTable
+          rows={dupeRows}
+          exportName={`${tournament.slug || 'tournament'}-possible-duplicates`} exportTitle={`${tournament.name} — Possible duplicates`}
+          empty="No possible duplicates. A player who looks like someone already registered (same name and date of birth) is listed here once confirmed."
+          columns={[
+            { key: 'playerNumber', label: 'ID' }, { key: 'name', label: 'Name' }, { key: 'dob', label: 'DOB' },
+            { key: 'teamId', label: 'Team', value: (p) => teamName(p.teamId), render: (p) => teamName(p.teamId) },
+            { key: 'of', label: 'Looks like', sortable: false, value: (p) => p.of.map((d) => `${d.name} (${d.playerNumber})`).join(', '),
+              render: (p) => <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>{p.of.map((d) => <Chip key={d.id} size="small" label={`${d.name} · ${d.playerNumber} · ${teamName(d.teamId)}`} />)}</Stack> },
+            { key: 'registrationStatus', label: 'Status', render: (p) => <StatusBadge status={p.registrationStatus} /> },
+            { key: 'actions', label: '', sortable: false, render: (p) => manage && !locked && (
+              <Tooltip title="Delete the duplicate"><IconButton size="small" onClick={() => setConfirm({
+                title: `Delete ${p.name} (${p.playerNumber})?`, danger: true, confirmLabel: 'Delete',
+                run: () => action.run(() => tms.players.remove(tid, p.id), 'Duplicate deleted').then(() => setDupeRows((r) => r.filter((x) => x.id !== p.id))),
+              })}><Delete fontSize="small" /></IconButton></Tooltip>
+            ) },
+          ]}
+        />
+      )}
+
       {view === 'players' && (
         <DataTable
           rows={players}
+          loading={loading} refreshing={refreshing}
           server={{ ...paged, onChange: (next) => setPageQuery((q) => ({ ...q, ...next })) }}
+          exportName={`${tournament.slug || 'tournament'}-players`} exportTitle={`${tournament.name} — Players`}
+          exportRows={() => tms.players.list(tid, clean({ ...filter, q: pageQuery.q }))}
           searchPlaceholder="Search name, player ID, team, club"
           empty="No players match."
           toolbar={(
@@ -182,6 +252,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
             { key: 'teamId', label: 'Team', value: (p) => teamName(p.teamId), render: (p) => teamName(p.teamId) },
             { key: 'gender', label: 'G' },
             { key: 'age', label: 'Age', render: (p) => p.age ?? '—' },
+            { key: 'district', label: 'District', render: (p) => p.district || '—' },
+            { key: 'state', label: 'State', render: (p) => p.state || '—' },
             { key: 'weight', label: 'Kg', render: (p) => p.weight ?? '—' },
             { key: 'entries', label: 'Category', sortable: false, value: entryLabel, render: (p) => (
               <Box>
@@ -193,6 +265,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
               <Box>
                 <StatusBadge status={p.registrationStatus} />
                 {p.rejectionReason && <Typography variant="body2" color="text.secondary">{p.rejectionReason}</Typography>}
+                {p.withdrawalReason && <Typography variant="body2" color="text.secondary">{p.withdrawalReason}</Typography>}
+                {p.duplicateOf?.length > 0 && <Typography variant="body2" color="warning.main">Possible duplicate</Typography>}
               </Box>
             ) },
             { key: 'payment', label: 'Payment', sortKey: 'payment.status', value: (p) => p.payment?.status, render: (p) => <StatusBadge status={p.payment?.status || 'PENDING'} label={`${humanize(p.payment?.status || 'PENDING')}${p.payment?.amount ? ` · ₹${p.payment.amount}` : ''}`} /> },
@@ -213,6 +287,13 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
                 {can(role, P.PLAYER_EDIT) && !locked && (
                   <Tooltip title="Change category"><IconButton size="small" onClick={() => setOverride({ player: p, event: p.events?.[0] || 'kumite', ageGroupId: p.entries?.[p.events?.[0]]?.ageGroupId || '', weightCategoryId: p.entries?.[p.events?.[0]]?.weightCategoryId || '' })}><Category fontSize="small" /></IconButton></Tooltip>
                 )}
+                {can(role, P.RESULT_MANAGE) && !['WITHDRAWN', 'REJECTED', 'DRAFT'].includes(p.registrationStatus) && (
+                  <Tooltip title="Withdraw (injury, no-show)"><IconButton size="small" onClick={() => setConfirm({
+                    title: `Withdraw ${p.name}?`, danger: true, confirmLabel: 'Withdraw', requireReason: true, reasonLabel: 'Why (e.g. injured after the first bout)',
+                    message: 'Bouts they still have are completed as walkovers for the opponent; finished results stay.',
+                    run: (reason) => action.run(() => tms.withdrawPlayer(tid, p.id, reason), `${p.name} withdrawn`).then(load),
+                  })}><DirectionsWalk fontSize="small" /></IconButton></Tooltip>
+                )}
                 {manage && (
                   <Tooltip title="Payment"><IconButton size="small" onClick={() => setPayment({ player: p, status: p.payment?.status || 'PENDING', amount: p.payment?.amount ?? 0, method: p.payment?.method || '', transactionId: p.payment?.transactionId || '', date: p.payment?.date || '', receipt: p.payment?.receipt || '' })}><Payments fontSize="small" /></IconButton></Tooltip>
                 )}
@@ -232,7 +313,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         <Stack spacing={2}>
           <Alert severity="info">Each row names its team in the Team column (by team name or club code). Excel: save the sheet as CSV.</Alert>
           <BulkUpload fields={fields} action={action}
-            onPreview={(csv) => tms.bulkPreview(tid, csv, null)} onImport={(csv) => tms.bulkImport(tid, csv, null)}
+            onPreview={(csv) => tms.bulkPreview(tid, csv, null)} onImport={(csv, opts) => tms.bulkImport(tid, csv, null, opts)}
             onDone={() => { setView('players'); load() }} />
         </Stack>
       )}
@@ -241,17 +322,23 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         <DialogTitle>{teamEdit?.id ? 'Edit team' : 'Add team'}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            {teamEdit?.teamNumber && (
+              <Grid size={{ xs: 12, sm: 4 }}><TextField fullWidth disabled label="Team reference" value={teamEdit.teamNumber} /></Grid>
+            )}
             {TEAM_FIELDS.map(([k, label, w]) => (
               <Grid key={k} size={{ xs: 12, sm: w }}>
                 <TextField fullWidth required={k === 'name'} label={label} value={teamEdit?.[k] || ''} onChange={(e) => setTeamEdit({ ...teamEdit, [k]: e.target.value })} />
               </Grid>
             ))}
+            <Grid size={{ xs: 12 }}>
+              <FormControlLabel control={<Switch checked={teamEdit?.active !== false} onChange={(e) => setTeamEdit({ ...teamEdit, active: e.target.checked })} />} label="Active (can add players)" />
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setTeamEdit(null)}>Cancel</Button>
           <Button variant="contained" onClick={async () => {
-            const doc = Object.fromEntries(TEAM_FIELDS.map(([k]) => [k, teamEdit[k] || null]).filter(([k, v]) => v !== null || teamEdit.id))
+            const doc = { ...Object.fromEntries(TEAM_FIELDS.map(([k]) => [k, teamEdit[k] || null]).filter(([, v]) => v !== null || teamEdit.id)), active: teamEdit.active !== false }
             const ok = await action.run(() => (teamEdit.id ? tms.teams.update(tid, teamEdit.id, doc) : tms.teams.create(tid, doc)), 'Team saved')
             if (ok) { setTeamEdit(null); load() }
           }}>Save</Button>
@@ -273,7 +360,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPlayerEdit(null)}>Cancel</Button>
-          <Button variant="contained" onClick={savePlayer}>Save</Button>
+          <Button variant="contained" onClick={() => savePlayer()}>Save</Button>
         </DialogActions>
       </Dialog>
 
@@ -348,6 +435,9 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         </DialogActions>
       </Dialog>
 
+      <ConfirmDialog open={!!duplicates} title="Possible duplicate" confirmLabel="Register anyway"
+        message={duplicates ? `This player looks like ${duplicates.map((d) => `${d.name} (${d.playerNumber || 'no ID'}, born ${d.dob}${d.club ? `, ${d.club}` : ''})`).join('; ')}. Register them anyway? The confirmation is recorded in the audit log.` : ''}
+        onClose={() => setDuplicates(null)} onConfirm={() => savePlayer(true)} />
       <ConfirmDialog open={!!confirm} title={confirm?.title} message={confirm?.message} requireReason={confirm?.requireReason}
         reasonLabel={confirm?.reasonLabel} danger={confirm?.danger} confirmLabel={confirm?.confirmLabel}
         onClose={() => setConfirm(null)} onConfirm={(reason) => { const c = confirm; setConfirm(null); c.run(reason) }} />

@@ -8,14 +8,15 @@ import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 import AssignedMatches from '../../components/tms/AssignedMatches'
+import { PageLoader } from '../../components/Loader'
 
-export default function RefereeCategoryList({ uid }) {
+export default function RefereeCategoryList({ uid, profile = null }) {
   const navigate = useNavigate()
   const [tournaments, setTournaments] = useState([])
   const [selectedTournamentId, setSelectedTournamentId] = useState('')
 
   const {
-    rows: categories, total, page, limit, search, setSearch, setPage,
+    rows: categories, total, page, limit, search, setSearch, setPage, loading,
   } = usePagedList(
     // Nothing to ask for until a tournament is chosen.
     useCallback((options) => (
@@ -42,6 +43,8 @@ export default function RefereeCategoryList({ uid }) {
   const selectedTournament = tournaments.find(t => t.id === selectedTournamentId)
 
   const isSelectedExpired = selectedTournament ? isExpired(selectedTournament.date) : false
+  // PRD point 20: a tournament may show referees only the bouts they are on.
+  const assignedOnly = profile?.role === 'referee' && !!selectedTournament?.settings?.officialsSeeAssignedOnly
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
@@ -126,11 +129,15 @@ export default function RefereeCategoryList({ uid }) {
 
         {!selectedTournamentId ? (
           <Alert severity="info">Select a tournament to view categories</Alert>
+        ) : assignedOnly ? (
+          <Alert severity="info">In this tournament referees see only the matches they are assigned to, listed above. Ask the tournament admin to assign you to a bout.</Alert>
         ) : isSelectedExpired ? (
           <Alert severity="warning">
             This tournament has expired ({new Date(selectedTournament.date).toLocaleDateString()}).
             You can view categories but cannot manage matches.
           </Alert>
+        ) : loading && categories.length === 0 ? (
+          <PageLoader label="Loading categories…" />
         ) : categories.length === 0 ? (
           <Alert severity="info">No categories available in this tournament</Alert>
         ) : (

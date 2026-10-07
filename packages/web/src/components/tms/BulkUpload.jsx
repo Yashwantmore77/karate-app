@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Paper, Typography, Stack, Button, Alert, Box } from '@mui/material'
+import { Paper, Typography, Stack, Button, Alert, Box, FormControlLabel, Checkbox } from '@mui/material'
 import { UploadFile, Download } from '@mui/icons-material'
 import { bulkTemplate, errorReportCsv, parseCsv, toCsv } from '@kumite/shared/registration.js'
 import DataTable from './DataTable'
@@ -14,6 +14,7 @@ export default function BulkUpload({ fields, withTeamColumn = true, onPreview, o
   const [csv, setCsv] = useState(null)
   const [fileName, setFileName] = useState('')
   const [preview, setPreview] = useState(null)
+  const [confirmDuplicates, setConfirmDuplicates] = useState(false)
 
   const templateRows = () => {
     const [header] = parseCsv(bulkTemplate(fields))
@@ -44,10 +45,11 @@ export default function BulkUpload({ fields, withTeamColumn = true, onPreview, o
     setFileName(file.name)
     const result = await action.run(() => onPreview(text))
     setPreview(result || null)
+    setConfirmDuplicates(false)
   }
 
   const confirm = async () => {
-    const out = await action.run(() => onImport(csv), (r) => `Imported ${r.created} players`)
+    const out = await action.run(() => onImport(csv, confirmDuplicates ? { confirmDuplicates: true } : {}), (r) => `Imported ${r.created} players`)
     if (out) { setCsv(null); setPreview(null); setFileName(''); onDone?.() }
   }
 
@@ -72,6 +74,15 @@ export default function BulkUpload({ fields, withTeamColumn = true, onPreview, o
           ) : (
             <Alert severity="success">{preview.valid.length} players ready to import.</Alert>
           )}
+          {/* PRD v1 §21, §28: a possible duplicate is a warning to review, never a silent merge. */}
+          {preview.warnings?.length > 0 && (
+            <Alert severity="warning">
+              <Box>{preview.warnings.length} possible duplicate{preview.warnings.length === 1 ? '' : 's'} of players already registered:</Box>
+              <Box component="ul" sx={{ m: 0, pl: 2 }}>{preview.warnings.slice(0, 10).map((w) => <li key={`${w.row}-${w.message}`}>Row {w.row}: {w.message}</li>)}</Box>
+              <FormControlLabel control={<Checkbox checked={confirmDuplicates} onChange={(e) => setConfirmDuplicates(e.target.checked)} />}
+                label="I have checked these; register them anyway (recorded in the audit log)" />
+            </Alert>
+          )}
           <DataTable
             rowKey={(r) => r.row}
             rows={preview.rows}
@@ -85,10 +96,11 @@ export default function BulkUpload({ fields, withTeamColumn = true, onPreview, o
               { key: 'weight', label: 'Weight', value: (r) => r.player.weight, render: (r) => r.player.weight ?? '—' },
               { key: 'errors', label: 'Problems', value: (r) => r.errors.length, render: (r) => (r.errors.length
                 ? <Box sx={{ color: 'error.main' }}>{r.errors.map((e) => e.message).join('; ')}</Box>
-                : <Box sx={{ color: 'success.main' }}>✓ OK</Box>) },
+                : r.warnings?.length ? <Box sx={{ color: 'warning.main' }}>{r.warnings.map((w) => w.message).join('; ')}</Box>
+                  : <Box sx={{ color: 'success.main' }}>✓ OK</Box>) },
             ]}
           />
-          <Box><Button size="large" variant="contained" disabled={!!preview.errors.length || !preview.valid.length || action.busy} onClick={confirm}>Confirm import</Button></Box>
+          <Box><Button size="large" variant="contained" disabled={!!preview.errors.length || !preview.valid.length || action.busy || (preview.warnings?.length > 0 && !confirmDuplicates)} onClick={confirm}>Confirm import</Button></Box>
         </Stack>
       )}
     </Paper>

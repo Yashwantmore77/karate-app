@@ -5,7 +5,7 @@
 
 import { makeClock, startClock, stopClock, adjustClock, remainingNow } from './clock.js'
 import {
-  makeMatchState, awardPoint, deductPoint, setSenshu, setPenalty, evaluateOutcome, DEFAULT_RULES
+  makeMatchState, awardPoint, deductPoint, setSenshu, setPenalty, evaluateOutcome, DEFAULT_RULES, POINTS, OVERTIME_MODES, PENALTY_LADDER
 } from './rules.js'
 
 export const DEFAULT_DURATION_MS = 90_000
@@ -17,6 +17,7 @@ export const initialMatchState = () => ({
   koActive: false,
   koClock: makeClock(DEFAULT_RULES.koTimerMs),
   fieldNumber: '1',
+  timeouts: { ao: 0, aka: 0 },
   scoreboardActive: false,
   // A referee's declaration, which the rules cannot derive from the score.
   decision: null,
@@ -40,7 +41,7 @@ export function withOutcome(state, rules, at = Date.now()) {
     return unchanged ? state : { ...state, outcome: declared }
   }
   const expired = remainingNow(state.clock, at) === 0 && !state.koActive
-  const outcome = evaluateOutcome(state.match, active, { expired })
+  const outcome = evaluateOutcome(state.match, active, { expired, inOvertime: !!state.inOvertime })
   if (!outcome.ended) return state.outcome ? { ...state, outcome: null } : state
   const same = state.outcome
     && state.outcome.winner === outcome.winner
@@ -51,7 +52,7 @@ export function withOutcome(state, rules, at = Date.now()) {
 export const COMMANDS = [
   'CLOCK_START', 'CLOCK_STOP', 'CLOCK_ADJUST', 'CLOCK_SET', 'CLOCK_RESET', 'KO_TIMER',
   'SCORE', 'DEDUCT', 'SENSHU', 'PENALTY', 'FIELD_NUMBER', 'SCOREBOARD',
-  'KIKEN', 'SHIKKAKU', 'HANTEI', 'CLEAR_DECISION', 'RULES',
+  'KIKEN', 'SHIKKAKU', 'HANTEI', 'CLEAR_DECISION', 'RULES', 'TIMEOUT', 'OVERTIME',
 ]
 
 /**
@@ -59,11 +60,20 @@ export const COMMANDS = [
  * Accepts only the values a tournament configures; anything else keeps the
  * defaults rather than arriving unchecked from a client.
  */
-export function rulesFrom({ durationMs, pointGap, senshu } = {}) {
-  const rules = { ...DEFAULT_RULES }
+export function rulesFrom({ durationMs, pointGap, senshu, points, overtime, extraTimeMs, penaltyCategories, penaltyLadder } = {}) {
+  const rules = { ...DEFAULT_RULES, points: { ...POINTS } }
+  if (OVERTIME_MODES.includes(overtime)) rules.overtime = overtime
+  if (Number.isFinite(extraTimeMs) && extraTimeMs >= 10_000 && extraTimeMs <= 300_000) rules.extraTimeMs = extraTimeMs
+  if ([1, 2].includes(penaltyCategories)) rules.penaltyCategories = penaltyCategories
+  if (Array.isArray(penaltyLadder) && penaltyLadder.length >= 2 && penaltyLadder.length <= 6) rules.penaltyLadder = penaltyLadder.map((l) => String(l).slice(0, 6))
   if (Number.isFinite(durationMs) && durationMs >= 10_000 && durationMs <= 600_000) rules.durationMs = durationMs
   if (Number.isInteger(pointGap) && pointGap >= 0 && pointGap <= 20) rules.pointGap = pointGap
   if (typeof senshu === 'boolean') rules.senshu = senshu
+  if (points && typeof points === 'object') {
+    for (const key of Object.keys(POINTS)) {
+      if (Number.isInteger(points[key]) && points[key] >= 1 && points[key] <= 10) rules.points[key] = points[key]
+    }
+  }
   return rules
 }
 
@@ -113,7 +123,7 @@ export function applyCommand(state, cmd, payload = {}, at) {
           }
 
     case 'SCORE':
-      return { ...state, match: awardPoint(state.match, payload.side, payload.type) }
+      return { ...state, match: awardPoint(state.match, payload.side, payload.type, state.rules?.points || POINTS) }
 
     case 'DEDUCT':
       return { ...state, match: deductPoint(state.match, payload.side) }
@@ -124,7 +134,7 @@ export function applyCommand(state, cmd, payload = {}, at) {
     case 'PENALTY':
       return {
         ...state,
-        match: setPenalty(state.match, payload.side, payload.category, payload.level),
+        match: setPenalty(state.match, payload.side, payload.category, payload.level, state.rules?.penaltyLadder || PENALTY_LADDER),
       }
 
     case 'FIELD_NUMBER':
@@ -143,6 +153,22 @@ export function applyCommand(state, cmd, payload = {}, at) {
 
     case 'HANTEI':
       return { ...state, decision: { method: 'hantei', winner: payload.side } }
+
+    // A side's timeout stops the clock and is counted, so the panel can see
+    // how many each corner has taken.
+    case 'TIMEOUT': {
+      if (!['ao', 'aka'].includes(payload.side)) return state
+      const timeouts = { ao: 0, aka: 0, ...(state.timeouts || {}) }
+      return { ...state, clock: stopClock(state.clock, at), timeouts: { ...timeouts, [payload.side]: timeouts[payload.side] + 1 } }
+    }
+
+    // PRD v1 §6 overtime: level at time, the bout goes to extra time (or
+    // golden score, where the first score wins).
+    case 'OVERTIME': {
+      if (state.inOvertime) return state
+      const ms = state.rules?.extraTimeMs || DEFAULT_RULES.extraTimeMs
+      return { ...state, inOvertime: true, durationMs: ms, clock: makeClock(ms) }
+    }
 
     case 'CLEAR_DECISION':
       return state.decision ? { ...state, decision: null } : state

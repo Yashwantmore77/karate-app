@@ -20,13 +20,16 @@ const CONNECTION = {
 // one screen anyone might want to throw onto a second display mid-session.
 const MENUS = {
   admin: [
+    { label: 'Dashboard', to: '/admin/dashboard' },
     { label: 'Tournaments', to: '/admin' },
     // The referee screens, which an admin may also use: scheduling, panels,
     // the draw, and deleting a bout.
     { label: 'Matches', to: '/referee' },
     { label: 'Accounts', to: '/admin/accounts' },
     { label: 'Sign-ins', to: '/admin/sign-ins' },
+    { label: 'System', to: '/admin/system' },
     { label: 'Scoreboard', to: '/display' },
+    { label: 'Live board', to: '/live' },
     { label: 'Public site', to: '/tournaments' },
   ],
   registration_officer: [
@@ -43,7 +46,28 @@ const MENUS = {
   ],
   judge: [
     { label: 'Matches', to: '/judge' },
+    { label: 'Kata scoring', to: '/judge/kata' },
     { label: 'Scoreboard', to: '/display' },
+  ],
+  announcer: [
+    { label: 'Call matches', to: '/announcer' },
+    { label: 'Live board', to: '/live' },
+    { label: 'Public site', to: '/tournaments' },
+  ],
+  // PRD v1 §4: runs the hall screens.
+  scoreboard_operator: [
+    { label: 'Scoreboard control', to: '/scoreboard_operator' },
+    { label: 'Scoreboard', to: '/display' },
+    { label: 'Live board', to: '/live' },
+  ],
+  coach: [
+    { label: 'My team', to: '/coach' },
+    { label: 'Public site', to: '/tournaments' },
+  ],
+  viewer: [
+    { label: 'Tournaments', to: '/viewer' },
+    { label: 'Live board', to: '/live' },
+    { label: 'Public site', to: '/tournaments' },
   ],
 }
 
@@ -77,9 +101,11 @@ export default function AppNav({ user, profile }) {
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
-  const base = MENUS[profile?.role === 'super_admin' ? 'admin' : profile?.role] || []
-  const items = base.length ? [...base, { label: 'My account', to: '/account' }] : base
-  const onPublicScreen = location.pathname === '/display' || location.pathname === '/login'
+  const base = profile?.role === 'super_admin'
+    ? [...MENUS.admin.slice(0, 3), { label: 'Organisations', to: '/admin/organizations' }, { label: 'Rulesets', to: '/admin/rulesets' }, ...MENUS.admin.slice(3)]
+    : MENUS[profile?.role] || []
+  const items = base.length && profile?.role !== 'coach' ? [...base, { label: 'My account', to: '/account' }] : base
+  const onPublicScreen = ['/display', '/login', '/live'].includes(location.pathname)
   if (!user || !profile || onPublicScreen || items.length === 0) return null
 
   const active = activeItem(items, location.pathname)
@@ -115,7 +141,7 @@ export default function AppNav({ user, profile }) {
           </Typography>
 
           {/* Full menu on a laptop at the scorer's table; a drawer on a phone. */}
-          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, flexGrow: 1 }}>
+          <Box sx={{ display: { xs: 'none', lg: 'flex' }, gap: 0.5, flexGrow: 1, minWidth: 0 }}>
             {items.map((item) => {
               const isActive = active?.to === item.to
               return (
@@ -125,7 +151,8 @@ export default function AppNav({ user, profile }) {
                   aria-current={isActive ? 'page' : undefined}
                   sx={{
                     color: TEXT.secondary,
-                    px: 2,
+                    px: 1.5,
+                    whiteSpace: 'nowrap',
                     ...(isActive ? activeSx : {}),
                   }}
                 >
@@ -135,7 +162,7 @@ export default function AppNav({ user, profile }) {
             })}
           </Box>
 
-          <Box sx={{ flexGrow: { xs: 1, md: 0 } }} />
+          <Box sx={{ flexGrow: { xs: 1, lg: 0 } }} />
 
           {/* Only with a server: offline mode has no connection to lose. */}
           {connection && (
@@ -165,7 +192,7 @@ export default function AppNav({ user, profile }) {
             aria-label="Open menu"
             edge="end"
             onClick={() => setDrawerOpen(true)}
-            sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+            sx={{ display: { xs: 'inline-flex', lg: 'none' } }}
           >
             <MenuIcon />
           </IconButton>

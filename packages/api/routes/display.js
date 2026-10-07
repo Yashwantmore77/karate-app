@@ -27,6 +27,11 @@ const DISPLAY_SCHEMA = {
   outcome: { type: 'string', max: 80, nullable: true },
   // The bout after this one on the same mat: { matchNumber, akaName, aoName, category }.
   next: { type: 'object', nullable: true },
+  // PRD v1 §15: clear AKA/AO identity and club.
+  akaClub: { type: 'string', max: 120, nullable: true },
+  aoClub: { type: 'string', max: 120, nullable: true },
+  // An announcement over the board, set by the scoreboard operator.
+  message: { type: 'string', max: 200, nullable: true },
 }
 
 export function displayRoutes(stores) {
@@ -44,13 +49,26 @@ export function displayRoutes(stores) {
     res.json({ display: (await display.get(LIVE_ID)) ?? null })
   })
 
-  // Publishing stays with whoever is running the mat.
-  router.put('/', requireAuth, requireRole('referee'), async (req, res) => {
+  // Publishing stays with whoever is running the mat, or the scoreboard
+  // operator (PRD v1 §4: display control, no scoring authority).
+  router.put('/', requireAuth, requireRole('referee', 'scoreboard_operator'), async (req, res) => {
     const payload = validate(req.body, DISPLAY_SCHEMA)
     const existing = await display.get(LIVE_ID)
+    // A referee's update keeps the operator's announcement.
+    const keep = existing?.message && payload.message === undefined ? { message: existing.message } : {}
     const saved = existing
-      ? await display.update(LIVE_ID, payload)
+      ? await display.update(LIVE_ID, { ...payload, ...keep })
       : await display.insert({ ...payload, id: LIVE_ID })
+    res.json({ display: saved })
+  })
+
+  // Just the announcement line, without touching the scores.
+  router.patch('/message', requireAuth, requireRole('referee', 'scoreboard_operator'), async (req, res) => {
+    const { message } = validate(req.body, { message: { type: 'string', max: 200, nullable: true } })
+    const existing = await display.get(LIVE_ID)
+    const saved = existing
+      ? await display.update(LIVE_ID, { message: message || null })
+      : await display.insert({ id: LIVE_ID, status: 'closed', message: message || null })
     res.json({ display: saved })
   })
 

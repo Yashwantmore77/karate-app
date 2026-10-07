@@ -26,7 +26,12 @@ export function SessionProvider({ children }) {
       return
     }
     setUser({ uid: apiUser.uid, email: apiUser.email })
-    setProfile({ role: apiUser.role, seat: apiUser.seat })
+    // PRD v1 §4: roles held inside particular tournaments; a coach account
+    // carries the one tournament and team it belongs to.
+    setProfile({
+      role: apiUser.role, seat: apiUser.seat, tournamentRoles: apiUser.tournamentRoles || {},
+      ...(apiUser.role === 'coach' ? { tournamentId: apiUser.tournamentId, teamId: apiUser.teamId } : {}),
+    })
   }, [])
 
   // A refresh should not bounce a signed-in referee back to the login screen:
@@ -84,7 +89,11 @@ export function SessionProvider({ children }) {
     adopt(await (code ? loginToServer(email, password, coords, code) : loginToServer(email, password, coords)))
   }, [adopt])
 
+  // PRD v1 §22/§26: signing out ends the session on the server too (and is audited).
   const logout = useCallback(() => {
+    const token = getToken()
+    const url = apiUrl('/auth/logout')
+    if (token && url) fetch(url, { method: 'POST', headers: { authorization: `Bearer ${token}` } }).catch(() => {})
     clearSession()
     adopt(null)
   }, [adopt])

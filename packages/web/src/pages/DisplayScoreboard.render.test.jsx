@@ -158,6 +158,8 @@ describe('console undo and referee decisions', () => {
     await waitFor(() => expect(view.container.querySelector('h1')?.textContent).toBe('3'))
 
     await user.click(panel.getByRole('button', { name: /undo/i }))
+    // Undo asks first: a stray tap must not wipe a score.
+    await user.click(await screen.findByRole('button', { name: 'Confirm' }))
     await waitFor(() => expect(view.container.querySelector('h1')?.textContent).toBe('0'))
   })
 

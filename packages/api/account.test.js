@@ -26,8 +26,8 @@ afterEach(() => new Promise((resolve) => http.close(resolve)))
 
 describe('PRD section 4: accounts', () => {
   it('limits an account to its assigned tournaments', async () => {
-    const a = (await call('POST', '/tournaments', { name: 'Cup A', location: 'X', date: '2027-01-01', template: 'kumite' }, admin)).body.tournament
-    const b = (await call('POST', '/tournaments', { name: 'Cup B', location: 'X', date: '2027-01-01', template: 'kumite' }, admin)).body.tournament
+    const a = (await call('POST', '/tournaments', { name: 'Cup A', location: 'Pune', date: '2027-01-01', template: 'kumite' }, admin)).body.tournament
+    const b = (await call('POST', '/tournaments', { name: 'Cup B', location: 'Pune', date: '2027-01-01', template: 'kumite' }, admin)).body.tournament
     const { body: { user } } = await call('POST', '/users', { email: 'officer.a@kata.local', password: 'password1', role: 'registration_officer', tournamentIds: [a.id] }, admin)
     const officer = (await login('officer.a@kata.local', 'password1')).body.token
     expect((await call('GET', '/tournaments', undefined, officer)).body.tournaments.map((t) => t.id)).toEqual([a.id])

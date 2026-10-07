@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Container, Paper, Typography, Button, Alert, Stack, TextField, Box } from '@mui/material'
+import { Container, Paper, Typography, Button, Alert, Stack, TextField, Box, List, ListItem, ListItemText, Chip } from '@mui/material'
 import { request } from '../../data/http'
 import { ROLE_LABEL } from '@kumite/shared/permissions.js'
+import { PageLoader } from '../../components/Loader'
 
 /** PRD section 4: the signed-in person's account, and optional two-factor sign-in. */
 export default function MyAccount() {
@@ -9,11 +10,15 @@ export default function MyAccount() {
   const [setup, setSetup] = useState(null)
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState(null)
+  const [sessions, setSessions] = useState([])
 
   const load = () => request('/auth/account').then((r) => setAccount(r.account)).catch(() => setAccount(null))
-  useEffect(() => { load() }, [])
+  const loadSessions = () => request('/auth/sessions').then((r) => setSessions(r.sessions)).catch(() => setSessions([]))
+  useEffect(() => { load(); loadSessions() }, [])
+  const endSession = (sid) => request(`/auth/sessions/${sid}`, { method: 'DELETE' }).then(loadSessions).catch(() => {})
+  const endOthers = () => request('/auth/sessions/revoke-others', { method: 'POST', body: {} }).then(loadSessions).catch(() => {})
 
-  if (!account) return null
+  if (!account) return <PageLoader label="Loading your account…" />
 
   const act = async (path, success) => {
     try {
@@ -32,7 +37,10 @@ export default function MyAccount() {
       <Paper sx={{ p: 3 }}>
         <Typography variant="h1" gutterBottom>My account</Typography>
         <Typography>{account.email}</Typography>
-        <Typography color="text.secondary" sx={{ mb: 3 }}>{ROLE_LABEL[account.role] || account.role}{account.tournamentIds.length ? ` · ${account.tournamentIds.length} assigned tournament(s)` : ' · all tournaments'}</Typography>
+        <Typography color="text.secondary" sx={{ mb: 3 }}>
+          {ROLE_LABEL[account.role] || account.role}{account.tournamentIds.length ? ` · ${account.tournamentIds.length} assigned tournament(s)` : ' · all tournaments'}
+          {Object.keys(account.tournamentRoles || {}).length > 0 && ` · a different role in ${Object.keys(account.tournamentRoles).length} tournament(s)`}
+        </Typography>
 
         <Typography variant="h3" gutterBottom>Two-factor sign-in</Typography>
         {msg && <Alert severity={msg.severity} sx={{ mb: 2 }}>{msg.text}</Alert>}
@@ -56,6 +64,20 @@ export default function MyAccount() {
             <Button variant="contained" onClick={() => request('/auth/2fa/setup', { method: 'POST', body: {} }).then(setSetup)}>Set up two-factor sign-in</Button>
           </Stack>
         )}
+
+        {/* PRD v1 §26: where this account is signed in, and ending those sessions. */}
+        <Typography variant="h3" gutterBottom sx={{ mt: 4 }}>Where you are signed in</Typography>
+        <List dense>
+          {sessions.map((x) => (
+            <ListItem key={x.sid} disableGutters secondaryAction={!x.current && <Button size="small" onClick={() => endSession(x.sid)}>Sign out</Button>}>
+              <ListItemText
+                primary={<>{(x.userAgent || 'Unknown device').slice(0, 70)} {x.current && <Chip size="small" color="primary" label="This device" sx={{ ml: 1 }} />}</>}
+                secondary={`${x.ip || 'unknown address'} · signed in ${new Date(x.createdAt).toLocaleString()} · last active ${new Date(x.lastSeenAt).toLocaleString()}`} />
+            </ListItem>
+          ))}
+          {!sessions.length && <Typography color="text.secondary">No other sessions.</Typography>}
+        </List>
+        {sessions.filter((x) => !x.current).length > 0 && <Button variant="outlined" color="warning" onClick={endOthers}>Sign out everywhere else</Button>}
       </Paper>
     </Container>
   )

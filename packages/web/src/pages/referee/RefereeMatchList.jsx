@@ -18,6 +18,7 @@ import { localInputToIso, isoToLocalInput, formatSlotTime, describeClashes } fro
 import { downloadCSV } from '../../utils/csvExport'
 import StandingsTable from '../../components/StandingsTable'
 import * as users from '../../data/users'
+import { PageLoader } from '../../components/Loader'
 
 // Used until a tournament says otherwise; matches the server's own default.
 const DEFAULT_JUDGE_COUNT = 4
@@ -88,7 +89,7 @@ export default function RefereeMatchList({ uid, profile }) {
   const [clashes, setClashes] = useState([])
 
   const {
-    rows: matches, total, page, limit, search, setSearch, setPage, refresh, reset,
+    rows: matches, total, page, limit, search, setSearch, setPage, refresh, reset, loading,
   } = usePagedList(
     useCallback((options) => matchStore.page(categoryId, options), [categoryId]),
     { deps: [categoryId] }
@@ -375,7 +376,7 @@ export default function RefereeMatchList({ uid, profile }) {
           </Stack>
         </Box>
 
-        {matches.length === 0 ? (
+        {loading && matches.length === 0 ? <PageLoader label="Loading matches…" /> : matches.length === 0 ? (
           <Alert severity="info">
             {competitors.length < 2
               ? `Need at least 2 competitors to create a match (${competitors.length}/2)`
@@ -561,7 +562,7 @@ export default function RefereeMatchList({ uid, profile }) {
             {/* Optional, like the panel: the draw is made before the timetable
                 is, and a bout with no time yet blocks nobody. Giving it one is
                 what brings it into the clash check. */}
-            <Stack direction="row" spacing={2} alignItems="flex-start">
+            <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
               <TextField
                 fullWidth
                 margin="normal"

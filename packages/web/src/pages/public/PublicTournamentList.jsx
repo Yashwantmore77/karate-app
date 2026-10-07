@@ -8,7 +8,9 @@ import StatusBadge from '../../components/tms/StatusBadge'
 export default function PublicTournamentList() {
   const navigate = useNavigate()
   const [rows, setRows] = useState(null)
-  useEffect(() => { tms.public.list().then(setRows).catch(() => setRows([])) }, [])
+  // PRD point 33: /tournaments?org=short-name lists one organisation's tournaments.
+  const org = new URLSearchParams(window.location.search).get('org') || undefined
+  useEffect(() => { tms.public.list(org).then(setRows).catch(() => setRows([])) }, [org])
   return (
     <Container maxWidth="md" sx={{ py: 5 }}>
       <Typography variant="h1" sx={{ mb: 1 }}>Tournaments</Typography>

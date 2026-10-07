@@ -10,6 +10,7 @@ import PageBar from '../../components/PageBar'
 import { TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
 import * as loginLog from '../../data/loginLog'
+import { PageLoader } from '../../components/Loader'
 
 // The server answers with a code; these are the ones a person can act on.
 const MESSAGES = {
@@ -159,7 +160,7 @@ export default function AdminLoginLog() {
             <Button type="submit" variant="outlined">Apply</Button>
           </Stack>
 
-          {loading ? null : entries.length === 0 ? (
+          {loading ? <PageLoader label="Loading sign-ins…" /> : entries.length === 0 ? (
             <Paper sx={{ p: 4, textAlign: 'center' }}>
               <NoResults query={appliedEmail || outcome} noun="sign-ins" />
             </Paper>

@@ -4,7 +4,9 @@ import { issueReset, redeemReset } from '../auth/resets.js'
 import { newSecret, verifyTotp, otpauthUrl } from '../auth/totp.js'
 import { sendMail } from '../lib/mailer.js'
 import { validate } from '../lib/validate.js'
-import { signToken } from '../auth/jwt.js'
+import { signToken, signCoachToken } from '../auth/jwt.js'
+import { createSession, listSessions, revokeSession, revokeOtherSessions } from '../auth/sessions.js'
+import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { requireAuth, requireRole } from '../auth/middleware.js'
 import { recordLogin, listLogins } from '../auth/loginLog.js'
 import { rateLimit } from '../lib/rateLimit.js'
@@ -29,7 +31,7 @@ const LOGIN_MAX_PER_ADDRESS = 60
 
 const attemptedEmail = (req) => String(req.body?.email || '').trim().toLowerCase() || 'unknown'
 
-export function authRoutes() {
+export function authRoutes({ audit = async () => {} } = {}) {
   const router = Router()
 
   const perAccount = rateLimit({
@@ -53,6 +55,7 @@ export function authRoutes() {
 
     if (!found) {
       recordLogin({ req, email, outcome: 'invalid_credentials', coords })
+      audit(null, { action: 'auth.login_failed', entity: 'user', entityId: attemptedEmail(req), meta: { ip: clientIp(req), userAgent: userAgent(req) } }).catch(() => {})
       // One undifferentiated failure: never say which half was wrong.
       throw unauthorized('invalid_credentials')
     }
@@ -68,7 +71,12 @@ export function authRoutes() {
       }
     }
 
-    res.json({ token: signToken(user), user })
+    const sid = await createSession({ uid: user.uid, ip: clientIp(req), userAgent: userAgent(req) })
+    // PRD v1 §7: a team manager's own login opens their team's coach session.
+    const token = user.role === 'coach'
+      ? signCoachToken({ linkId: `account:${user.uid}`, tournamentId: user.tournamentId, teamId: user.teamId, sid, email: user.email })
+      : signToken(user, sid)
+    res.json({ token, user })
     // After the response: the record is for us, and the person signing in
     // should not wait on a database write they get nothing from.
     recordLogin({ req, email, user, outcome: 'success', coords })
@@ -138,12 +146,40 @@ export function authRoutes() {
   router.get('/account', requireAuth, async (req, res) => {
     const user = await findUserRecord(req.user.uid)
     if (!user) throw unauthorized()
-    res.json({ account: { uid: user.uid, email: user.email, role: user.role, twoFactorEnabled: !!user.twoFactorSecret, tournamentIds: user.tournamentIds || [] } })
+    res.json({ account: { uid: user.uid, email: user.email, role: user.role, twoFactorEnabled: !!user.twoFactorSecret, tournamentIds: user.tournamentIds || [], tournamentRoles: user.tournamentRoles || {} } })
   })
 
   // The token is self-describing, so this needs no store read — it reports the
   // claims the caller actually presented.
-  router.get('/me', requireAuth, (req, res) => res.json({ user: req.user }))
+  // Claims plus what the account says now: roles per tournament change
+  // without a new sign-in (PRD v1 §4).
+  // PRD v1 §22 audit: sign-outs are recorded, and end the session.
+  router.post('/logout', requireAuth, async (req, res) => {
+    if (req.user.sid) await revokeSession(req.user.sid, req.user.uid)
+    await audit(req.user, { action: 'auth.logout', entity: 'user', entityId: req.user.uid, meta: { ip: clientIp(req), userAgent: userAgent(req) } })
+    res.status(204).end()
+  })
+
+  // PRD v1 §26: the person's own sessions, and ending them.
+  router.get('/sessions', requireAuth, async (req, res) => {
+    const rows = await listSessions(req.user.uid)
+    res.json({ sessions: rows.map((r) => ({ sid: r.sid, ip: r.ip, userAgent: r.userAgent, createdAt: r.createdAt, lastSeenAt: r.lastSeenAt, current: r.sid === req.user.sid })) })
+  })
+  router.delete('/sessions/:sid', requireAuth, async (req, res) => {
+    if (!(await revokeSession(req.params.sid, req.user.uid))) throw badRequest('session_not_found')
+    await audit(req.user, { action: 'auth.session_revoked', entity: 'user', entityId: req.user.uid, after: { sid: req.params.sid } })
+    res.status(204).end()
+  })
+  router.post('/sessions/revoke-others', requireAuth, async (req, res) => {
+    const count = await revokeOtherSessions(req.user.uid, req.user.sid)
+    if (count) await audit(req.user, { action: 'auth.session_revoked', entity: 'user', entityId: req.user.uid, after: { others: count } })
+    res.json({ revoked: count })
+  })
+
+  router.get('/me', requireAuth, async (req, res) => {
+    const account = req.user.role === 'coach' ? null : await findUserRecord(req.user.uid)
+    res.json({ user: { ...req.user, ...(account ? { tournamentRoles: account.tournamentRoles || {}, organizationId: account.organizationId || null } : {}) } })
+  })
 
   // Reading the trail is an administrator's business, and only theirs: it holds
   // every other account's addresses and whereabouts.

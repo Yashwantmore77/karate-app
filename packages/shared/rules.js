@@ -17,7 +17,16 @@ export const DEFAULT_RULES = {
   pointGap: 8,
   senshu: true,
   tieBreak: 'senshu',
+  // PRD v1 §6 golden score / overtime: what a tie at time leads to —
+  // senshu, none (a draw), extra_time, golden_score (first score in extra
+  // time wins) or hantei (a referees' decision).
+  overtime: 'senshu',
+  // PRD v1 §6 penalty configuration.
+  penaltyCategories: 2,
+  penaltyLadder: PENALTY_LADDER,
 }
+
+export const OVERTIME_MODES = ['senshu', 'none', 'extra_time', 'golden_score', 'hantei']
 
 const emptyPenalties = () => ({ c1: 0, c2: 0 })
 
@@ -29,8 +38,10 @@ export const makeMatchState = () => ({
 
 const other = (side) => (side === 'ao' ? 'aka' : 'ao')
 
-export const awardPoint = (state, side, type) => {
-  const value = POINTS[type]
+// `points` lets a tournament set its own values (PRD point 16); the defaults
+// are yuko 1, waza-ari 2, ippon 3.
+export const awardPoint = (state, side, type, points = POINTS) => {
+  const value = points[type]
   if (!value) return state
   return {
     ...state,
@@ -50,9 +61,9 @@ export const setSenshu = (state, side) => ({
 })
 
 // Clicking the level already set steps back down, so a mis-tap is one tap to undo.
-export const setPenalty = (state, side, category, level) => {
-  const current = state.penalties[side][category]
-  const next = current === level ? level - 1 : level
+export const setPenalty = (state, side, category, level, ladder = PENALTY_LADDER) => {
+  const current = state.penalties[side][category] || 0
+  const next = Math.min(ladder.length, current === level ? level - 1 : level)
   return {
     ...state,
     penalties: {
@@ -62,8 +73,11 @@ export const setPenalty = (state, side, category, level) => {
   }
 }
 
-export const hasHansoku = (state, side) =>
-  PENALTY_CATEGORIES.some((c) => state.penalties[side][c] >= PENALTY_LADDER.length)
+export const hasHansoku = (state, side, rules = DEFAULT_RULES) => {
+  const ladder = rules.penaltyLadder || PENALTY_LADDER
+  const categories = PENALTY_CATEGORIES.slice(0, rules.penaltyCategories || 2)
+  return categories.some((c) => (state.penalties[side][c] || 0) >= ladder.length)
+}
 
 export const leader = (state) => {
   const { ao, aka } = state.scores
@@ -80,9 +94,9 @@ export const scoreGap = (state) => Math.abs(state.scores.ao - state.scores.aka)
  * Returns { ended, winner, method }. `winner` is null on a tie that still
  * needs encho or hantei, with method 'tieBreak'.
  */
-export const evaluateOutcome = (state, rules = DEFAULT_RULES, { expired = false } = {}) => {
+export const evaluateOutcome = (state, rules = DEFAULT_RULES, { expired = false, inOvertime = false } = {}) => {
   for (const side of SIDES) {
-    if (hasHansoku(state, side)) {
+    if (hasHansoku(state, side, rules)) {
       return { ended: true, winner: other(side), method: 'hansoku' }
     }
   }
@@ -91,14 +105,21 @@ export const evaluateOutcome = (state, rules = DEFAULT_RULES, { expired = false 
     return { ended: true, winner: leader(state), method: 'gapRule' }
   }
 
+  const overtime = rules.overtime || 'senshu'
+  const ahead = leader(state)
+  // Golden score: in extra time the first score decides.
+  if (inOvertime && overtime === 'golden_score' && ahead) return { ended: true, winner: ahead, method: 'goldenScore' }
+
   if (!expired) return { ended: false, winner: null, method: null }
 
-  const ahead = leader(state)
-  if (ahead) return { ended: true, winner: ahead, method: 'points' }
+  if (ahead) return { ended: true, winner: ahead, method: inOvertime ? 'extraTime' : 'points' }
 
-  if (rules.senshu && state.senshu) {
+  if ((rules.senshu ?? true) && state.senshu && (overtime === 'senshu' || inOvertime)) {
     return { ended: true, winner: state.senshu, method: 'senshu' }
   }
+  // Level at time: the configured overtime decides what happens next.
+  if (!inOvertime && (overtime === 'extra_time' || overtime === 'golden_score')) return { ended: false, winner: null, method: 'overtimeDue' }
+  if (overtime === 'none') return { ended: true, winner: null, method: 'draw' }
 
   return { ended: true, winner: null, method: 'tieBreak' }
 }

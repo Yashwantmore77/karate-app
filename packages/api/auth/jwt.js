@@ -14,9 +14,9 @@ if (!process.env.JWT_SECRET) {
   console.warn('[auth] JWT_SECRET is not set — using a per-boot random secret')
 }
 
-export const signToken = (user) =>
+export const signToken = (user, sid = null) =>
   jwt.sign(
-    { uid: user.uid, email: user.email, role: user.role, seat: user.seat },
+    { uid: user.uid, email: user.email, role: user.role, seat: user.seat, ...(sid ? { sid } : {}) },
     secret,
     { algorithm: ALGORITHM, expiresIn: TOKEN_TTL, subject: user.uid }
   )
@@ -26,9 +26,9 @@ export const signToken = (user) =>
  * than an account. It names the one tournament (and, once registered, the one
  * team) it may touch; the service enforces both.
  */
-export const signCoachToken = ({ linkId, tournamentId, teamId = null }) =>
+export const signCoachToken = ({ linkId, tournamentId, teamId = null, sid = null, email = null }) =>
   jwt.sign(
-    { uid: `coach:${linkId}`, role: 'coach', tournamentId, teamId, linkId },
+    { uid: `coach:${linkId}`, role: 'coach', tournamentId, teamId, linkId, ...(sid ? { sid } : {}), ...(email ? { email } : {}) },
     secret,
     { algorithm: ALGORITHM, expiresIn: TOKEN_TTL, subject: `coach:${linkId}` }
   )

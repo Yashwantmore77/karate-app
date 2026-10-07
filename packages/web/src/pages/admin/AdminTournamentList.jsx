@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -13,6 +13,7 @@ import { TableSearch, TablePager, NoResults } from '../../components/TableToolba
 import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
+import { PageLoader } from '../../components/Loader'
 
 // The server applies these when a body leaves them out; the form shows the
 // same numbers so a new tournament is not a surprise.
@@ -47,7 +48,7 @@ export default function AdminTournamentList({ uid }) {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   const {
-    rows: tournaments, total, page, limit, search, setSearch, setPage, refresh, reset,
+    rows: tournaments, total, page, limit, search, setSearch, setPage, refresh, reset, loading,
   } = usePagedList(useCallback((options) => tournamentStore.page(options), []))
 
   const editingTournament = editingId ? tournaments.find(t => t.id === editingId) : null
@@ -101,6 +102,16 @@ export default function AdminTournamentList({ uid }) {
     setOpenModal(true)
   }
 
+  // The dashboard's "New tournament" quick action lands here with ?create=1.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('create') === '1') {
+      handleOpenCreate()
+      params.delete('create')
+      window.history.replaceState(null, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`)
+    }
+  }, [])
+
   const handleOpenEdit = (id) => {
     setEditingId(id)
     setOpenModal(true)
@@ -149,7 +160,7 @@ export default function AdminTournamentList({ uid }) {
           </Box>
         </Box>
 
-        {tournaments.length === 0 ? (
+        {loading && tournaments.length === 0 ? <PageLoader label="Loading tournaments…" /> : tournaments.length === 0 ? (
           <Paper elevation={0} sx={{ border: '1px dashed', borderColor: 'divider' }}>
             <NoResults query={search} noun="tournaments" />
           </Paper>
