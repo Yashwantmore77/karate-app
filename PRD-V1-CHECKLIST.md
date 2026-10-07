@@ -252,8 +252,7 @@ See `api/lib/store.js` and `TMS_COLLECTIONS`.
 
 - REST API under `/api/v1` and a Socket.IO live channel.
 - Idempotency keys; partner API; webhooks for SMS and WhatsApp.
-- i18n is set up: English and Hindi dictionaries (`web/i18n`), a language switch in the header, translated navigation and tab labels.
-  - 🟡 Screen bodies are still English only.
+- Language: **English only, by decision.** The PRD's "i18n-ready" is not taken up; no translation layer is built.
 
 ## 26. Key screens — ✅
 
@@ -360,6 +359,7 @@ See `api/lib/store.js` and `TMS_COLLECTIONS`.
 | 13 | Multi-organisation SaaS from day one? | Supported (organisations, scoped admins); optional |
 | 14 | Notification and payment providers? | Email over SMTP; SMS and WhatsApp through any webhook gateway; payment gateways deferred |
 | 15 | Offline scoring for the first event? | No: reconnect with persisted state; full offline is Phase 2 |
+| — | Languages? | English only (decided by the product owner) |
 
 ---
 

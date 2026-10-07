@@ -23,7 +23,6 @@ import AuditTab from './AuditTab'
 import { PageLoader } from '../../components/Loader'
 import { ExportAuditContext } from '../../components/tms/exportAudit'
 import { tms } from '../../data/tms'
-import { useT } from '../../i18n'
 
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
 // only when the signed-in role holds its permission (section 3).
@@ -51,7 +50,6 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   const [missing, setMissing] = useState(false)
   const [version, setVersion] = useState(0)
   const action = useAction()
-  const { t: tr } = useT()
   // PRD v1 §4: an account may hold a different role inside this one tournament.
   const role = profile?.tournamentRoles?.[tournamentId] || profile?.role || 'admin'
   const logExport = useCallback((entry) => tms.logExport(tournamentId, entry), [tournamentId])
@@ -97,7 +95,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
           </Stack>
         </Toolbar>
         <Tabs value={current?.key || false} onChange={(_e, key) => setParams({ tab: key })} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ px: 1 }}>
-          {tabs.map((t) => <Tab key={t.key} value={t.key} label={tr(t.label)} />)}
+          {tabs.map((t) => <Tab key={t.key} value={t.key} label={t.label} />)}
         </Tabs>
       </PageBar>
       <Container maxWidth="xl" sx={{ py: 3 }}>

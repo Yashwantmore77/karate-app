@@ -8,7 +8,6 @@ import { Menu as MenuIcon, Logout } from '@mui/icons-material'
 import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
 import { useConnection } from '../state/ConnectionContext'
-import { useT } from '../i18n'
 
 const CONNECTION = {
   online: { label: '● Live', color: 'success' },
@@ -99,7 +98,6 @@ export default function AppNav({ user, profile }) {
   const navigate = useNavigate()
   const { logout } = useSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { t, lang, setLanguage } = useT()
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
@@ -158,7 +156,7 @@ export default function AppNav({ user, profile }) {
                     ...(isActive ? activeSx : {}),
                   }}
                 >
-                  {t(item.label)}
+                  {item.label}
                 </Button>
               )
             })}
@@ -178,14 +176,6 @@ export default function AppNav({ user, profile }) {
             size="small"
             sx={{ display: { xs: 'none', sm: 'inline-flex' }, mr: 1, textTransform: 'capitalize' }}
           />
-
-          {/* PRD v1 §25: the interface language. */}
-          <Tooltip title={t('Language')}>
-            <Button color="inherit" size="small" aria-label={t('Language')} sx={{ minWidth: 0, mr: 0.5, color: TEXT.secondary }}
-              onClick={() => setLanguage(lang === 'en' ? 'hi' : 'en')}>
-              {lang === 'en' ? 'हिन्दी' : 'EN'}
-            </Button>
-          </Tooltip>
 
           <Tooltip title="Sign out">
             <IconButton
@@ -225,7 +215,7 @@ export default function AppNav({ user, profile }) {
                   aria-current={isActive ? 'page' : undefined}
                   onClick={() => go(item.to)}
                 >
-                  <ListItemText primary={t(item.label)} />
+                  <ListItemText primary={item.label} />
                 </ListItemButton>
               )
             })}
