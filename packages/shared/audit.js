@@ -57,6 +57,8 @@ export const AUDIT_ACTIONS = {
   KATA_SCORE_OVERRIDDEN: 'kata.score_overridden',
   KATA_PENALTY: 'kata.penalty',
   CERTIFICATE_ISSUED: 'certificate.issued',
+  PASSES_GENERATED: 'passes.generated',
+  CHECKED_IN: 'checkin.recorded',
   CERTIFICATE_DOWNLOADED: 'certificate.downloaded',
   EXPORTED: 'data.exported',
   DUPLICATE_CONFIRMED: 'player.duplicate_confirmed',

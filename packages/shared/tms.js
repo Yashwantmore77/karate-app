@@ -2608,6 +2608,91 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return row
   }
 
+  // --- accreditation passes and QR check-in ------------------------------------
+
+  const PASS_ROLE = { player: 'Athlete', coach: 'Coach', official: 'Technical Official' }
+  const PASS_KINDS = Object.keys(PASS_ROLE)
+  const NOT_ACCREDITED = new Set([R.DRAFT, R.REJECTED, R.WITHDRAWN])
+
+  /**
+   * Accreditation passes: one per athlete, coach and official, each with a
+   * code its QR carries. Generating again only adds passes for people who
+   * have none, so a printed pass keeps working.
+   */
+  async function generatePasses(actor, tournamentId, { kinds = ['player', 'coach'], officials = [] } = {}) {
+    await writableTournament(tournamentId)
+    const wanted = kinds.filter((k) => PASS_KINDS.includes(k))
+    const existing = new Set((await stores.passes.list({ tournamentId })).map((p) => p.refKey))
+    const teams = new Map((await stores.teams.list({ tournamentId })).map((t) => [t.id, t]))
+    const labels = new Map((await divisions(tournamentId)).map((d) => [d.key, d.label]))
+    const fresh = []
+    const add = (doc) => {
+      if (existing.has(doc.refKey)) return
+      existing.add(doc.refKey)
+      fresh.push({ tournamentId, code: randomToken(10).toUpperCase(), role: PASS_ROLE[doc.kind], issuedAt: iso(), ...doc })
+    }
+    if (wanted.includes('player')) {
+      for (const p of await stores.players.list({ tournamentId })) {
+        if (NOT_ACCREDITED.has(p.registrationStatus)) continue
+        const team = teams.get(p.teamId)
+        const category = Object.values(p.entries || {}).map((e) => labels.get(e.divisionKey)).filter(Boolean).join(' · ') || (p.events || []).join(', ')
+        add({ kind: 'player', refId: p.id, refKey: `player:${p.id}`, name: p.name, number: p.playerNumber || null, club: p.club || team?.club || team?.name || null, team: team?.name || null, category, photoFileId: p.photo || null })
+      }
+    }
+    if (wanted.includes('coach')) {
+      for (const t of teams.values()) {
+        if (!t.coachName) continue
+        add({ kind: 'coach', refId: t.id, refKey: `coach:${t.id}`, name: t.coachName, number: t.teamNumber || null, club: t.club || t.name, team: t.name, category: `Coach, ${t.name}` })
+      }
+    }
+    if (wanted.includes('official')) {
+      for (const o of officials) {
+        if (!o?.uid || !o?.name) continue
+        add({ kind: 'official', refId: o.uid, refKey: `official:${o.uid}`, name: String(o.name).slice(0, 120), number: null, club: null, team: null, category: o.role === 'judge' ? 'Kata Judge' : o.role === 'referee' ? 'Referee' : 'Technical Official' })
+      }
+    }
+    if (fresh.length) await stores.passes.insertMany(fresh)
+    await record(actor, { tournamentId, action: A.PASSES_GENERATED, entity: 'tournament', entityId: tournamentId, after: { created: fresh.length, kinds: wanted } })
+    return { created: fresh.length, passes: await listPasses(tournamentId) }
+  }
+
+  const listPasses = async (tournamentId, { kind = null } = {}) =>
+    (await stores.passes.list(kind ? { tournamentId, kind } : { tournamentId }))
+      .sort((a, b) => PASS_KINDS.indexOf(a.kind) - PASS_KINDS.indexOf(b.kind) || byName(a, b))
+
+  /**
+   * Scanning a pass (Phase 2 "QR check-in"). At the door it records arrival;
+   * at a mat it marks the athlete present for their next bout, which the
+   * announcer's attendance shows. Unknown or foreign codes are refused.
+   */
+  async function checkIn(actor, tournamentId, rawCode, { point = 'arrival' } = {}) {
+    await writableTournament(tournamentId)
+    const code = String(rawCode || '').trim().toUpperCase().replace(/^.*\//, '')
+    const pass = (await stores.passes.list({ tournamentId, code }))[0]
+    if (!pass) throw missing('pass_not_found')
+    const result = { pass: { kind: pass.kind, name: pass.name, role: pass.role, club: pass.club, number: pass.number, category: pass.category } }
+    if (point === 'mat') {
+      if (pass.kind !== 'player') throw rule('not_an_athlete')
+      const player = await inTournament('players', tournamentId, pass.refId)
+      if (player.registrationStatus === R.WITHDRAWN) throw rule('player_withdrawn')
+      const next = (await listMatches(tournamentId))
+        .filter((m) => !boutOutcome(m) && m.status !== 'cancelled' && (m.akaPlayerId === player.id || m.aoPlayerId === player.id))
+        .sort((a, b) => String(a.scheduledAt || '9').localeCompare(String(b.scheduledAt || '9')) || String(a.matchNumber).localeCompare(String(b.matchNumber), undefined, { numeric: true }))[0]
+      if (!next) throw rule('no_pending_bout')
+      const side = next.akaPlayerId === player.id ? 'aka' : 'ao'
+      await markAttendance(actor, tournamentId, next.id, side, true)
+      result.bout = { matchId: next.id, matchNumber: next.matchNumber, mat: next.mat || null, side, category: next.categoryName || null }
+    } else {
+      const at = iso()
+      await stores.passes.update(pass.id, { checkedInAt: pass.checkedInAt || at, lastScanAt: at, scans: (pass.scans || 0) + 1 })
+      if (pass.kind === 'player') await stores.players.update(pass.refId, { checkedInAt: pass.checkedInAt || at })
+      result.alreadyCheckedIn = !!pass.checkedInAt
+      result.checkedInAt = pass.checkedInAt || at
+    }
+    await record(actor, { tournamentId, action: A.CHECKED_IN, entity: pass.kind, entityId: pass.refId, after: { point, code, ...(result.bout ? { match: result.bout.matchNumber } : {}) } })
+    return result
+  }
+
   /**
    * A coach's own certificates: their team's players' (medal, participation,
    * special awards) and their own coach certificate. The tournament comes
@@ -2917,7 +3002,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket,
-    publishResults, verifyResult, assertResultEditable, setDivisionLock, coachCertificates, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
+    publishResults, verifyResult, assertResultEditable, setDivisionLock, coachCertificates, generatePasses, listPasses, checkIn, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
     // rulesets and locks
     listRulesets, resolveRuleset, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
     // links and coaches
@@ -2935,7 +3020,7 @@ export const TMS_COLLECTIONS = [
   'ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals',
   'certificates', 'registrationLinks', 'notifications', 'auditLog', 'files',
   'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'organizations',
-  'rulesets', 'divisionResults', 'liveStates',
+  'rulesets', 'divisionResults', 'liveStates', 'passes',
 ]
 
 export { DomainError, poolName }

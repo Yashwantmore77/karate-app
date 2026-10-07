@@ -300,3 +300,83 @@ describe('coach portal certificates', () => {
     expect((await fetch(`http://localhost:${port}/api/v1/coach/certificates/CERT-THEIRS.pdf`, { headers: { authorization: `Bearer ${coach}` } })).status).toBe(404)
   })
 })
+
+describe('accreditation passes and QR check-in', () => {
+  it('issues passes once, prints them, and checks people in at the door and the mat', async () => {
+    const t = await tournament('pass-open')
+    await call('PATCH', `/tournaments/${t}/settings`, { requireWeighInForDraw: false }, tokens.admin)
+    const team = (await call('POST', `/tournaments/${t}/teams`, { name: 'ABC Karate', club: 'ABC Karate', coachName: 'Sensei Rao' }, tokens.admin)).body.team
+    for (const name of ['Asha Rao', 'Ravi Kumar']) {
+      const { player } = (await call('POST', `/tournaments/${t}/players`, { teamId: team.id, name, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, tokens.admin)).body
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    }
+    const first = (await call('POST', `/tournaments/${t}/passes/generate`, { kinds: ['player', 'coach', 'official'] }, tokens.admin)).body
+    expect(first.passes.filter((p) => p.kind === 'player')).toHaveLength(2)
+    expect(first.passes.some((p) => p.kind === 'coach' && p.name === 'Sensei Rao')).toBe(true)
+    expect(first.passes.some((p) => p.kind === 'official')).toBe(true)
+    // generating again keeps every printed code
+    const again = (await call('POST', `/tournaments/${t}/passes/generate`, { kinds: ['player', 'coach'] }, tokens.admin)).body
+    expect(again.created).toBe(0)
+    const pdf = await fetch(`http://localhost:${port}/api/v1/tournaments/${t}/passes.pdf`, { headers: { authorization: `Bearer ${tokens.admin}` } })
+    expect(pdf.headers.get('content-type')).toBe('application/pdf')
+
+    const asha = first.passes.find((p) => p.name === 'Asha Rao')
+    const announcer = await login('announcer@kata.local')
+    // the door: a QR holding the full check-in link works as well as the bare code
+    const door = (await call('POST', `/tournaments/${t}/checkin`, { code: `https://scores.example.org/checkin/${asha.code}` }, announcer)).body
+    expect(door).toMatchObject({ pass: { name: 'Asha Rao', role: 'Athlete' }, alreadyCheckedIn: false })
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: asha.code.toLowerCase() }, announcer)).body.alreadyCheckedIn).toBe(true)
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: 'NOPE123456' }, announcer)).status).toBe(404)
+    // the mat: needs a bout
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: asha.code, point: 'mat' }, announcer)).body.error).toBe('no_pending_bout')
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)
+    await call('POST', `/tournaments/${t}/locks/draw`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
+    const mat = (await call('POST', `/tournaments/${t}/checkin`, { code: asha.code, point: 'mat' }, announcer)).body
+    expect(mat.bout).toMatchObject({ matchNumber: 'M-001' })
+    const [bout] = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
+    expect(bout.attendance[mat.bout.side]).toBe('present')
+    // a coach's pass is not an athlete's
+    const coachPass = first.passes.find((p) => p.kind === 'coach')
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: coachPass.code, point: 'mat' }, announcer)).body.error).toBe('not_an_athlete')
+    // a viewer may not scan
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: asha.code }, tokens.viewer)).status).toBe(403)
+  })
+})
+
+describe('analytics across tournaments', () => {
+  it('follows an athlete and a club from one tournament to the next, without birth dates', async () => {
+    const seasons = []
+    for (const slug of ['spring-open', 'autumn-open']) {
+      const t = await tournament(slug)
+      await call('PATCH', `/tournaments/${t}/settings`, { requireWeighInForDraw: false }, tokens.admin)
+      const team = (await call('POST', `/tournaments/${t}/teams`, { name: 'ABC Karate', club: 'ABC Karate' }, tokens.admin)).body.team
+      const other = (await call('POST', `/tournaments/${t}/teams`, { name: 'XYZ Dojo', club: 'XYZ Dojo' }, tokens.admin)).body.team
+      for (const [teamId, name] of [[team.id, 'Asha Rao'], [other.id, 'Ravi Kumar']]) {
+        const { player } = (await call('POST', `/tournaments/${t}/players`, { teamId, name, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, tokens.admin)).body
+        await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+      }
+      await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+      await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)
+      await call('POST', `/tournaments/${t}/locks/draw`, { locked: true }, tokens.admin)
+      await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
+      const [final] = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
+      const ashaRed = final.akaName === 'Asha Rao'
+      await call('POST', `/tournaments/${t}/matches/${final.id}/correct`, { winner: ashaRed ? 'red' : 'blue', avgRed: 3, avgBlue: 1 }, tokens.admin)
+      await call('POST', `/tournaments/${t}/results/publish`, {}, tokens.admin)
+      seasons.push(t)
+    }
+    const res = await call('GET', '/analytics', undefined, tokens.admin)
+    expect(res.status).toBe(200)
+    const asha = res.body.athletes.find((a) => a.name === 'Asha Rao')
+    expect(asha).toMatchObject({ tournaments: 2, gold: 2, won: 2, lost: 0, winRate: 100 })
+    expect(asha.history.map((h) => h.medals[0]?.medal)).toEqual(['gold', 'gold'])
+    const abc = res.body.clubs.find((c) => c.name === 'ABC Karate')
+    expect(abc).toMatchObject({ tournaments: 2, gold: 2, entries: 2 })
+    expect(res.body.tournaments.map((t) => t.id).sort()).toEqual(seasons.sort())
+    expect(JSON.stringify(res.body)).not.toContain('2014-06-15')
+    // no reporting permission, no analytics
+    expect((await call('GET', '/analytics', undefined, await login('referee@kata.local'))).status).toBe(403)
+  })
+})

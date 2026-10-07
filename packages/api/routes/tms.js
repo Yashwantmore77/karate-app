@@ -9,7 +9,7 @@ import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { PERMISSION as P, can } from '@kumite/shared/permissions.js'
 import { FILE_SCHEMA } from './files.js'
 import { partnerKeyHash, newPartnerKey } from './partner.js'
-import { certificatesPdf, tablePdf } from '../lib/pdf.js'
+import { certificatesPdf, tablePdf, passesPdf } from '../lib/pdf.js'
 import { REPORT_KEYS, REPORT_TITLE, REPORT_FILTERS, loadReportData, buildReport } from '@kumite/shared/reports.js'
 import { TOURNAMENT_STATUS, REGISTRATION_STATUS, MATCH_STATUS } from '@kumite/shared/lifecycle.js'
 import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES, POOL_SYSTEMS, KATA_METHODS, SETTING_CHOICES } from '@kumite/shared/tms.js'
@@ -641,6 +641,50 @@ export function tmsRoutes(tms, stores) {
     }
     res.status(201).json(await tms.generateCertificates(withMeta(req), tid(req), { types: types || ['medal'], officials }))
   })
+  // --- accreditation passes and QR check-in ----------------------------------
+
+  // Officials who may work this tournament: its referees and judges.
+  const tournamentOfficials = async (tournamentId) => (await Promise.all((await listAssignableOfficials())
+    .filter((o) => ['referee', 'judge'].includes(o.role))
+    .map(async (o) => ({ o, account: await findUserRecord(o.uid) }))))
+    .filter(({ account }) => mayAccessTournament(account, tournamentId))
+    .map(({ o }) => ({ uid: o.uid, name: o.name || o.email.split('@')[0].replace(/[._-]+/g, ' '), role: o.role }))
+
+  router.post('/:tid/passes/generate', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
+    const { kinds } = validate(req.body || {}, { kinds: { type: 'array', items: { type: 'enum', values: ['player', 'coach', 'official'] }, maxItems: 3, nullable: true } })
+    const wanted = kinds || ['player', 'coach']
+    const officials = wanted.includes('official') ? await tournamentOfficials(tid(req)) : []
+    res.status(201).json(await tms.generatePasses(withMeta(req), tid(req), { kinds: wanted, officials }))
+  })
+  router.get('/:tid/passes', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
+    const kind = ['player', 'coach', 'official'].includes(req.query.kind) ? req.query.kind : null
+    res.json({ passes: await tms.listPasses(tid(req), { kind }) })
+  })
+  router.get('/:tid/passes.pdf', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
+    const tournament = await loadTournament(tid(req))
+    const kind = ['player', 'coach', 'official'].includes(req.query.kind) ? req.query.kind : null
+    const passes = await tms.listPasses(tid(req), { kind })
+    // Photos uploaded on registration (PNG or JPEG; a PDF is left out).
+    const photos = new Map()
+    for (const id of new Set(passes.map((p) => p.photoFileId).filter(Boolean))) {
+      const file = await tms.readFile(withMeta(req), id, { canViewRegistrations: true }).catch(() => null)
+      if (file && ['image/png', 'image/jpeg'].includes(file.type)) photos.set(id, Buffer.from(file.data, 'base64'))
+    }
+    await tms.logExport(withMeta(req), tid(req), { report: 'passes', format: 'pdf', rows: passes.length, filters: kind ? { kind } : null })
+    sendPdf(res, await passesPdf(tournament, passes, { photos, logo: await logoOf(tournament), checkinBase: verifyBase() }), `${slugOf(tournament)}-passes.pdf`)
+  })
+  // A scanned pass: arrival at the door (registration or weigh-in desk), or
+  // presence at the mat for the athlete's next bout.
+  router.post('/:tid/checkin', async (req, res, next) => {
+    const role = req.tournamentRole || req.user.role
+    const point = req.body?.point === 'mat' ? 'mat' : 'arrival'
+    const allowed = point === 'mat' ? can(role, P.ATTENDANCE_MARK) : (can(role, P.ATTENDANCE_MARK) || can(role, P.WEIGHIN_RECORD) || can(role, P.REGISTRATION_MANAGE))
+    return allowed ? next() : res.status(403).json({ error: 'forbidden' })
+  }, async (req, res) => {
+    const { code, point } = validate(req.body, { code: { type: 'string', required: true, max: 300 }, point: { type: 'enum', values: ['arrival', 'mat'], default: 'arrival' } })
+    res.json(await tms.checkIn(withMeta(req), tid(req), code, { point }))
+  })
+
   router.post('/:tid/certificates/custom', requirePermission(P.CERTIFICATE_GENERATE), async (req, res) => {
     const body = validate(req.body, { name: { type: 'string', required: true, max: 120 }, title: { type: 'string', max: 120, nullable: true }, award: { type: 'string', max: 120, nullable: true }, club: { type: 'string', max: 120, nullable: true }, category: { type: 'string', max: 120, nullable: true }, playerId: { ...ID, nullable: true } })
     res.status(201).json({ certificate: await tms.issueCustomCertificate(withMeta(req), tid(req), body) })

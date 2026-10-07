@@ -1,7 +1,8 @@
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import TournamentSelector from '../components/tms/TournamentSelector'
 import TournamentManager from '../pages/tms/TournamentManager'
-import { ROLE_LABEL } from '@kumite/shared/permissions.js'
+import { ROLE_LABEL, can, PERMISSION as P } from '@kumite/shared/permissions.js'
+import Analytics from '../pages/Analytics'
 
 /**
  * PRD sections 3.3 and 3.4: registration and weigh-in officers work inside
@@ -14,6 +15,7 @@ export default function StaffRouter({ uid, profile }) {
     <Routes>
       <Route path="/" element={<TournamentSelector title={`${ROLE_LABEL[profile.role] || 'Staff'}: choose a tournament`} onPick={(t) => navigate(`${base}/tournament/${t.id}`)} />} />
       <Route path="/tournament/:tournamentId" element={<TournamentManager uid={uid} profile={profile} basePath={base} />} />
+      {can(profile.role, P.REPORT_EXPORT) && <Route path="/analytics" element={<Analytics />} />}
       <Route path="*" element={<Navigate to={base} />} />
     </Routes>
   )

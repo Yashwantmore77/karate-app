@@ -19,6 +19,7 @@ import { displayRoutes } from './routes/display.js'
 import { tmsRoutes } from './routes/tms.js'
 import { publicRoutes, publicViewCache } from './routes/public.js'
 import { matchAuthority } from './auth/matchAccess.js'
+import { analyticsRoutes } from './routes/analytics.js'
 import { coachRoutes } from './routes/coach.js'
 import { fileRoutes } from './routes/files.js'
 import { organizationRoutes } from './routes/organizations.js'
@@ -101,6 +102,7 @@ export function createApp() {
   app.use(`${API_BASE}/organizations`, organizationRoutes(stores, { audit: systemAudit }))
   app.use(`${API_BASE}/rulesets`, rulesetRoutes(tms))
   app.use(`${API_BASE}/system`, systemRoutes(stores, tms))
+  app.use(`${API_BASE}/analytics`, analyticsRoutes(stores, tms))
   app.use(`${API_BASE}/partner`, partnerRoutes(tms, stores))
   app.use(`${API_BASE}/officials`, officialRoutes())
   app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores, tms))

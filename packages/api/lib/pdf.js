@@ -100,6 +100,62 @@ export function certificatesPdf(tournament, certificates, { logo = null, verifyB
   return toBuffer(doc)
 }
 
+const PASS_COLOR = { player: '#0B3D91', coach: '#2E5E4E', official: '#9A2A2A' }
+
+/**
+ * Accreditation passes (Phase 2 "digital accreditation"): ID-card sized,
+ * eight to an A4 page with cut lines. Each carries the person's photo when
+ * there is one, their role in a coloured band, and a QR code with their
+ * check-in code, scanned at the door and at the mat.
+ */
+export function passesPdf(tournament, passes, { photos = new Map(), logo = null, checkinBase = null } = {}) {
+  const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: `${tournament.name} accreditation` } })
+  const W = 255
+  const H = 180
+  const left = (doc.page.width - W * 2) / 2
+  const top = (doc.page.height - H * 4) / 2
+  passes.forEach((p, i) => {
+    if (i > 0 && i % 8 === 0) doc.addPage()
+    const x = left + (i % 2) * W
+    const y = top + Math.floor((i % 8) / 2) * H
+    const colour = PASS_COLOR[p.kind] || '#333333'
+    doc.lineWidth(0.5).dash(3, { space: 3 }).strokeColor('#BBBBBB').rect(x, y, W, H).stroke().undash()
+    // Header: tournament name (and logo).
+    let tx = x + 12
+    if (logo) {
+      try { doc.image(logo, x + 10, y + 8, { fit: [26, 26] }); tx = x + 42 } catch { /* unreadable logo: leave it out */ }
+    }
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#111111').text(tournament.name, tx, y + 10, { width: x + W - 12 - tx, height: 24, ellipsis: true })
+    // Photo, or an empty frame to stick one on.
+    const px = x + 12
+    const py = y + 40
+    const photo = photos.get(p.photoFileId)
+    if (photo) {
+      try { doc.image(photo, px, py, { fit: [64, 80], align: 'center', valign: 'center' }) } catch { doc.rect(px, py, 64, 80).strokeColor('#CCCCCC').stroke() }
+    } else {
+      doc.lineWidth(0.5).rect(px, py, 64, 80).strokeColor('#CCCCCC').stroke()
+      doc.font('Helvetica').fontSize(6).fillColor('#AAAAAA').text('PHOTO', px, py + 36, { width: 64, align: 'center' })
+    }
+    // Name, club, category, number.
+    const nx = x + 86
+    const nw = W - 86 - 78
+    doc.font('Helvetica-Bold').fontSize(11).fillColor('#111111').text(p.name, nx, py, { width: nw, height: 28, ellipsis: true })
+    doc.font('Helvetica').fontSize(7.5).fillColor('#444444')
+    if (p.club) doc.text(p.club, nx, doc.y + 2, { width: nw, height: 10, ellipsis: true })
+    if (p.category) doc.text(p.category, nx, doc.y + 2, { width: nw, height: 20, ellipsis: true })
+    if (p.number) doc.font('Helvetica-Bold').fontSize(8).fillColor('#222222').text(p.number, nx, doc.y + 2, { width: nw })
+    // QR with the check-in code.
+    const value = checkinBase ? `${String(checkinBase).replace(/\/$/, '')}/checkin/${p.code}` : p.code
+    drawQr(doc, value, x + W - 74, py - 2, 64)
+    doc.font('Courier').fontSize(6.5).fillColor('#333333').text(p.code, x + W - 74, py + 63, { width: 64, align: 'center' })
+    // Role band.
+    doc.rect(x + 1, y + H - 34, W - 2, 33).fill(colour)
+    doc.font('Helvetica-Bold').fontSize(15).fillColor('#FFFFFF').text(String(p.role || p.kind).toUpperCase(), x, y + H - 26, { width: W, align: 'center', characterSpacing: 2 })
+  })
+  if (!passes.length) doc.font('Helvetica').fontSize(14).text('No passes yet.', 40, 40)
+  return toBuffer(doc)
+}
+
 /** A report as a paginated table, header repeated on every page. */
 export function tablePdf(title, rows, { subtitle = '' } = {}) {
   const [head = [], ...body] = rows

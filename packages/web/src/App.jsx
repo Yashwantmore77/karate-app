@@ -17,6 +17,7 @@ import MyAccount from './pages/account/MyAccount'
 import DisplayScoreboard from './pages/DisplayScoreboard'
 import LiveBoard from './pages/public/LiveBoard'
 import VerifyCertificate from './pages/public/VerifyCertificate'
+import PassInfo from './pages/public/PassInfo'
 import ScoreboardOperator from './pages/ScoreboardOperator'
 import { getToken } from './data/session'
 import RequireAuth from './routes/RequireAuth'
@@ -204,6 +205,7 @@ function AppShell() {
             {/* PRD v1 §18: where a certificate's QR code points. */}
             <Route path="/verify" element={<VerifyCertificate />} />
             <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
+            <Route path="/checkin/:code" element={<PassInfo />} />
             {/* PRD v1 §7: a team manager's own login opens their team panel. */}
             <Route
               path="/coach/*"

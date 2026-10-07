@@ -54,6 +54,9 @@ export const tms = {
   lockResults: (tid, divisionKey, locked, reason) => send('POST', `${T(tid)}/results/lock`, { divisionKey, locked, reason: reason || null }),
   logExport: (tid, body) => send('POST', `${T(tid)}/exports`, body).catch(() => null),
   issueCustomCertificate: async (tid, body) => (await send('POST', `${T(tid)}/certificates/custom`, body)).certificate,
+  passes: async (tid, kind) => (await get(`${T(tid)}/passes${qs({ kind })}`)).passes,
+  generatePasses: (tid, kinds) => send('POST', `${T(tid)}/passes/generate`, { kinds }),
+  checkIn: (tid, code, point = 'arrival') => send('POST', `${T(tid)}/checkin`, { code, point }),
   report: (tid, key, filters) => get(`${T(tid)}/reports/${key}${qs(filters)}`),
 
   ageGroups: crud('age-groups', 'ageGroup'),

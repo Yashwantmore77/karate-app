@@ -22,6 +22,7 @@ const MENUS = {
   admin: [
     { label: 'Dashboard', to: '/admin/dashboard' },
     { label: 'Tournaments', to: '/admin' },
+    { label: 'Analytics', to: '/admin/analytics' },
     // The referee screens, which an admin may also use: scheduling, panels,
     // the draw, and deleting a bout.
     { label: 'Matches', to: '/referee' },
@@ -66,6 +67,7 @@ const MENUS = {
   ],
   viewer: [
     { label: 'Tournaments', to: '/viewer' },
+    { label: 'Analytics', to: '/viewer/analytics' },
     { label: 'Live board', to: '/live' },
     { label: 'Public site', to: '/tournaments' },
   ],

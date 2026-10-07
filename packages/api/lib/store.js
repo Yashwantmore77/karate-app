@@ -286,6 +286,7 @@ export const INDEXES = {
   rulesets: [[{ family: 1, version: 1 }]],
   divisionResults: [[{ tournamentId: 1, divisionKey: 1 }]],
   apiKeys: [[{ tournamentId: 1 }]],
+  passes: [[{ tournamentId: 1, code: 1 }], [{ tournamentId: 1, refKey: 1 }]],
 }
 
 export async function ensureIndexes(collection, name) {
