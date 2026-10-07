@@ -20,9 +20,9 @@ Legend:
 
 | Workspace | Test files | Tests |
 | --- | --- | --- |
-| `packages/shared` | 6 | 136 |
-| `packages/api` | 19 | 261 |
-| `packages/web` | 28 | 208 |
+| `packages/shared` | 7 | 139 |
+| `packages/api` | 20 | 267 |
+| `packages/web` | 29 | 211 |
 
 - All of the above run with `npm test` from the root.
 - `packages/shared/prdv1.test.js` and `packages/api/prdv1.test.js` are the PRD v1 suites.
@@ -173,7 +173,7 @@ One system covers setup to archive: configuration, registration, weigh-in, draw,
 - Mat control belongs to one socket at a time; takeover is reported.
 - **Only an admin of that tournament, or the referee assigned to the bout (or a referee of that tournament on an unassigned bout), may take a mat or record a result** — over the socket and over REST (AC-14, `api/auth/matchAccess.js`).
 - Commands sent over the socket are idempotent (`clientEventId`), and REST writes honour an `Idempotency-Key`.
-- 🟡 **Offline scoring is Phase 2.** Reconnect restores the persisted live state, but scoring needs the server.
+- ✅ **Offline scoring** (built from Phase 2): a console that loses the connection keeps scoring and syncs on reconnect; see §29.
 
 ## 16. Results, ranking and medal tally — ✅
 
@@ -328,17 +328,17 @@ See `api/lib/store.js` and `TMS_COLLECTIONS`.
 
 | Item | Status |
 | --- | --- |
-| Offline scoring | ⏭️ |
-| Native mobile apps | ⏭️ |
+| Offline scoring | ✅ The console keeps scoring with no connection and replays on reconnect (same shared bout step as the server; original times kept; each action counted once; the referee resolves a conflict if someone else took the mat) |
+| Native mobile apps | 🟡 Installable web app (PWA): home-screen icon, full screen, opens offline. Native store apps not built |
 | Payment gateways | ⏭️ Final phase, by decision (free MVP first); payments are recorded manually |
 | SMS / WhatsApp | ✅ Built early, through webhooks |
-| QR check-in | ⏭️ Attendance is marked by the announcer |
+| QR check-in | ✅ Check-in & passes tab: scan with the camera or type the code; arrival at the door, or present for the next bout at the mat |
 | QR certificate verification | ✅ Built early |
-| Digital accreditation | ⏭️ |
-| Scale hardware integration | ⏭️ |
+| Digital accreditation | ✅ Printable passes for athletes, coaches and officials (photo, role, QR), eight to an A4 page |
+| Scale hardware integration | ⏭️ Not now, by decision |
 | Advanced federation rulesets | 🟡 Versioned rulesets with three standard ones, which are **editable** (each edit is a new version; the original can be restored); further federation-specific rulesets are entered in Admin → Rulesets as needed |
-| Multi-venue optimisation | ⏭️ |
-| Advanced analytics | ⏭️ |
+| Multi-venue optimisation | ⏭️ Not now, by decision |
+| Advanced analytics | ✅ Analytics page: clubs and athletes across tournaments (medals, bouts, win rate, history) |
 | Public partner APIs | ✅ Entry import |
 
 ## 30. Recommended technology architecture — discrepancy, by decision
@@ -371,7 +371,7 @@ See `api/lib/store.js` and `TMS_COLLECTIONS`.
 | 12 | Category changes after weigh-in? | Configurable: auto-move, or flag for recheck and admin decision |
 | 13 | Multi-organisation SaaS from day one? | Supported (organisations, scoped admins); optional |
 | 14 | Notification and payment providers? | Email over SMTP; SMS and WhatsApp through any webhook gateway; payment gateways deferred |
-| 15 | Offline scoring for the first event? | No: reconnect with persisted state; full offline is Phase 2 |
+| 15 | Offline scoring for the first event? | Built: a console keeps scoring offline and syncs on reconnect |
 | — | Languages? | English only (decided by the product owner) |
 
 ---

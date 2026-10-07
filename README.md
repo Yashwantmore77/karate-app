@@ -76,6 +76,8 @@ restart. Its seeded accounts are listed in `packages/api/auth/users.js`.
 ```bash
 npm run seed:sample -w @kumite/api              # add the sample tournament
 npm run seed:sample -w @kumite/api -- --reset   # rebuild it from scratch
+npm run mock -w @kumite/api                     # rehearse a whole event end to end (19 checked steps)
+npm run loadtest -w @kumite/api                 # mats scoring live while spectators poll
 ```
 
 Writes to the database in `packages/api/.env` (`MONGODB_URI`): one tournament,

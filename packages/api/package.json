@@ -11,7 +11,8 @@
     "seed:sample": "node --env-file-if-exists=.env scripts/seed-sample.js",
     "backup": "node --env-file-if-exists=.env scripts/backup.js",
     "restore": "node --env-file-if-exists=.env scripts/restore.js",
-    "loadtest": "node --env-file-if-exists=.env scripts/loadtest.js"
+    "loadtest": "node --env-file-if-exists=.env scripts/loadtest.js",
+    "mock": "node --env-file-if-exists=.env scripts/mock-tournament.js"
   },
   "dependencies": {
     "@kumite/shared": "^1.0.0",
