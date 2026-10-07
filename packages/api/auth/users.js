@@ -447,6 +447,12 @@ export async function updateUser(uid, patch) {
   return strip(user)
 }
 
+/** Team manager logins (each belongs to one tournament and team). */
+export async function listCoachAccounts() {
+  const users = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
+  return users.filter((user) => user.role === 'coach').map(({ uid, email, tournamentId, teamId }) => ({ uid, email, tournamentId, teamId }))
+}
+
 export async function deleteUser(uid) {
   return isMongoConfigured() ? deleteMongoUser(uid) : deleteMemoryUser(uid)
 }

@@ -10,6 +10,7 @@
     "preview": "npm run preview -w @kumite/web",
     "server": "npm start -w @kumite/api",
     "server:dev": "npm run dev -w @kumite/api",
+    "seed:scenarios": "npm run seed:scenarios -w @kumite/api --",
     "test": "npm run test:run --workspaces --if-present",
     "test:web": "npm run test:run -w @kumite/web",
     "test:api": "npm run test:run -w @kumite/api",

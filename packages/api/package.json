@@ -9,6 +9,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "seed:sample": "node --env-file-if-exists=.env scripts/seed-sample.js",
+    "seed:scenarios": "node --env-file-if-exists=.env scripts/seed-scenarios.js",
     "backup": "node --env-file-if-exists=.env scripts/backup.js",
     "restore": "node --env-file-if-exists=.env scripts/restore.js",
     "loadtest": "node --env-file-if-exists=.env scripts/loadtest.js",
