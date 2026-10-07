@@ -7,6 +7,7 @@ import DataTable from '../../components/tms/DataTable'
 import useAction from '../../components/tms/useAction'
 import { useLoading } from '../../components/Loader'
 import { humanize } from '../../components/tms/StatusBadge'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 /**
  * PRD v1 §22-23 for the super admin: the installation-wide audit trail
@@ -38,10 +39,10 @@ export default function AdminSystem({ profile }) {
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Typography variant="h1" gutterBottom>System</Typography>
+      <HelpTitle id="admin.system" variant="h1" gutterBottom>System</HelpTitle>
       {profile?.role === 'super_admin' && (
         <Paper sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h3" gutterBottom>Backup</Typography>
+          <HelpTitle id="admin.backup" variant="h3" gutterBottom>Backup</HelpTitle>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Every collection, accounts included (passwords stay hashed), as one JSON file. Restore it with <code>npm run restore -- file.json</code> on the server;
             schedule <code>npm run backup -- file.json</code> for automatic backups.
@@ -49,7 +50,7 @@ export default function AdminSystem({ profile }) {
           <Stack direction="row" spacing={1}><Button variant="contained" startIcon={<CloudDownload />} onClick={backup} disabled={action.busy}>Download backup</Button></Stack>
         </Paper>
       )}
-      <Typography variant="h3" gutterBottom>Audit trail (outside tournaments)</Typography>
+      <HelpTitle id="admin.systemAudit" variant="h3" gutterBottom>Audit trail (outside tournaments)</HelpTitle>
       <Alert severity="info" sx={{ mb: 2 }}>Each tournament&apos;s own changes are on its Audit log tab.</Alert>
       <DataTable rows={paged.rows} loading={loading} refreshing={refreshing}
         server={{ ...paged, onChange: (next) => setQuery((q) => ({ ...q, ...next })) }}

@@ -15,6 +15,7 @@ import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import useAction from '../../components/tms/useAction'
 import { openStoredFile } from '../../components/tms/download'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -125,7 +126,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
       <Container maxWidth="md" sx={{ py: 6 }}>
         {header}
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h3" gutterBottom>Register your team</Typography>
+          <HelpTitle id="coach.register" variant="h3" gutterBottom>Register your team</HelpTitle>
           <Grid container spacing={2}>
             {TEAM_FIELDS.map(([k, label, w, required]) => (
               <Grid key={k} size={{ xs: 12, sm: w }}>
@@ -189,7 +190,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
       {header}
       {!canWrite && <Alert severity="info" sx={{ mb: 2 }}>{closedMessage(me)} You can still follow your players' status.</Alert>}
       <Paper sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h3">{me.team.name}</Typography>
+        <HelpTitle id="coach.portal" variant="h3">{me.team.name}</HelpTitle>
         <Typography color="text.secondary">{[me.team.club, me.team.coachName && `Coach ${me.team.coachName}`, me.team.state].filter(Boolean).join(' · ')}</Typography>
         <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: 'wrap' }}>
           <Typography><b>{players.length}</b> players</Typography>

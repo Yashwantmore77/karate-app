@@ -17,6 +17,7 @@ import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 import * as users from '../../data/users'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 // Only on create: an existing account keeps its password unless a new one is
 // typed, so the field is optional when editing.
@@ -142,7 +143,7 @@ export default function AdminUserList({ uid }) {
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">Accounts</Typography>
+            <HelpTitle id="admin.accounts" variant="h6">Accounts</HelpTitle>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
               Referees and judges who can sign in
             </Typography>

@@ -11,6 +11,7 @@ import { settingsOf } from '@kumite/shared/tms.js'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { tms } from '../../data/tms'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 // A bout from a PRD draw, or any tournament with its own rules configured,
 // is scored under those rules (PRD section 29); older matches keep the
@@ -81,7 +82,7 @@ export default function RefereeMatchControl() {
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">Kumite WKF</Typography>
+            <HelpTitle id="console" variant="h6">Kumite WKF</HelpTitle>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>{category?.name}</Typography>
           </Box>
         </Toolbar>

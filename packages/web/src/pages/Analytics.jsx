@@ -6,6 +6,7 @@ import {
 import { request } from '../data/http'
 import DataTable from '../components/tms/DataTable'
 import { PageLoader } from '../components/Loader'
+import { HelpTitle } from '../components/help/InfoTip'
 
 const medalCols = [
   { key: 'gold', label: '🥇' }, { key: 'silver', label: '🥈' }, { key: 'bronze', label: '🥉' },
@@ -34,7 +35,7 @@ export default function Analytics() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
-      <Typography variant="h1" gutterBottom>Analytics</Typography>
+      <HelpTitle id="analytics" variant="h1" gutterBottom>Analytics</HelpTitle>
       <Typography color="text.secondary" sx={{ mb: 2 }}>
         Across {data.tournaments.length} tournament{data.tournaments.length === 1 ? '' : 's'}. An athlete is recognised across events by name and date of birth; medals count once results are published.
       </Typography>

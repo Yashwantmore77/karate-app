@@ -9,6 +9,7 @@ import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { useLoading } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 /** Sections 20-25: categorise, lock, draw pools, confirm the draw, generate matches. */
 export default function DrawTab({ tournament, reload, version, action, goTab }) {
@@ -74,7 +75,7 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
   return (
     <Stack spacing={3}>
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>1. Categorise players</Typography>
+        <HelpTitle id="draw.categorise" variant="h3" gutterBottom>1. Categorise players</HelpTitle>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Gender + age (as of {tournament.masterAgeDate || 'the master date'}) + event + weight → category (Rule 2). Approved players only.
         </Typography>
@@ -91,7 +92,7 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>2. Lock entries and draw pools</Typography>
+        <HelpTitle id="draw.pools" variant="h3" gutterBottom>2. Lock entries and draw pools</HelpTitle>
         {!locked && <Alert severity="info" sx={{ mb: 2 }}>Lock entries on the Dashboard before drawing pools (section 21).</Alert>}
         {drawLocked && <Alert severity="success" sx={{ mb: 2 }} icon={<Lock />}>The draw is locked. Unlock it on the Dashboard (with a reason) to change pools.</Alert>}
         {settings.requireWeighInForDraw && <Alert severity="info" sx={{ mb: 2 }}>Only kumite players with a verified weigh-in enter the draw (Settings → Entries and weigh-in).</Alert>}
@@ -154,7 +155,7 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
       ))}
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>3. Generate matches</Typography>
+        <HelpTitle id="draw.matches" variant="h3" gutterBottom>3. Generate matches</HelpTitle>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Every pool fights a round robin. AKA (red) and AO (blue) are stored on each match, numbered M-001 onwards and spread across {settings.mats} mat{settings.mats > 1 ? 's' : ''}.
         </Typography>

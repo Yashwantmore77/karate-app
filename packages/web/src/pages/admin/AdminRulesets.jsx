@@ -13,6 +13,7 @@ import StatusBadge from '../../components/tms/StatusBadge'
 import useAction from '../../components/tms/useAction'
 import { useLoading } from '../../components/Loader'
 import { OVERTIME_LABEL } from '../../components/tms/AdvancedSettings'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const KUMITE_NUMBERS = [['matchDurationSec', 'Bout length (seconds)'], ['pointGap', 'Winning point gap'], ['extraTimeSec', 'Extra time (seconds)'], ['penaltyCategories', 'Penalty categories (1 or 2)']]
 const KATA_NUMBERS = [['kataJudges', 'Judges'], ['kataMinScore', 'Lowest score'], ['kataMaxScore', 'Highest score'], ['kataPrecision', 'Decimals'], ['kataRounds', 'Rounds'], ['kataQualifiers', 'Qualifiers'], ['kataTechnicalWeight', 'Technical weight']]
@@ -49,7 +50,7 @@ export default function AdminRulesets() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Typography variant="h1" gutterBottom>Rulesets</Typography>
+      <HelpTitle id="admin.rulesets" variant="h1" gutterBottom>Rulesets</HelpTitle>
       <Alert severity="info" sx={{ mb: 2 }}>A tournament applies a ruleset in Settings. Changing a ruleset saves a new version when a tournament uses it, and tournaments keep the version they applied until they apply again. The standard rulesets can be edited too: the edit becomes the next version and the original can be restored at any time.</Alert>
       <DataTable rows={rows} loading={loading} refreshing={refreshing} empty="No rulesets."
         toolbar={(

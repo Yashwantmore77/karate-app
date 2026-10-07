@@ -2902,8 +2902,21 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const pools = await stores.pools.list({ tournamentId })
     const matches = await listMatches(tournamentId)
     const medals = await stores.medals.list({ tournamentId })
+    // For the step-by-step guide: how far each stage of the event has got.
+    const [ageGroups, weightCategories, certificates, passes, kataRounds] = await Promise.all([
+      stores.ageGroups.list({ tournamentId }), stores.weightCategories.list({ tournamentId }),
+      stores.certificates.list({ tournamentId }), stores.passes.list({ tournamentId }), stores.kataRounds.list({ tournamentId }),
+    ])
     const count = (pred) => players.filter(pred).length
     return {
+      ageGroups: ageGroups.length,
+      weightCategories: weightCategories.length,
+      certificates: certificates.length,
+      passes: passes.length,
+      checkedIn: passes.filter((p) => p.checkedInAt).length,
+      kataRounds: kataRounds.length,
+      scheduledMatches: matches.filter((m) => m.mat || m.scheduledAt).length,
+      matchesWithReferee: matches.filter((m) => m.refereeId).length,
       teams: teamRows.length,
       players: players.length,
       kataPlayers: count((p) => p.events?.includes('kata')),

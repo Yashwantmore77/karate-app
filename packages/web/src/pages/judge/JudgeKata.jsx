@@ -9,6 +9,7 @@ import { watchPublicChanges } from '../../data/live'
 import useAction from '../../components/tms/useAction'
 import TournamentSelector from '../../components/tms/TournamentSelector'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 /**
  * PRD point 19: a kata judge's screen. The judge picks the open round and
@@ -77,7 +78,7 @@ function KataPanel({ tid, accountSeat, uid }) {
   return (
     <Container maxWidth="md" sx={{ py: 3 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 2 }}>
-        <Typography variant="h1" sx={{ flex: 1 }}>Kata scoring</Typography>
+        <HelpTitle id="judge.kata" variant="h1" sx={{ flex: 1 }}>Kata scoring</HelpTitle>
         {seat ? <Chip color="primary" label={`Judge J${seat}`} /> : null}
       </Stack>
 

@@ -4,6 +4,7 @@ import { OpenInNew } from '@mui/icons-material'
 import { displayRepo } from '../data/display'
 import { httpPatch } from '../data/http'
 import useAction from '../components/tms/useAction'
+import { HelpTitle } from '../components/help/InfoTip'
 
 /**
  * PRD v1 §4, the scoreboard operator: runs the hall screens. They see what
@@ -28,10 +29,10 @@ export default function ScoreboardOperator() {
 
   return (
     <Container maxWidth="md" sx={{ py: 3 }}>
-      <Typography variant="h1" gutterBottom>Scoreboard control</Typography>
+      <HelpTitle id="scoreboard.operator" variant="h1" gutterBottom>Scoreboard control</HelpTitle>
       <Paper sx={{ p: 2, mb: 2 }}>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: 1 }}>
-          <Typography variant="h3" sx={{ flex: 1 }}>On the scoreboard now</Typography>
+          <HelpTitle id="scoreboard.now" variant="h3" sx={{ flex: 1 }}>On the scoreboard now</HelpTitle>
           <TextField select size="small" label="Screen" value={target} sx={{ minWidth: 160 }} onChange={(e) => setTarget(e.target.value)}>
             <MenuItem value="">Whole hall</MenuItem>
             {MATS.map((m) => <MenuItem key={m} value={m}>Mat {m}</MenuItem>)}
@@ -57,7 +58,7 @@ export default function ScoreboardOperator() {
         </Stack>
       </Paper>
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Screens</Typography>
+        <HelpTitle id="scoreboard.screens" variant="h3" gutterBottom>Screens</HelpTitle>
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
           <Button variant="outlined" endIcon={<OpenInNew />} href="/display" target="_blank">Hall scoreboard (latest bout)</Button>
           {MATS.map((m) => <Button key={m} variant="outlined" endIcon={<OpenInNew />} href={`/display?mat=${m}`} target="_blank">Mat {m}</Button>)}

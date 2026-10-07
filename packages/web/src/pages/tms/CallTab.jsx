@@ -8,6 +8,7 @@ import { watchPublicChanges } from '../../data/live'
 import { MatchSides } from './MatchesTab'
 import { PageLoader } from '../../components/Loader'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const UPCOMING = 4
 const number = (m) => Number(String(m.matchNumber).replace(/\D/g, '')) || 0
@@ -53,7 +54,7 @@ export default function CallTab({ tournament, version, action, role }) {
         {byMat.map(({ mat, rows }) => (
           <Grid key={mat} size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 2, height: '100%' }}>
-              <Typography variant="h3" gutterBottom>Mat {mat}</Typography>
+              <HelpTitle id="call.mats" variant="h3" gutterBottom>Mat {mat}</HelpTitle>
               {!rows.length && <Typography color="text.secondary">Nothing waiting on this mat.</Typography>}
               <Stack spacing={1}>
                 {rows.map((m, i) => (
@@ -97,7 +98,7 @@ export default function CallTab({ tournament, version, action, role }) {
       </Grid>
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Latest results</Typography>
+        <HelpTitle id="call.latest" variant="h3" gutterBottom>Latest results</HelpTitle>
         {!finished.length && <Typography color="text.secondary">No results yet.</Typography>}
         {finished.map((m) => (
           <Box key={m.id} sx={{ py: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>

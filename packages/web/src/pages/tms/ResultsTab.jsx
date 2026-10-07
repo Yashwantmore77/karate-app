@@ -13,6 +13,7 @@ import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import Bracket from '../../components/tms/Bracket'
 import KataRoundTable from '../../components/tms/KataRoundTable'
 import { PageLoader, useLoading } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 export const MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' }
 
@@ -114,7 +115,7 @@ export default function ResultsTab({ tournament, reload, version, action, role }
       <Paper sx={{ p: 2 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}>
           <Box>
-            <Typography variant="h3">Publish results</Typography>
+            <HelpTitle id="results.publish" variant="h3">Publish results</HelpTitle>
             <Typography variant="body2" color="text.secondary">
               Each category goes Provisional → Verified → Published → Locked (PRD v1 §16). Publishing verifies what is still provisional, shows it on the public page and notifies teams; completing the tournament locks it.
               {settings.resultPublishing === 'auto' && ' Results here are published automatically as each category is verified.'}
@@ -137,7 +138,7 @@ export default function ResultsTab({ tournament, reload, version, action, role }
         <Paper key={d.key} sx={{ p: 2 }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', mb: 1 }} spacing={1}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-              <Typography variant="h3">{d.label}</Typography>
+              <HelpTitle id="results.category" variant="h3">{d.label}</HelpTitle>
               {d.resultStatus && <StatusBadge status={d.resultStatus === 'LOCKED' || d.resultStatus === 'PUBLISHED' ? 'COMPLETED' : d.resultStatus === 'VERIFIED' ? 'APPROVED' : 'DRAFT'} label={humanize(d.resultStatus)} />}
             </Stack>
             {/* PRD v1 §16: freeze a finished category while the event goes on. */}
@@ -230,7 +231,7 @@ export default function ResultsTab({ tournament, reload, version, action, role }
 
       <Paper sx={{ p: 2 }}>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: 1 }}>
-          <Typography variant="h3">Medal tally</Typography>
+          <HelpTitle id="results.tally" variant="h3">Medal tally</HelpTitle>
           <TextField select size="small" value={by} onChange={(e) => setBy(e.target.value)}>
             {['club', 'district', 'state', 'country'].map((k) => <MenuItem key={k} value={k}>By {k}</MenuItem>)}
           </TextField>

@@ -11,6 +11,7 @@ import { TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
 import * as loginLog from '../../data/loginLog'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 // The server answers with a code; these are the ones a person can act on.
 const MESSAGES = {
@@ -100,7 +101,7 @@ export default function AdminLoginLog() {
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">Sign-ins</Typography>
+            <HelpTitle id="admin.signins" variant="h6">Sign-ins</HelpTitle>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
               Every attempt on this system, accepted or not
             </Typography>

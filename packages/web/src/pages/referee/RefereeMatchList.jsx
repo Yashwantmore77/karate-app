@@ -19,6 +19,7 @@ import { downloadCSV } from '../../utils/csvExport'
 import StandingsTable from '../../components/StandingsTable'
 import * as users from '../../data/users'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 // Used until a tournament says otherwise; matches the server's own default.
 const DEFAULT_JUDGE_COUNT = 4
@@ -338,7 +339,7 @@ export default function RefereeMatchList({ uid, profile }) {
         )}
 
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">Matches ({total})</Typography>
+          <HelpTitle id="referee.matches" variant="h6">Matches ({total})</HelpTitle>
           <TableSearch value={search} onChange={setSearch} placeholder="Search status or winner" />
           <Stack direction="row" spacing={1}>
             <Button
@@ -492,7 +493,7 @@ export default function RefereeMatchList({ uid, profile }) {
           </TableContainer>
         )}
 
-        <Typography variant="h6" sx={{ mb: 2 }}>Standings</Typography>
+        <HelpTitle id="referee.standings" variant="h6" sx={{ mb: 2 }}>Standings</HelpTitle>
         <StandingsTable competitors={competitors} matches={allMatches} />
       </Container>
 

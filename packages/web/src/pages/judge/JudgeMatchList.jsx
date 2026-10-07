@@ -7,6 +7,7 @@ import { competitors as competitorStore, matches as matchStore } from '../../dat
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 export default function JudgeMatchList({ uid, profile }) {
   const navigate = useNavigate()
@@ -68,7 +69,7 @@ export default function JudgeMatchList({ uid, profile }) {
         </Grid>
 
         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-          <Typography variant="h6">Live Matches ({total})</Typography>
+          <HelpTitle id="judge.matches" variant="h6">Live Matches ({total})</HelpTitle>
           <TableSearch value={search} onChange={setSearch} placeholder="Search status or winner" />
         </Box>
 

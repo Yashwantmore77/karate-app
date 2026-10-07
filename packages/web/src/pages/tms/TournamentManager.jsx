@@ -24,6 +24,7 @@ import CheckinTab from './CheckinTab'
 import { PageLoader } from '../../components/Loader'
 import { ExportAuditContext } from '../../components/tms/exportAudit'
 import { tms } from '../../data/tms'
+import WorkflowGuide from '../../components/help/WorkflowGuide'
 
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
 // only when the signed-in role holds its permission (section 3).
@@ -102,6 +103,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
         </Tabs>
       </PageBar>
       <Container maxWidth="xl" sx={{ py: 3 }}>
+        {current && <WorkflowGuide tournament={tournament} version={version} tabs={tabs} current={current} goTab={(key) => setParams({ tab: key })} role={role} />}
         <ExportAuditContext.Provider value={logExport}>
           {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} goTab={(key) => setParams({ tab: key })} />}
         </ExportAuditContext.Provider>

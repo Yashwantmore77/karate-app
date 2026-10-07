@@ -14,6 +14,7 @@ import { matches as matchStore } from '../../data/domain'
 import DataTable from '../../components/tms/DataTable'
 import StatusBadge from '../../components/tms/StatusBadge'
 import { useLoading } from '../../components/Loader'
+import InfoTip from '../../components/help/InfoTip'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
@@ -107,6 +108,7 @@ export default function MatchesTab({ tournament, version, action }) {
           <ToggleButton value="completed">Completed ({counts.completed})</ToggleButton>
           <ToggleButton value="all">All ({matches.length})</ToggleButton>
         </ToggleButtonGroup>
+        <InfoTip id="matches.list" />
         <TextField select size="small" label="Mat" value={mat} onChange={(e) => setMat(e.target.value)} sx={{ minWidth: 120 }}>
           <MenuItem value="">All mats</MenuItem>
           {Array.from({ length: settings.mats }, (_, i) => <MenuItem key={i + 1} value={i + 1}>Mat {i + 1}</MenuItem>)}

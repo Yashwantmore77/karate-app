@@ -13,6 +13,7 @@ import DataTable from '../../components/tms/DataTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import StatusBadge from '../../components/tms/StatusBadge'
 import { useLoading } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const GENDER = { M: 'Boys / Men', F: 'Girls / Women', Mixed: 'Mixed' }
 const num = (v) => (v === '' || v == null ? null : Number(v))
@@ -77,7 +78,7 @@ export default function CategoriesTab({ tournament, version, action }) {
     <Stack spacing={3}>
       {locked && <Alert severity="info">Entries are locked, so categories are frozen (section 21).</Alert>}
       <Box>
-        <Typography variant="h3" gutterBottom>Age groups</Typography>
+        <HelpTitle id="categories.age" variant="h3" gutterBottom>Age groups</HelpTitle>
         <DataTable
           rows={groups}
           loading={loading} refreshing={refreshing}
@@ -103,7 +104,7 @@ export default function CategoriesTab({ tournament, version, action }) {
       </Box>
 
       <Box>
-        <Typography variant="h3" gutterBottom>Weight categories (Kumite)</Typography>
+        <HelpTitle id="categories.weight" variant="h3" gutterBottom>Weight categories (Kumite)</HelpTitle>
         <DataTable
           rows={weights}
           loading={loading} refreshing={refreshing}

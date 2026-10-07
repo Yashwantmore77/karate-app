@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Typography, Box } from '@mui/material'
+import { Typography, Box, Stack } from '@mui/material'
+import { HelpTitle } from '../../components/help/InfoTip'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import { useLoading } from '../../components/Loader'
@@ -16,6 +17,8 @@ export default function AuditTab({ tournament, version }) {
   useEffect(() => { load() }, [load, version])
 
   return (
+    <Stack spacing={1}>
+    <HelpTitle id="audit.list" variant="h3">Audit log</HelpTitle>
     <DataTable rows={result.rows} loading={loading} refreshing={refreshing} searchPlaceholder="Search action, user, entity, reason" empty="Nothing recorded yet."
       server={{ ...result, onChange: (next) => setQuery((q) => ({ ...q, ...next })) }}
       columns={[
@@ -33,5 +36,6 @@ export default function AuditTab({ tournament, version }) {
         { key: 'reason', label: 'Reason', sortable: false, render: (a) => a.reason || '—' },
         { key: 'ip', label: 'IP / device', sortable: false, render: (a) => (a.ip || a.userAgent ? `${a.ip || ''} ${a.userAgent ? a.userAgent.slice(0, 30) : ''}` : '—') },
       ]} />
+    </Stack>
   )
 }

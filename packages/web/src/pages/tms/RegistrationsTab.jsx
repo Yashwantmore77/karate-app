@@ -16,6 +16,7 @@ import PlayerForm from '../../components/tms/PlayerForm'
 import BulkUpload from '../../components/tms/BulkUpload'
 import { openStoredFile } from '../../components/tms/download'
 import { useLoading } from '../../components/Loader'
+import InfoTip from '../../components/help/InfoTip'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -169,12 +170,15 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
 
   return (
     <Stack spacing={2}>
+      <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
       <ToggleButtonGroup exclusive value={view} onChange={(_e, v) => v && setView(v)} size="small">
         <ToggleButton value="players">Players ({loading ? '…' : paged.total})</ToggleButton>
         <ToggleButton value="teams">Teams ({loading ? '…' : teams.length})</ToggleButton>
         <ToggleButton value="duplicates">Possible duplicates</ToggleButton>
         {manage && <ToggleButton value="bulk">Bulk upload</ToggleButton>}
       </ToggleButtonGroup>
+      <InfoTip id="registrations.views" />
+      </Stack>
 
       {locked && <Alert severity="info">Entries are locked: no new players, and DOB, gender, weight, events and team cannot change.</Alert>}
 
@@ -242,7 +246,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
           toolbar={(
             <>
               {filters}
-              {manage && <Button variant="outlined" onClick={approveAll}>Approve all pending</Button>}
+              {manage && <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}><Button variant="outlined" onClick={approveAll}>Approve all pending</Button><InfoTip id="registrations.approveAll" /></Box>}
               {can(role, P.PLAYER_EDIT) && <Button variant="contained" startIcon={<Add />} disabled={locked || !teams.length} onClick={() => { setPlayerErrors([]); setPlayerEdit({ ...blank(fields), teamId: teams[0]?.id }) }}>Add player</Button>}
             </>
           )}

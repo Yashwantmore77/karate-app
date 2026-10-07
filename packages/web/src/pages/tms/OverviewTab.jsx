@@ -8,6 +8,7 @@ import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { LockIcon } from './TournamentManager'
 import { PageLoader } from '../../components/Loader'
+import InfoTip, { HelpTitle } from '../../components/help/InfoTip'
 
 const ORDER = Object.values(TOURNAMENT_STATUS)
 
@@ -58,7 +59,7 @@ export default function OverviewTab({ tournament, reload, version, action, role 
       )}
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Tournament status</Typography>
+        <HelpTitle id="overview.status" variant="h3" gutterBottom>Tournament status</HelpTitle>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
           {ORDER.map((st) => (
             <Box key={st} sx={{ opacity: st === status ? 1 : ORDER.indexOf(st) < ORDER.indexOf(status) ? 0.75 : 0.4 }}>
@@ -95,6 +96,7 @@ export default function OverviewTab({ tournament, reload, version, action, role 
             <Button size="large" variant="outlined" startIcon={<LockIcon locked={!tournament.drawLocked} />} onClick={() => lock('draw', !tournament.drawLocked)} disabled={!tournament.entriesLocked && !tournament.drawLocked}>
               {tournament.drawLocked ? 'Unlock draw' : 'Lock draw'}
             </Button>
+            <InfoTip id="overview.locks" />
           </Stack>
         )}
         {status !== 'DRAFT' && (
@@ -104,6 +106,7 @@ export default function OverviewTab({ tournament, reload, version, action, role 
         )}
       </Paper>
 
+      <HelpTitle id="overview.stats" variant="h3" sx={{ mb: -1 }}>At a glance</HelpTitle>
       <Grid container spacing={2}>
         {[
           ['Teams', s.teams], ['Players', s.players], ['Kata players', s.kataPlayers], ['Kumite players', s.kumitePlayers],
@@ -119,7 +122,7 @@ export default function OverviewTab({ tournament, reload, version, action, role 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, height: '100%' }}>
-            <Typography variant="h3" gutterBottom>Next matches</Typography>
+            <HelpTitle id="overview.next" variant="h3" gutterBottom>Next matches</HelpTitle>
             {!stats && <PageLoader minHeight={120} />}
             {stats && !s.nextMatches?.length && <Typography color="text.secondary">No pending matches.</Typography>}
             <List dense>
@@ -134,7 +137,7 @@ export default function OverviewTab({ tournament, reload, version, action, role 
         <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, height: '100%' }}>
             <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h3">Notifications</Typography>
+              <HelpTitle id="overview.notifications" variant="h3">Notifications</HelpTitle>
               {notes.some((n) => !n.read) && <Button size="small" onClick={() => tms.markRead(tid).then(() => tms.notifications(tid)).then(setNotes)}>Mark all read</Button>}
             </Stack>
             {!notes.length && <Typography color="text.secondary">Nothing new.</Typography>}

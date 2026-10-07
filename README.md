@@ -39,6 +39,13 @@ REST lives under `/api/v1`. `/health` sits outside it for uptime checks.
 
 There is no signup. Accounts are created by an admin.
 
+## Help inside the app
+
+- **ⓘ icons** next to page titles, section headings and key buttons explain what each one does. Hover on a computer; tap on a phone or tablet.
+- **Guide** (top bar, every signed-in page) opens "How to run a tournament — step by step", plus what the signed-in role does.
+- On the tournament screen, the **guide bar** under the tabs shows the current page, what comes before and after it, and the next step still to do for this tournament, with a **Go** button for each. **Full guide** lists all the steps and ticks the ones that are done.
+- All help text lives in `packages/web/src/help/guide.js`, so it can be updated in one place. A test checks that every ⓘ icon has text.
+
 ## Scheduling rules
 
 - A tournament sets the **slot length** (default 15 min) and **panel size**

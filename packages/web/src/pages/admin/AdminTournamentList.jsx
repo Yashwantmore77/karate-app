@@ -14,6 +14,7 @@ import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 // The server applies these when a body leaves them out; the form shows the
 // same numbers so a new tournament is not a surprise.
@@ -143,7 +144,7 @@ export default function AdminTournamentList({ uid }) {
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           {/* The count is the total behind the search, not the rows on screen. */}
-          <Typography variant="h6">Tournaments ({total})</Typography>
+          <HelpTitle id="admin.tournaments" variant="h6">Tournaments ({total})</HelpTitle>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <TableSearch
               value={search}

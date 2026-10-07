@@ -9,6 +9,7 @@ import { tournaments as tournamentStore, categories as categoryStore } from '../
 import { isExpired } from '../../utils/dateUtils'
 import AssignedMatches from '../../components/tms/AssignedMatches'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 export default function RefereeCategoryList({ uid, profile = null }) {
   const navigate = useNavigate()
@@ -143,7 +144,7 @@ export default function RefereeCategoryList({ uid, profile = null }) {
         ) : (
           <>
             <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="h6">Categories ({total})</Typography>
+              <HelpTitle id="referee.categories" variant="h6">Categories ({total})</HelpTitle>
               <TableSearch value={search} onChange={setSearch} placeholder="Search name, age or division" />
             </Box>
 

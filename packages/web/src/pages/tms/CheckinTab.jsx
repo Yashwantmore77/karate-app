@@ -8,6 +8,7 @@ import { tms, describeError } from '../../data/tms'
 import QrScanner from '../../components/tms/QrScanner'
 import DataTable from '../../components/tms/DataTable'
 import { useLoading } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const KIND_LABEL = { player: 'Athletes', coach: 'Coaches', official: 'Officials' }
 const ROLE_COLOR = { player: 'primary', coach: 'success', official: 'secondary' }
@@ -49,7 +50,7 @@ export default function CheckinTab({ tournament, version, action, role }) {
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, height: '100%' }}>
-            <Typography variant="h3" gutterBottom>Scan a pass</Typography>
+            <HelpTitle id="checkin.scan" variant="h3" gutterBottom>Scan a pass</HelpTitle>
             <ToggleButtonGroup exclusive size="small" value={point} onChange={(_e, v) => v && setPoint(v)} sx={{ mb: 2 }}>
               <ToggleButton value="arrival">At the door (arrival)</ToggleButton>
               <ToggleButton value="mat" disabled={!can(role, P.ATTENDANCE_MARK)}>At the mat (next bout)</ToggleButton>
@@ -59,7 +60,7 @@ export default function CheckinTab({ tournament, version, action, role }) {
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, height: '100%' }}>
-            <Typography variant="h3" gutterBottom>Scans</Typography>
+            <HelpTitle id="checkin.scans" variant="h3" gutterBottom>Scans</HelpTitle>
             {!log.length && <Typography color="text.secondary">Scanned passes appear here.</Typography>}
             <List dense>
               {log.map((e, i) => (
@@ -75,7 +76,7 @@ export default function CheckinTab({ tournament, version, action, role }) {
 
       {manage && (
         <Paper sx={{ p: 2 }}>
-          <Typography variant="h3" gutterBottom>Accreditation passes</Typography>
+          <HelpTitle id="checkin.passes" variant="h3" gutterBottom>Accreditation passes</HelpTitle>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             ID-card passes with photo (from registration), role and a QR code, eight to an A4 page. Generating again only adds passes for people who have none; printed codes keep working.
           </Typography>
