@@ -797,18 +797,51 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return true
   }
 
+  /**
+   * The player filters as a store query (shared/query.js), so a store with a
+   * database filters, sorts and pages in the database (PRD section 62). A
+   * text search also matches team names and codes, by the teams' ids.
+   */
+  async function playerQuery(tournamentId, f = {}) {
+    const and = [{ tournamentId }]
+    if (f.teamId) and.push({ teamId: f.teamId })
+    if (f.gender) and.push({ gender: f.gender })
+    if (f.event) and.push({ events: f.event })
+    if (f.registrationStatus) and.push({ registrationStatus: f.registrationStatus })
+    // Never set means still pending.
+    if (f.paymentStatus) and.push(f.paymentStatus === 'PENDING' ? { $or: [{ 'payment.status': 'PENDING' }, { 'payment.status': { $missing: true } }] } : { 'payment.status': f.paymentStatus })
+    if (f.weighInStatus) and.push(f.weighInStatus === 'PENDING' ? { $or: [{ 'weighIn.status': 'PENDING' }, { 'weighIn.status': { $missing: true } }] } : { 'weighIn.status': f.weighInStatus })
+    if (f.ageGroupId) and.push({ $or: Object.values(EVENTS).map((e) => ({ [`entries.${e}.ageGroupId`]: f.ageGroupId })) })
+    if (f.weightCategoryId) and.push({ 'entries.kumite.weightCategoryId': f.weightCategoryId })
+    for (const key of ['club', 'district', 'state', 'country']) if (f[key]) and.push({ [key]: { $ieq: f[key] } })
+    if (f.q) {
+      const q = String(f.q)
+      const teamIds = (await stores.teams.list({ tournamentId }))
+        .filter((t) => [t.name, t.code].some((v) => String(v || '').toLowerCase().includes(q.toLowerCase()))).map((t) => t.id)
+      and.push({ $or: [
+        { name: { $contains: q } }, { playerNumber: { $contains: q } }, { club: { $contains: q } }, { id: q },
+        ...(teamIds.length ? [{ teamId: { $in: teamIds } }] : []),
+      ] })
+    }
+    return { $and: and }
+  }
+
   async function listPlayers(tournamentId, filter = {}) {
-    const [rows, teamRows] = await Promise.all([
-      stores.players.list({ tournamentId }),
-      stores.teams.list({ tournamentId }),
-    ])
+    if (stores.players.search) return (await stores.players.search(await playerQuery(tournamentId, filter), { sort: { name: 1 } })).rows
+    // A store without search (an older adapter): filter what it returns.
+    const [rows, teamRows] = await Promise.all([stores.players.list({ tournamentId }), stores.teams.list({ tournamentId })])
     const teamsById = new Map(teamRows.map((t) => [t.id, t]))
     return rows.filter((p) => matchesFilter(p, filter, { teamsById })).sort(byName)
   }
 
-  /** A page of players (section 62), with the same filters as listPlayers. */
+  /** A page of players (section 62), with the same filters as listPlayers, paged by the store. */
   async function pagePlayers(tournamentId, filter = {}, options = {}) {
-    return paginate(await listPlayers(tournamentId, filter), { sort: 'name', ...options })
+    const { page, pageSize, sort, dir } = pageOptions({ sort: 'name', ...options })
+    if (!stores.players.search) return paginate(await listPlayers(tournamentId, filter), { sort: 'name', ...options })
+    const { rows, total } = await stores.players.search(await playerQuery(tournamentId, filter), {
+      sort: { [sort || 'name']: dir === 'desc' ? -1 : 1 }, skip: page * pageSize, limit: pageSize,
+    })
+    return { rows, total, page, pageSize }
   }
 
   /**
@@ -2575,6 +2608,20 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return row
   }
 
+  /**
+   * A coach's own certificates: their team's players' (medal, participation,
+   * special awards) and their own coach certificate. The tournament comes
+   * back too, for the route that prints them; it is never sent to the coach.
+   */
+  async function coachCertificates(actor) {
+    if (!isCoach(actor) || !actor.teamId) return { tournament: null, certificates: [] }
+    const tournament = await tournamentOf(actor.tournamentId)
+    const mine = new Set((await stores.players.list({ tournamentId: tournament.id, teamId: actor.teamId })).map((p) => p.id))
+    const certificates = (await listCertificates(tournament.id))
+      .filter((c) => (c.playerId && mine.has(c.playerId)) || c.personKey === `coach:${actor.teamId}`)
+    return { tournament, certificates }
+  }
+
   const listCertificates = async (tournamentId, { type = null } = {}) =>
     (await stores.certificates.list({ tournamentId }))
       .map((c) => ({ ...c, type: c.type || c.medal }))
@@ -2870,7 +2917,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket,
-    publishResults, verifyResult, assertResultEditable, setDivisionLock, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
+    publishResults, verifyResult, assertResultEditable, setDivisionLock, coachCertificates, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
     // rulesets and locks
     listRulesets, resolveRuleset, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
     // links and coaches

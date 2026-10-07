@@ -147,6 +147,8 @@ export function createApp() {
   function announcePublic(collection) {
     if (collection === 'display') {
       stores.display.get('live').then((row) => publicIo.emit('display:update', row ?? null)).catch(() => {})
+      // A screen for one mat re-reads its own document on this.
+      publicIo.emit('display:changed', { at: serverNow() })
       return
     }
     if (['auditLog', 'registrationLinks'].includes(collection)) return

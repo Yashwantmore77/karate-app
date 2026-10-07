@@ -14,8 +14,9 @@ const DISPLAY_SAFETY_POLL_MS = 10_000
  * The referee's console publishes to it; a screen in the hall reads it.
  */
 export const displayRepo = {
-  get: async () => (await httpGet('/display', { quiet: true })).display,
-  put: async (payload) => (await httpPut('/display', payload)).display,
+  // `mat` picks one mat's screen (PRD v1 §17); without it, the hall screen.
+  get: async (mat = null) => (await httpGet(`/display${mat ? `?mat=${mat}` : ''}`, { quiet: true })).display,
+  put: async (payload, mat = null) => (await httpPut(`/display${mat ? `?mat=${mat}` : ''}`, payload)).display,
   /**
    * Pushed over the public socket channel, which needs no session (a hall
    * screen has none), and polled as a fallback: every second while that
@@ -23,25 +24,28 @@ export const displayRepo = {
    * swallowed on purpose — a scoreboard that stops asking after one dropped
    * request is worse than one that shows the last score a moment longer.
    */
-  subscribe: (cb) => {
+  subscribe: (cb, { mat = null } = {}) => {
     let stopped = false
     const sock = publicSocket()
     const tick = async () => {
       try {
-        const row = await displayRepo.get()
+        const row = await displayRepo.get(mat)
         if (!stopped) cb(row)
       } catch {
         // Keep asking.
       }
     }
-    const pushed = (row) => { if (!stopped) cb(row) }
+    // The pushed row is the hall screen's; a mat screen re-reads its own.
+    const pushed = (row) => { if (!stopped) (mat ? tick() : cb(row)) }
+    const changed = () => { if (!stopped && mat) tick() }
     sock?.on('display:update', pushed)
+    sock?.on('display:changed', changed)
     tick()
     let last = Date.now()
     const id = setInterval(() => {
       const every = sock?.connected ? DISPLAY_SAFETY_POLL_MS : DISPLAY_POLL_MS
       if (Date.now() - last >= every) { last = Date.now(); tick() }
     }, DISPLAY_POLL_MS)
-    return () => { stopped = true; clearInterval(id); sock?.off('display:update', pushed) }
+    return () => { stopped = true; clearInterval(id); sock?.off('display:update', pushed); sock?.off('display:changed', changed) }
   },
 }

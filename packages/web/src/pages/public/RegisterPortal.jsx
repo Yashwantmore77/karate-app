@@ -53,6 +53,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   })
   const [duplicates, setDuplicates] = useState(null)
   const [account, setAccount] = useState(null)
+  const [certificates, setCertificates] = useState(null)
   const [password, setPassword] = useState('')
   const [me, setMe] = useState(null)
   const [team, setTeam] = useState({})
@@ -204,6 +205,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
         <ToggleButton value="players">Players</ToggleButton>
         <ToggleButton value="bulk" disabled={!canWrite}>Bulk upload</ToggleButton>
         <ToggleButton value="notes">Notifications ({me.notifications.length})</ToggleButton>
+        <ToggleButton value="certificates" onClick={() => tms.coach.certificates(session).then(setCertificates).catch(() => setCertificates([]))}>Certificates</ToggleButton>
       </ToggleButtonGroup>
 
       {view === 'players' && (
@@ -233,6 +235,20 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
         <BulkUpload fields={fields} withTeamColumn={false} action={action}
           onPreview={(csv) => tms.coach.bulkPreview(session, csv)} onImport={(csv, opts) => tms.coach.bulkImport(session, csv, opts)}
           onDone={() => { setView('players'); load() }} />
+      )}
+
+      {view === 'certificates' && (
+        <DataTable rows={certificates || []} rowKey={(c) => c.certificateId} loading={!certificates}
+          empty="No certificates yet. They appear once the organisers issue them after the results."
+          columns={[
+            { key: 'name', label: 'Name' },
+            { key: 'type', label: 'Type', render: (c) => (c.medal ? `${c.medal[0].toUpperCase()}${c.medal.slice(1)} medal` : c.type === 'coach' ? 'Coach' : c.type === 'participation' ? 'Participation' : c.title || 'Award') },
+            { key: 'category', label: 'Category / award', value: (c) => c.award || c.category, render: (c) => c.award || c.category || '—' },
+            { key: 'certificateId', label: 'Certificate ID' },
+            { key: 'pdf', label: '', sortable: false, render: (c) => (
+              <Button size="small" variant="outlined" onClick={() => action.run(() => tms.coach.certificatePdf(session, c.certificateId))}>Download</Button>
+            ) },
+          ]} />
       )}
 
       {view === 'notes' && (

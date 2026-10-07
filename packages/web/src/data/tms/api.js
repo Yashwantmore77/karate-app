@@ -168,6 +168,18 @@ export const tms = {
     removePlayer: (session, id) => send('DELETE', `/coach/players/${id}`, undefined, { token: session.token }),
     bulkPreview: (session, csv) => send('POST', '/coach/players/bulk/preview', { csv }, { token: session.token }),
     bulkImport: (session, csv, opts = {}) => send('POST', '/coach/players/bulk', { csv, ...opts }, { token: session.token }),
+    certificates: async (session) => (await get('/coach/certificates', { token: session.token })).certificates,
+    async certificatePdf(session, id) {
+      const { blob } = await fetchFile(`/coach/certificates/${encodeURIComponent(id)}.pdf`, session.token)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${id}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    },
     createAccount: async (session, body) => (await send('POST', '/coach/account', body, { token: session.token })).account,
     uploadFile: async (session, file) => (await send('POST', '/coach/files', file, { token: session.token })).file,
     readFile: (session, id) => fetchFile(`/coach/files/${id}`, session.token),

@@ -157,7 +157,8 @@ export default function KumiteConsole({
 
   const toggleScoreboard = () => {
     const next = !view.scoreboardActive
-    if (!next) displayRepo.put({ status: 'closed' })
+    // Closes this mat's screen (and the hall screen if it shows this bout).
+    if (!next) displayRepo.put({ status: 'closed', matchId, fieldNumber: view.fieldNumber || null })
     send('SCOREBOARD', { active: next })
   }
 

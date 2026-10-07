@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { isMongoConfigured, getDb } from '../db/mongo.js'
 import { TMS_COLLECTIONS } from '@kumite/shared/tms.js'
+import { searchRows, toMongo } from '@kumite/shared/query.js'
 
 // One document store, two backends, chosen the same way the user store already
 // chooses: MONGODB_URI present means Mongo, absent means memory. Routes are
@@ -73,6 +74,10 @@ function memoryCollection(name) {
     },
     async count(filter = {}) {
       return [...rows.values()].filter((row) => matchesFilter(row, filter)).length
+    },
+    // The portable query of shared/query.js (filters, sort, page).
+    async search(query = {}, options = {}) {
+      return searchRows([...rows.values()], query, options)
     },
     async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25, official = null } = {}) {
       const found = [...rows.values()]
@@ -157,6 +162,19 @@ function mongoCollection(name) {
     },
     async count(filter = {}) {
       return (await collection()).countDocuments(filter)
+    },
+    // The same query run by the database: only the page travels, and an
+    // index on the filter fields does the work (PRD section 62).
+    async search(query = {}, { sort = null, skip = 0, limit = null } = {}) {
+      const col = await collection()
+      const filter = toMongo(query)
+      // Case-insensitive, number-aware ordering, matching the memory stores.
+      let cursor = col.find(filter, withoutInternalId).collation({ locale: 'en', strength: 2, numericOrdering: true })
+      if (sort) cursor = cursor.sort({ ...sort, id: 1 })
+      if (skip) cursor = cursor.skip(skip)
+      if (limit) cursor = cursor.limit(limit)
+      const [rows, total] = await Promise.all([cursor.toArray(), col.countDocuments(filter)])
+      return { rows, total }
     },
     async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25, official = null } = {}) {
       const query = { ...filter }
@@ -251,7 +269,7 @@ export const INDEXES = {
   ageGroups: [[{ tournamentId: 1 }]],
   weightCategories: [[{ tournamentId: 1, ageGroupId: 1 }]],
   teams: [[{ tournamentId: 1 }]],
-  players: [[{ tournamentId: 1, teamId: 1 }], [{ tournamentId: 1, registrationStatus: 1 }]],
+  players: [[{ tournamentId: 1, teamId: 1 }], [{ tournamentId: 1, registrationStatus: 1 }], [{ tournamentId: 1, name: 1 }, { collation: { locale: 'en', strength: 2, numericOrdering: true } }], [{ tournamentId: 1, playerNumber: 1 }]],
   pools: [[{ tournamentId: 1, divisionKey: 1 }]],
   brackets: [[{ tournamentId: 1, divisionKey: 1 }]],
   medals: [[{ tournamentId: 1 }]],

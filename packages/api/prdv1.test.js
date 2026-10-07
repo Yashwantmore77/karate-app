@@ -251,3 +251,52 @@ describe('who may score a bout (PRD v1 AC-14)', () => {
     expect((await call('GET', `/categories/${category.id}/matches`, undefined, outsider)).status).toBe(403)
   })
 })
+
+describe('one scoreboard per mat (PRD v1 §17)', () => {
+  it('keeps each mat on its own screen while the hall screen follows the latest bout', async () => {
+    const referee = await login('referee@kata.local')
+    const bout = (id, name) => ({ status: 'open', matchId: id, fieldNumber: id === 'b1' ? '1' : '2', akaName: name, aoName: 'X', akaScore: 0, aoScore: 0 })
+    await call('PUT', '/display', bout('b1', 'Asha'), referee)
+    await call('PUT', '/display', bout('b2', 'Ravi'), referee)
+    expect((await call('GET', '/display?mat=1')).body.display).toMatchObject({ mat: 1, akaName: 'Asha', status: 'open' })
+    expect((await call('GET', '/display?mat=2')).body.display).toMatchObject({ mat: 2, akaName: 'Ravi' })
+    expect((await call('GET', '/display')).body.display.akaName).toBe('Ravi')
+    // closing mat 1 leaves the hall screen, which shows mat 2, alone
+    await call('PUT', '/display', { status: 'closed', matchId: 'b1', fieldNumber: '1' }, referee)
+    expect((await call('GET', '/display?mat=1')).body.display.status).toBe('closed')
+    expect((await call('GET', '/display')).body.display).toMatchObject({ status: 'open', akaName: 'Ravi' })
+    // a hall announcement shows on every mat; a mat's own one replaces it there
+    await call('PATCH', '/display/message', { message: 'Finals at 3 pm' }, tokens.scoreboard)
+    await call('PATCH', '/display/message?mat=2', { message: 'Mat 2: next is the final' }, tokens.scoreboard)
+    expect((await call('GET', '/display?mat=1')).body.display.message).toBe('Finals at 3 pm')
+    expect((await call('GET', '/display?mat=2')).body.display.message).toBe('Mat 2: next is the final')
+    // a referee's score update keeps the announcement
+    await call('PUT', '/display', { ...bout('b2', 'Ravi'), akaScore: 3 }, referee)
+    expect((await call('GET', '/display?mat=2')).body.display).toMatchObject({ akaScore: 3, message: 'Mat 2: next is the final' })
+  })
+})
+
+describe('coach portal certificates', () => {
+  it("shows a coach only their own team's certificates, and prints them", async () => {
+    const t = await tournament('certs-open')
+    const { body: { link } } = await call('PUT', `/tournaments/${t}/registration-link`, { password: 'dojo-pass' }, tokens.admin)
+    const session = (await call('POST', `/public/register/${link.token}/session`, { password: 'dojo-pass' })).body.token
+    const coach = (await call('POST', '/coach/team', { name: 'ABC Karate', club: 'ABC Karate', coachName: 'Sensei Rao' }, session)).body.token
+    const mine = (await call('POST', '/coach/players', { name: 'Asha Rao', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)).body.player
+    const other = (await call('POST', `/tournaments/${t}/teams`, { name: 'XYZ Dojo' }, tokens.admin)).body.team
+    const theirs = (await call('POST', `/tournaments/${t}/players`, { teamId: other.id, name: 'Ravi Kumar', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, tokens.admin)).body.player
+    await stores.certificates.insertMany([
+      { tournamentId: t, certificateId: 'CERT-MINE', type: 'gold', medal: 'gold', playerId: mine.id, name: 'Asha Rao', issuedAt: new Date().toISOString() },
+      { tournamentId: t, certificateId: 'CERT-THEIRS', type: 'silver', medal: 'silver', playerId: theirs.id, name: 'Ravi Kumar', issuedAt: new Date().toISOString() },
+    ])
+    const team = (await call('GET', '/coach/me', undefined, coach)).body.team
+    await stores.certificates.insert({ tournamentId: t, certificateId: 'CERT-COACH', type: 'coach', personKey: `coach:${team.id}`, name: 'Sensei Rao', issuedAt: new Date().toISOString() })
+
+    const listed = (await call('GET', '/coach/certificates', undefined, coach)).body.certificates
+    expect(listed.map((c) => c.certificateId).sort()).toEqual(['CERT-COACH', 'CERT-MINE'])
+    expect(Object.keys(listed[0])).not.toContain('playerId')
+    const pdf = await fetch(`http://localhost:${port}/api/v1/coach/certificates/CERT-MINE.pdf`, { headers: { authorization: `Bearer ${coach}` } })
+    expect(pdf.headers.get('content-type')).toBe('application/pdf')
+    expect((await fetch(`http://localhost:${port}/api/v1/coach/certificates/CERT-THEIRS.pdf`, { headers: { authorization: `Bearer ${coach}` } })).status).toBe(404)
+  })
+})

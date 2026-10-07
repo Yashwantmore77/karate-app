@@ -6,6 +6,7 @@ import { createCoachAccount } from '../auth/users.js'
 import { badRequest } from '../lib/errors.js'
 import { playerBody, withMeta } from './tms.js'
 import { FILE_SCHEMA, sendFile } from './files.js'
+import { certificatesPdf } from '../lib/pdf.js'
 
 const TEAM = {
   name: { type: 'string', required: true, max: 120 },
@@ -69,6 +70,23 @@ export function coachRoutes(tms) {
     res.status(201).json({ file: await tms.uploadFile(withMeta(req), t(req), validate(req.body, FILE_SCHEMA)) })
   })
   router.get('/files/:id', async (req, res) => sendFile(res, await tms.readFile(req.user, req.params.id)))
+
+  // The team's certificates, and one at a time as a PDF (same number as the organisers').
+  const PUBLIC_CERT = ['certificateId', 'type', 'title', 'name', 'club', 'category', 'medal', 'award', 'issuedAt']
+  router.get('/certificates', async (req, res) => {
+    const { certificates } = await tms.coachCertificates(req.user)
+    res.json({ certificates: certificates.map((c) => Object.fromEntries(PUBLIC_CERT.map((k) => [k, c[k] ?? null]))) })
+  })
+  router.get('/certificates/:certificateId.pdf', async (req, res) => {
+    const { tournament, certificates } = await tms.coachCertificates(req.user)
+    const cert = certificates.find((c) => c.certificateId === req.params.certificateId)
+    if (!cert) return res.status(404).json({ error: 'certificate_not_found' })
+    await tms.record(withMeta(req), { tournamentId: tournament.id, action: 'certificate.downloaded', entity: 'certificate', entityId: cert.certificateId })
+    const buffer = await certificatesPdf(tournament, [cert], { verifyBase: process.env.APP_URL || null, settings: tournament.settings?.certificate })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${cert.certificateId}.pdf"`)
+    res.send(buffer)
+  })
 
   const bulkBody = (req) => validate(req.body, { csv: { type: 'string', required: true, max: 2_000_000, trim: false }, confirmDuplicates: { type: 'boolean' } })
   router.post('/players/bulk/preview', async (req, res) => res.json(await tms.previewBulk(withMeta(req), t(req), bulkBody(req).csv)))
