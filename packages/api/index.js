@@ -126,7 +126,9 @@ export function createApp() {
   app.use(errorHandler())
 
   const http = createServer(app)
-  const io = new Server(http, { cors: { origin: true } })
+  // A shorter heartbeat than the default (25 s + 20 s) notices a dead venue
+  // link within about 15 s, so a console switches to offline scoring sooner.
+  const io = new Server(http, { cors: { origin: true }, pingInterval: 10_000, pingTimeout: 5_000 })
   io.use(socketAuth)
 
   // PRD section 57: public pages and hall screens have no session, so they get
@@ -202,7 +204,7 @@ export function createApp() {
       socket.join(matchId)
       // Anyone signed in may watch; control goes only to an admin of this
       // tournament or the bout's referee (AC-14).
-      if (control && (await mayControl(socket, matchId))) room.claim(socket.id)
+      if (control && (await mayControl(socket, matchId))) room.claim(socket.id, { uid: socket.user.uid })
       const snapshot = room.snapshot()
       if (typeof ack === 'function') ack(snapshot)
       else socket.emit('match:snapshot', snapshot)
@@ -223,7 +225,7 @@ export function createApp() {
       if (!(await mayControl(socket, matchId))) return ack?.({ error: 'forbidden' })
 
       const previousId = room.controllerId
-      room.claim(socket.id, { force: true })
+      room.claim(socket.id, { force: true, uid: socket.user.uid })
       io.to(matchId).emit('match:control', {
         matchId,
         controllerId: room.controllerId,
@@ -235,7 +237,7 @@ export function createApp() {
     // Commands that change nothing about the score are allowed on a decided bout.
     const HARMLESS = new Set(['FIELD_NUMBER', 'SCOREBOARD'])
 
-    socket.on('match:cmd', ({ matchId, cmd, payload, clientEventId } = {}, ack) => {
+    socket.on('match:cmd', ({ matchId, cmd, payload, clientEventId, offlineAt } = {}, ack) => {
       const room = rooms.get(matchId)
       if (!room) return ack?.({ error: 'unknown_match' })
       // Holding the mat is the authority: it was granted only after the
@@ -255,13 +257,14 @@ export function createApp() {
         }
         try {
           const before = room.state
-          const event = room.apply(cmd, payload, socket.id)
+          // An action scored offline keeps the time it happened (clamped in the room).
+          const event = room.apply(cmd, payload, socket.id, { at: Number.isFinite(offlineAt) ? offlineAt : null })
           if (event) {
             room.remember(clientEventId, event.seq)
             broadcast(matchId, { ...event, matchId, clientEventId })
             // PRD point 33: every live change is logged, corrections audited.
             tms.recordLiveEvent(socket.user, matchId, { seq: event.seq, cmd, payload, before, after: event.state, at: event.at }).catch(() => {})
-            tms.saveLiveState(matchId, { seq: room.seq, state: room.state, history: room.history }).catch(() => {})
+            tms.saveLiveState(matchId, { seq: room.seq, state: room.state, history: room.history, handoffs: room.handoffs, controllerUid: room.controllerUid, lastAt: room.lastAt }).catch(() => {})
           }
           ack?.({ ok: true, seq: room.seq })
         } catch (err) {

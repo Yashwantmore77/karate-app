@@ -4,7 +4,8 @@ import {
   AppBar, Toolbar, Box, Button, IconButton, Drawer, List, ListItemButton,
   ListItemText, Typography, Divider, Chip, Tooltip,
 } from '@mui/material'
-import { Menu as MenuIcon, Logout } from '@mui/icons-material'
+import { Menu as MenuIcon, Logout, InstallMobile } from '@mui/icons-material'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
 import { useConnection } from '../state/ConnectionContext'
@@ -100,6 +101,7 @@ export default function AppNav({ user, profile }) {
   const navigate = useNavigate()
   const { logout } = useSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { canInstall, install } = useInstallPrompt()
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
@@ -178,6 +180,12 @@ export default function AppNav({ user, profile }) {
             size="small"
             sx={{ display: { xs: 'none', sm: 'inline-flex' }, mr: 1, textTransform: 'capitalize' }}
           />
+
+          {canInstall && (
+            <Tooltip title="Install the app on this device">
+              <IconButton color="inherit" aria-label="Install app" onClick={install} sx={{ mr: 0.5 }}><InstallMobile /></IconButton>
+            </Tooltip>
+          )}
 
           <Tooltip title="Sign out">
             <IconButton

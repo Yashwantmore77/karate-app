@@ -31,6 +31,8 @@ export function useMatchChannel(matchId, { control = true } = {}) {
 
   const send = useRef((cmd, payload) => channel.current?.send(cmd, payload)).current
   const takeover = useRef(() => channel.current?.takeover?.()).current
+  // Offline scoring: 'apply' or 'discard' actions the server could not take on its own.
+  const resolveOffline = useRef((choice) => channel.current?.resolve?.(choice)).current
 
-  return [state, send, { ...status, takeover }]
+  return [state, send, { ...status, takeover, resolveOffline }]
 }

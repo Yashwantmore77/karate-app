@@ -1706,9 +1706,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   // --- live state (PRD v1 §28 "Interrupted match: preserve state and resume")
 
-  const saveLiveState = (matchId, snapshot) => stores.liveStates.get(matchId).then((row) => (row
-    ? stores.liveStates.update(matchId, { seq: snapshot.seq, state: snapshot.state, history: snapshot.history || [], savedAt: iso() })
-    : stores.liveStates.insert({ id: matchId, seq: snapshot.seq, state: snapshot.state, history: snapshot.history || [], savedAt: iso() })))
+  const saveLiveState = (matchId, snapshot) => {
+    // Who held the mat is kept too, so offline scoring knows after a restart
+    // whether someone else took over meanwhile.
+    const doc = {
+      seq: snapshot.seq, state: snapshot.state, history: snapshot.history || [], savedAt: iso(),
+      handoffs: snapshot.handoffs || 0, controllerUid: snapshot.controllerUid || null, lastAt: snapshot.lastAt || 0,
+    }
+    return stores.liveStates.get(matchId).then((row) => (row ? stores.liveStates.update(matchId, doc) : stores.liveStates.insert({ id: matchId, ...doc })))
+  }
   const loadLiveState = (matchId) => stores.liveStates.get(matchId)
 
   /**

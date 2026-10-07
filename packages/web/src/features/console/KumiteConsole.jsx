@@ -129,7 +129,8 @@ export default function KumiteConsole({
       outcome: state.outcome?.ended && state.outcome.winner
         ? `${state.outcome.winner === 'aka' ? 'AKA' : 'AO'} wins`
         : null,
-    })
+    // Offline, the hall screen simply waits for the next publish.
+    }).catch(() => {})
     publish()
     const id = setInterval(publish, 2000)
     return () => clearInterval(id)
@@ -332,6 +333,33 @@ export default function KumiteConsole({
           Another device is running this mat, so the controls are read-only.
           Taking over moves control here and makes that device read-only.
         </Alert>
+      )}
+
+      {/* Offline scoring (Phase 2): the bout goes on, and syncs when the connection is back. */}
+      {!observing && mat.offline && !mat.conflict && (
+        <Alert severity="warning" sx={{ mb: 2, fontWeight: 700 }}>
+          Offline: scoring on this device. {mat.pending ? `${mat.pending} action${mat.pending === 1 ? '' : 's'} will be sent when the connection is back.` : 'Actions will be sent when the connection is back.'}
+        </Alert>
+      )}
+      {!observing && mat.syncing && (
+        <Alert severity="info" sx={{ mb: 2 }}>Back online: sending {mat.pending} offline action{mat.pending === 1 ? '' : 's'}…</Alert>
+      )}
+      {!observing && mat.conflict && (
+        <Alert severity="error" sx={{ mb: 2 }}
+          action={(
+            <Stack direction="row" spacing={1}>
+              <Button color="inherit" size="small" onClick={() => mat.resolveOffline('apply')}>Apply mine</Button>
+              <Button color="inherit" size="small" onClick={() => mat.resolveOffline('discard')}>Use the server&apos;s</Button>
+            </Stack>
+          )}>
+          {mat.conflict.reason === 'taken'
+            ? `Another device holds this mat now. Your ${mat.pending} offline action${mat.pending === 1 ? '' : 's'} have not been sent.`
+            : `Someone else scored this bout while you were offline. Your ${mat.pending} offline action${mat.pending === 1 ? '' : 's'} have not been sent.`}
+          {' '}Apply them on top (takes the mat back), or drop them and use the bout as the server has it.
+        </Alert>
+      )}
+      {!observing && mat.replayErrors > 0 && !mat.syncing && (
+        <Alert severity="info" sx={{ mb: 2 }}>{mat.replayErrors} offline action{mat.replayErrors === 1 ? ' was' : 's were'} refused by the server (for example, the bout was already decided).</Alert>
       )}
 
       {!observing && mat.lastError === 'taken_over' && (

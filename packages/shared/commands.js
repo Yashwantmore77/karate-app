@@ -86,6 +86,22 @@ export const pushHistory = (history, state) =>
 
 const other = (side) => (side === 'ao' ? 'aka' : 'ao')
 
+/**
+ * One step of a bout: a command applied (or undone) against the state and its
+ * undo history. The server's match room and a console scoring offline both
+ * use this, so a bout scored offline replays to exactly the same result.
+ * Returns { state, history, changed }.
+ */
+export function stepBout({ state, history = [] }, cmd, payload, at) {
+  if (cmd === UNDO) {
+    if (!history.length) return { state, history, changed: false }
+    return { state: history[history.length - 1], history: history.slice(0, -1), changed: true }
+  }
+  const next = withOutcome(applyCommand(state, cmd, payload, at), undefined, at)
+  if (next === state) return { state, history, changed: false }
+  return { state: next, history: pushHistory(history, state), changed: true }
+}
+
 export class UnknownCommand extends Error {
   constructor(cmd) {
     super(`unknown command ${cmd}`)
