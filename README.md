@@ -87,7 +87,9 @@ SEED_SCENARIOS=true npm run server         # no database: load them into memory 
 ```
 
 `--wipe` removes every tournament with all its data, and every match and category, including
-older ones. Accounts, organisations and rulesets stay. It writes a backup to
+older ones, plus the coach logins of those tournaments. Staff accounts, organisations and rulesets stay.
+If the database has no referee or judge accounts, test officials are created
+(`test.referee1@test.local`, `test.judge1@test.local` … password `test12345`) so every match has a panel. It writes a backup to
 `packages/api/backups/before-wipe-<time>.json` first (`npm run restore -w @kumite/api -- <file>` brings it back).
 Dates are counted from the day it runs, so "open" is really open and "live" is today.
 

@@ -6,8 +6,9 @@
 //
 // --wipe removes every tournament with all its data (teams, players, pools,
 // matches, results, certificates, passes, audit entries) and every match and
-// category, including ones from before the tournament system. Accounts,
-// organisations and rulesets are kept. A backup is written first to
+// category, including ones from before the tournament system, and the coach
+// logins of those tournaments. Staff accounts, organisations and rulesets are
+// kept. A backup is written first to
 // backups/before-wipe-<time>.json, so the old data can be restored with
 // `npm run restore -- <file>`.
 //
@@ -27,11 +28,12 @@ import { isMongoConfigured, closeMongo } from '../db/mongo.js'
 import { createTms } from '@kumite/shared/tms.js'
 import { seededRandom } from '@kumite/shared/pools.js'
 import { boutOutcome } from '@kumite/shared/results.js'
-import { listAssignableOfficials } from '../auth/users.js'
+import { listAssignableOfficials, listCoachAccounts, deleteUser, createUser, findUserRecordByEmail } from '../auth/users.js'
 import { DEFAULT_SLOT_MINUTES, endOfSlot } from '../lib/schedule.js'
 
 export const SCENARIO_PREFIX = 'test-'
 export const LINK_PASSWORD = 'coach123'
+export const OFFICIAL_PASSWORD = 'test12345' // accounts need 8+ characters
 const admin = { uid: 'admin-uid-001', role: 'super_admin', meta: { ip: null, userAgent: 'seed-scenarios' } }
 
 // Kept out of a wipe: they are not tournament data.
@@ -65,6 +67,18 @@ export async function wipeTournaments(stores) {
   for (const name of WIPED_COLLECTIONS) {
     const n = await stores[name].removeWhere({})
     if (n) removed[name] = n
+  }
+  return removed
+}
+
+/** Team manager logins of tournaments that no longer exist. */
+export async function removeOrphanCoaches(stores) {
+  const live = new Set((await stores.tournaments.list({})).map((t) => t.id))
+  let removed = 0
+  for (const coach of await listCoachAccounts()) {
+    if (live.has(coach.tournamentId)) continue
+    await deleteUser(coach.uid)
+    removed += 1
   }
   return removed
 }
@@ -220,17 +234,28 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
     return { pools, created }
   }
 
-  /** Mat times from 09:00 on the first day, with a referee and judges where accounts exist. */
+  /**
+   * Mat times from 09:00 on the first day, with a referee and judges. Run
+   * again later, it schedules only bouts that have no time yet (knockout
+   * rounds created as winners go through), after the last one on each mat.
+   */
   async function schedule(t, { officials: assign = true } = {}) {
-    const first = new Date(`${day(0)}T00:00:00Z`)
     const tour = await stores.tournaments.get(t.id)
-    const start = new Date(`${tour.startDate}T03:30:00Z`).getTime() || first.getTime()
+    const start = new Date(`${tour.startDate}T03:30:00Z`).getTime()
+    const slot = DEFAULT_SLOT_MINUTES * 60_000
+    const matches = await tms.listMatches(t.id)
     const next = {}
-    let i = 0
-    for (const m of await tms.listMatches(t.id)) {
+    for (const m of matches) {
+      if (!m.scheduledAt) continue
       const mat = m.mat || 1
-      const startsAt = new Date(start + (next[mat] || 0) * DEFAULT_SLOT_MINUTES * 60_000).toISOString()
-      next[mat] = (next[mat] || 0) + 1
+      next[mat] = Math.max(next[mat] || start, new Date(m.scheduledAt).getTime() + slot)
+    }
+    let i = 0
+    for (const m of matches) {
+      if (m.scheduledAt) continue
+      const mat = m.mat || 1
+      const startsAt = new Date(next[mat] || start).toISOString()
+      next[mat] = (next[mat] || start) + slot
       const patch = { scheduledAt: startsAt, endsAt: endOfSlot(startsAt, DEFAULT_SLOT_MINUTES) }
       if (assign && officials.referees.length) {
         patch.refereeId = officials.referees[i % officials.referees.length].uid
@@ -284,9 +309,30 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
     }
   }
 
+  /**
+   * The referees and judges to put on matches. When the database has none,
+   * test officials are created, so every scheduled match has a panel.
+   */
   async function loadOfficials() {
-    const all = await listAssignableOfficials().catch(() => [])
-    officials = { referees: all.filter((u) => u.role === 'referee'), judges: all.filter((u) => u.role === 'judge') }
+    const read = async () => {
+      const all = await listAssignableOfficials().catch(() => [])
+      return { referees: all.filter((u) => u.role === 'referee'), judges: all.filter((u) => u.role === 'judge') }
+    }
+    officials = await read()
+    const wanted = [
+      ...(officials.referees.length ? [] : [1, 2].map((n) => ({ email: `test.referee${n}@test.local`, role: 'referee' }))),
+      ...(officials.judges.length ? [] : [1, 2, 3, 4].map((n) => ({ email: `test.judge${n}@test.local`, role: 'judge', seat: n }))),
+    ]
+    const created = []
+    for (const account of wanted) {
+      if (await findUserRecordByEmail(account.email)) continue
+      await createUser({ ...account, password: OFFICIAL_PASSWORD })
+      created.push(account.email)
+    }
+    if (created.length) {
+      log(`[seed] no referee/judge accounts found, so test officials were created (password ${OFFICIAL_PASSWORD}): ${created.join(', ')}`)
+      officials = await read()
+    }
   }
 
   return { tms, random, pick, day, name, dobFor, tournament, teams, players, approve, weighAll, steps, draw, schedule, fight, boutsOf, openBouts, finishDivision, kata, loadOfficials, get officials() { return officials } }
@@ -309,6 +355,8 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
   if (wipe) {
     if (backup) await backupFirst(stores, log)
     const removed = await wipeTournaments(stores)
+    const coaches = await removeOrphanCoaches(stores)
+    if (coaches) removed['coach logins'] = coaches
     log(`[seed] wiped: ${Object.entries(removed).map(([k, n]) => `${k} ${n}`).join(', ') || 'nothing to remove'}`)
   }
   const existing = (await stores.tournaments.list({})).filter((t) => String(t.slug || '').startsWith(SCENARIO_PREFIX))
@@ -586,6 +634,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     // The women's kata: round 1 set up, not started yet.
     await tms.createKataRound(admin, t.id, key('Seniors Female', 'kata'), { seed: 2026 })
 
+    await b.schedule(t) // knockout bouts created as winners went through
     await tms.generatePasses(admin, t.id, { kinds: ['player', 'coach'] })
     const passes = await tms.listPasses(t.id)
     for (const p of passes.slice(0, Math.floor(passes.length * 0.7))) await tms.checkIn(admin, t.id, p.code)
@@ -632,6 +681,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
       else if (d.playerIds.length === 1) await tms.decideSingleEntry(admin, t.id, d.key, 'award')
       else await b.finishDivision(t, d.key)
     }
+    await b.schedule(t)
     await tms.publishResults(admin, t.id, true)
     await tms.generateCertificates(admin, t.id, { types: ['medal', 'participation'] })
     await tms.issueCustomCertificate(admin, t.id, { name: all[3].name, award: 'Best Fighter of the Tournament', club: all[3].club })
