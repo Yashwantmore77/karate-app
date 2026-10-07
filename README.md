@@ -78,6 +78,32 @@ npm run dev
 With no `MONGODB_URI` the API keeps everything in memory and forgets it on
 restart. Its seeded accounts are listed in `packages/api/auth/users.js`.
 
+### Test tournaments (every scenario)
+
+```bash
+npm run seed:scenarios                     # add the 10 test tournaments
+npm run seed:scenarios -- --wipe --yes     # DELETE every tournament and match first, then add them
+SEED_SCENARIOS=true npm run server         # no database: load them into memory at start
+```
+
+`--wipe` removes every tournament with all its data, and every match and category, including
+older ones. Accounts, organisations and rulesets stay. It writes a backup to
+`packages/api/backups/before-wipe-<time>.json` first (`npm run restore -w @kumite/api -- <file>` brings it back).
+Dates are counted from the day it runs, so "open" is really open and "live" is today.
+
+| # | Tournament | Stage | What it shows |
+| --- | --- | --- | --- |
+| 01 | Draft Cup | Draft | Details missing; registration cannot open yet |
+| 02 | Monsoon Open | Registration open | Coach window starts next week |
+| 03 | District Open | Registration open | Every registration status (approved, paid, unpaid, pending, submitted by coach, rejected, sent back), payments paid / pending / failed / refunded, a possible duplicate, a player with no category, an inactive team. Coach link password `coach123` |
+| 04 | Coastal Cup | Verification | Window closed by date, link switched off, soft lock, entries still to verify |
+| 05 | Western Zone Championship | Weigh-in | Passed, moved up a category, failed, recheck, not weighed; reminder sent |
+| 06 | Senior Nationals Trials | Draw generated | Pools drawn but draw not locked; single entry awaiting a decision; 2 and 3 players; 17 split 9 + 8; knockout pool system; a pool move with a reason |
+| 07 | Cadet Cup | Ready | Matches scheduled with mats, times and officials; corners swapped; passes printed, some checked in |
+| 08 | State Championship | Live | Bouts scheduled, called, called twice, ready, open, live, paused, cancelled; results by points, senshu, hantei, 8-point gap, walkover, no-show, kiken, disqualification, manual override; an official correction; a withdrawal after the draw; single entries awarded / no competition; category results provisional (medals set by hand), verified, published, locked; knockout in progress; kata final half scored; 70% checked in |
+| 09 | Diwali Karate Cup | Completed | Everything fought, published and locked; medal, participation and special-award certificates |
+| 10 | Winter Open 2025 | Archived | Read-only history |
+
 ### Sample data
 
 ```bash

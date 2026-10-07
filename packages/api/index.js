@@ -299,7 +299,14 @@ export function createApp() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { http } = createApp()
+  const { http, stores } = createApp()
   const port = process.env.PORT || 4000
+  // Testing without a database: SEED_SCENARIOS=true loads the test tournaments
+  // into the in-memory store at start (never into MongoDB; use the script for that).
+  if (process.env.SEED_SCENARIOS === 'true' && !isMongoConfigured()) {
+    const { seedScenarios } = await import('./scripts/seed-scenarios.js')
+    await seedScenarios(stores, { log: () => {} })
+    console.log('[seed] test tournaments loaded into memory (SEED_SCENARIOS=true)')
+  }
   http.listen(port, () => console.log(`kumite server on :${port}`))
 }
