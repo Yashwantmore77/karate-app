@@ -2,6 +2,7 @@
 
 This checklist maps every section of *Karate_Tournament_Management_System_PRD_2.pdf* (PRD v1.0: 31 sections, 20 acceptance criteria, edge cases, MVP and Phase 2) to the code.
 It builds on the earlier work recorded in `PRD-CHECKLIST.md` (66-section PRD) and `KUMITE-PRD.md`.
+**Scope:** the MVP is complete. Everything not built yet, including Phase 2, the payment gateway and release checks, is recorded in `FUTURE-BACKLOG.md`.
 
 Legend:
 

@@ -140,12 +140,10 @@ scoring engine (`packages/web/src/test/memoryMatchChannel.js`).
 
 ## Known gaps
 
-- **Kata** has no console yet; it is parked in the PRD. A kata tournament still
-  opens the kumite console.
-- **The scoreboard shows one mat.** `/display` is a single "what is on now"
-  document, so with two mats live the last referee to publish wins.
-- **Assignment is not enforced live.** The schedule refuses double-booking, but
-  nothing yet stops an unassigned referee from opening and running a bout.
-- **Seeded accounts use a known password**, and the login page offers them as
-  one-click sign-ins. Change the passwords on any deployment that anyone else
-  can reach; the one-click buttons stop working once you do.
+The current focus is the MVP, which is complete. Everything deferred is recorded in `FUTURE-BACKLOG.md`:
+
+- what to check before a large event (penetration test, mock tournament, load test against the real server)
+- the final phase (payment gateway)
+- the Phase 2 features
+- smaller improvements, for example a hall scoreboard per mat (`/display` shows one bout; `/live` shows every mat)
+- decisions not to do something (other languages, public player photos)
