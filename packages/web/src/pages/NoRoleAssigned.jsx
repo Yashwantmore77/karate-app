@@ -7,7 +7,7 @@ export default function NoRoleAssigned() {
   const { logout } = useSession()
   return (
     <Container maxWidth="sm">
-      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="100vh" gap={2}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', gap: 2 }}>
         <Typography variant="h2">No role assigned</Typography>
         <Typography variant="body1" color="textSecondary" align="center">
           This account has no role, so there is nothing for it to open yet. Ask an

@@ -1,6 +1,7 @@
-import { Grid, Stack, TextField, MenuItem, FormControl, FormLabel, RadioGroup, Radio, FormControlLabel, Checkbox, FormGroup, FormHelperText, Button, Typography } from '@mui/material'
+import { Grid, Stack, TextField, MenuItem, FormControl, FormLabel, RadioGroup, Radio, FormControlLabel, Checkbox, FormGroup, FormHelperText, Button, Typography, Autocomplete } from '@mui/material'
 import { useState } from 'react'
-import { BUILT_IN_KEYS } from '@kumite/shared/registration.js'
+import { BUILT_IN_KEYS, fieldShown, CALCULATED_FORMULAS, SYSTEM_SOURCES } from '@kumite/shared/registration.js'
+import { COUNTRIES, statesOf } from '@kumite/shared/geography.js'
 import { checkFile } from '@kumite/shared/files.js'
 import { readFileBase64 } from './download'
 
@@ -9,11 +10,20 @@ const MAX_FILE = 2 * 1024 * 1024
 
 const valueOf = (value, key) => (BUILT_IN_KEYS.has(key) ? value[key] : value.extra?.[key])
 
+// PRD v1 §8: what a calculated or system field shows. Worked out by the
+// server; until the player is saved there is nothing to show yet.
+function computedValue(field, value, categoryOf) {
+  if (field.type === 'system') return value[field.source] ?? null
+  if (field.formula === 'age') return value.age ?? null
+  if (['category', 'ageGroup', 'weightCategory'].includes(field.formula) && categoryOf) return categoryOf(value, field.formula)
+  return null
+}
+
 /**
  * Renders a tournament's registration form (sections 11-12) from its field
  * list, so the admin's form builder and the coach's screen show the same thing.
  */
-export default function PlayerForm({ fields, value, onChange, errors = [], teams = null, disabled = false, onUpload = null, onOpenFile = null, coach = false }) {
+export default function PlayerForm({ fields, value, onChange, errors = [], teams = null, disabled = false, onUpload = null, onOpenFile = null, coach = false, categoryOf = null }) {
   const [uploading, setUploading] = useState(null)
   const [uploadError, setUploadError] = useState({})
   const set = (key, v) => {
@@ -32,9 +42,18 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
           </TextField>
         </Grid>
       )}
-      {fields.filter((f) => f.visible !== false).map((field) => {
+      {fields.filter((f) => f.visible !== false && fieldShown(f, (key) => valueOf(value, key))).map((field) => {
         const v = valueOf(value, field.key)
         const err = errorFor(field.key)
+        if (field.type === 'calculated' || field.type === 'system') {
+          const shown = computedValue(field, value, categoryOf)
+          return (
+            <Grid key={field.key} size={{ xs: 12, sm: 6 }}>
+              <TextField fullWidth disabled label={field.label} value={shown ?? 'Worked out when the player is saved'}
+                helperText={field.helpText || CALCULATED_FORMULAS[field.formula] || SYSTEM_SOURCES[field.source] || 'Filled in by the system'} />
+            </Grid>
+          )
+        }
         // PRD point 4: the system's Player ID is shown, never typed, and a
         // read-only field is the organisers' to fill in.
         if (field.generated) {
@@ -46,9 +65,30 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
         }
         const off = disabled || (coach && field.readOnly)
         const label = `${field.label}${field.required && !(coach && field.readOnly) ? ' *' : ''}${coach && field.readOnly ? ' (filled by organisers)' : ''}`
-        const common = { fullWidth: true, label, disabled: off, error: !!err, helperText: err }
+        const help = err || field.helpText || (field.defaultValue != null && (v == null || v === '') ? `Default: ${[].concat(field.defaultValue).join(', ')}` : undefined)
+        const common = { fullWidth: true, label, disabled: off, error: !!err, helperText: help, placeholder: field.placeholder }
         let input
-        if (field.key === 'events' || (field.type === 'checkbox' && field.options?.length)) {
+        if (field.type === 'multiselect') {
+          input = (
+            <Autocomplete multiple disabled={off} options={field.options || []} value={Array.isArray(v) ? v : []}
+              onChange={(_e, list) => set(field.key, list)} renderInput={(params) => <TextField {...params} {...common} />} />
+          )
+        } else if (field.type === 'country') {
+          input = (
+            <Autocomplete disabled={off} options={COUNTRIES} value={v || null} autoHighlight
+              onChange={(_e, c) => onChange(BUILT_IN_KEYS.has(field.key)
+                ? { ...value, [field.key]: c || '', ...(field.key === 'country' && c !== value.country ? { state: '' } : {}) }
+                : { ...value, extra: { ...(value.extra || {}), [field.key]: c || '' } })}
+              renderInput={(params) => <TextField {...params} {...common} />} />
+          )
+        } else if (field.type === 'state' && statesOf(value.country).length) {
+          input = (
+            <Autocomplete disabled={off} options={statesOf(value.country)} value={v || null} autoHighlight
+              onChange={(_e, st) => set(field.key, st || '')} renderInput={(params) => <TextField {...params} {...common} />} />
+          )
+        } else if (field.type === 'textarea') {
+          input = <TextField {...common} multiline minRows={3} value={v ?? ''} onChange={(e) => set(field.key, e.target.value)} />
+        } else if (field.key === 'events' || (field.type === 'checkbox' && field.options?.length)) {
           const list = Array.isArray(v) ? v : []
           input = (
             <FormControl error={!!err} disabled={off}>
@@ -129,11 +169,11 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
           const type = field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'
           input = (
             <TextField {...common} type={type} value={v ?? ''}
-              slotProps={{ inputLabel: type === 'date' ? { shrink: true } : undefined, htmlInput: type === 'number' ? { step: '0.1', min: 0 } : undefined }}
+              slotProps={{ inputLabel: type === 'date' ? { shrink: true } : undefined, htmlInput: type === 'number' ? { step: '0.1', min: field.min ?? 0, max: field.max } : type === 'date' ? undefined : { maxLength: field.max } }}
               onChange={(e) => set(field.key, type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />
           )
         }
-        const wide = field.key === 'events' || field.type === 'radio' || field.type === 'checkbox'
+        const wide = field.key === 'events' || field.type === 'radio' || field.type === 'checkbox' || field.type === 'textarea'
         return <Grid key={field.key} size={{ xs: 12, sm: wide ? 12 : 6 }}>{input}</Grid>
       })}
     </Grid>

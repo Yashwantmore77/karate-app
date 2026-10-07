@@ -2,7 +2,9 @@ import { httpGet, httpPost, httpPatch, httpDelete } from './http'
 
 /** Accounts. Administered here; there is no self-service signup. */
 
-export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer', 'announcer', 'viewer']
+export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer', 'announcer', 'scoreboard_operator', 'viewer']
+// Roles an account may hold inside one tournament (PRD v1 §4).
+export const TOURNAMENT_ROLES = ['admin', 'registration_officer', 'weighin_officer', 'referee', 'judge', 'announcer', 'scoreboard_operator', 'viewer']
 
 export const list = async () => (await httpGet('/users?limit=100')).users
 

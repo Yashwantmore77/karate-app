@@ -15,14 +15,14 @@ import { PageLoader } from '../../components/Loader'
  * scores each performer, in order, from their own seat. A score can be
  * changed until the admin closes the round; every change is recorded.
  */
-export default function JudgeKata({ profile }) {
+export default function JudgeKata({ profile, uid = null }) {
   const navigate = useNavigate()
   const { tournamentId } = useParams()
   if (!tournamentId) return <TournamentSelector title="Kata scoring: choose a tournament" onPick={(t) => navigate(`/judge/kata/${t.id}`)} />
-  return <KataPanel tid={tournamentId} seat={profile?.seat} />
+  return <KataPanel tid={tournamentId} accountSeat={profile?.seat} uid={uid} />
 }
 
-function KataPanel({ tid, seat }) {
+function KataPanel({ tid, accountSeat, uid }) {
   const action = useAction()
   const [divisions, setDivisions] = useState(null)
   const [roundId, setRoundId] = useState(null)
@@ -39,28 +39,49 @@ function KataPanel({ tid, seat }) {
   // Pick the only open round without asking.
   useEffect(() => { if (!roundId && open.length === 1) setRoundId(open[0].id) }, [open, roundId])
 
-  if (!seat) return <Container sx={{ py: 4 }}><Alert severity="warning">Your account has no judge seat. Ask the tournament admin to set one (J1 to J7).</Alert></Container>
+  // PRD v1 §14: the seat a judge holds on this round, as the admin assigned it.
+  const assigned = round && uid ? Object.entries(round.judgeAssignments || {}).find(([, who]) => who === uid)?.[0] : null
+  const seat = assigned ? Number(assigned) : accountSeat
   if (!divisions) return <PageLoader label="Loading kata rounds…" />
+  const limits = round ? { min: round.minScore ?? KATA_MIN, max: round.maxScore ?? KATA_MAX, precision: round.precision ?? 1 } : { min: KATA_MIN, max: KATA_MAX, precision: 1 }
+  const step = 1 / 10 ** limits.precision
 
   const performers = round ? [...round.rows].sort((a, b) => a.order - b.order) : []
   const mine = (r) => r.bySeat?.[seat]
   const nextUp = performers.find((r) => mine(r) == null)
 
+  const bad = () => action.notify({ severity: 'error', text: `A score is ${limits.min} to ${limits.max}, in steps of ${step}.` })
+  // A clientside id makes a resend after a dropped connection count once (PRD v1 §15).
+  const submissionId = () => `${uid || 'j'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
   const submit = async (r) => {
-    const value = normalizeKataScore(drafts[r.playerId])
-    if (value == null) return action.notify({ severity: 'error', text: `A score is ${KATA_MIN.toFixed(1)} to ${KATA_MAX.toFixed(1)}, in steps of 0.1.` })
-    const out = await action.run(() => tms.kata.score(tid, round.id, { playerId: r.playerId, score: value }), `${r.name}: ${value.toFixed(1)}`)
-    if (out) { setRound(out.round); setDrafts((d) => ({ ...d, [r.playerId]: undefined })) }
+    const d = drafts[r.playerId] || {}
+    let body
+    if (round.components) {
+      const technical = normalizeKataScore(d.technical, limits)
+      const athletic = normalizeKataScore(d.athletic, limits)
+      if (technical == null || athletic == null) return bad()
+      body = { playerId: r.playerId, technical, athletic }
+    } else {
+      const score = normalizeKataScore(d.score, limits)
+      if (score == null) return bad()
+      body = { playerId: r.playerId, score }
+    }
+    const out = await action.run(() => tms.kata.score(tid, round.id, { ...body, submissionId: submissionId() }), `${r.name}: scored`)
+    if (out) { setRound(out.round); setDrafts((x) => ({ ...x, [r.playerId]: undefined })) }
+  }
+  const ready = (r) => {
+    const d = drafts[r.playerId] || {}
+    return round.components ? d.technical != null && d.technical !== '' && d.athletic != null && d.athletic !== '' : d.score != null && d.score !== ''
   }
 
   return (
     <Container maxWidth="md" sx={{ py: 3 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 2 }}>
         <Typography variant="h1" sx={{ flex: 1 }}>Kata scoring</Typography>
-        <Chip color="primary" label={`Judge J${seat}`} />
+        {seat ? <Chip color="primary" label={`Judge J${seat}`} /> : null}
       </Stack>
 
-      {!open.length && <Alert severity="info">No kata round is open for scoring. This page updates when the admin opens one.</Alert>}
+      {!open.length && <Alert severity="info">No kata round you are judging is open. This page updates when the admin assigns you and starts a round.</Alert>}
       {open.length > 1 && (
         <Paper sx={{ mb: 2 }}>
           <List dense>
@@ -93,15 +114,17 @@ function KataPanel({ tid, seat }) {
                     <Typography sx={{ fontWeight: 600 }}>{r.name}</Typography>
                     <Typography variant="body2" color="text.secondary">{r.club || r.team || ''}</Typography>
                   </Box>
-                  {given != null && <Chip color="success" label={`Your score ${given.toFixed(1)}`} />}
+                  {given != null && <Chip color="success" label={`Your score ${given.toFixed(limits.precision)}`} />}
                   {round.status === 'open' && (
                     <>
-                      <TextField size="small" type="number" label={given != null ? 'Change to' : 'Score'} sx={{ width: 110 }}
-                        value={drafts[r.playerId] ?? ''} autoFocus={isNext}
-                        slotProps={{ htmlInput: { min: KATA_MIN, max: KATA_MAX, step: 0.1, inputMode: 'decimal' } }}
-                        onChange={(e) => setDrafts({ ...drafts, [r.playerId]: e.target.value })}
-                        onKeyDown={(e) => e.key === 'Enter' && submit(r)} />
-                      <Button variant={isNext ? 'contained' : 'outlined'} disabled={drafts[r.playerId] == null || drafts[r.playerId] === '' || action.busy} onClick={() => submit(r)}>
+                      {(round.components ? [['technical', 'Technical'], ['athletic', 'Athletic']] : [['score', given != null ? 'Change to' : 'Score']]).map(([k, label], idx) => (
+                        <TextField key={k} size="small" type="number" label={label} sx={{ width: 110 }}
+                          value={drafts[r.playerId]?.[k] ?? ''} autoFocus={isNext && idx === 0}
+                          slotProps={{ htmlInput: { min: limits.min, max: limits.max, step, inputMode: 'decimal' } }}
+                          onChange={(e) => setDrafts({ ...drafts, [r.playerId]: { ...(drafts[r.playerId] || {}), [k]: e.target.value } })}
+                          onKeyDown={(e) => e.key === 'Enter' && ready(r) && submit(r)} />
+                      ))}
+                      <Button variant={isNext ? 'contained' : 'outlined'} disabled={!ready(r) || action.busy} onClick={() => submit(r)}>
                         {given != null ? 'Change' : 'Submit'}
                       </Button>
                     </>

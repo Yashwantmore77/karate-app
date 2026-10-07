@@ -562,7 +562,7 @@ export default function RefereeMatchList({ uid, profile }) {
             {/* Optional, like the panel: the draw is made before the timetable
                 is, and a bout with no time yet blocks nobody. Giving it one is
                 what brings it into the clash check. */}
-            <Stack direction="row" spacing={2} alignItems="flex-start">
+            <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
               <TextField
                 fullWidth
                 margin="normal"

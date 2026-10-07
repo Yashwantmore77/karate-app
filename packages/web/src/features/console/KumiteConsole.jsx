@@ -113,6 +113,9 @@ export default function KumiteConsole({
       fieldNumber: state.fieldNumber,
       aoName: blueComp?.name,
       akaName: redComp?.name,
+      // PRD v1 §13: the scoreboard shows each fighter's club.
+      aoClub: blueComp?.club || blueComp?.team || null,
+      akaClub: redComp?.club || redComp?.team || null,
       aoScore: state.match.scores.ao,
       akaScore: state.match.scores.aka,
       senshu: state.match.senshu,
@@ -198,7 +201,17 @@ export default function KumiteConsole({
     shikkaku: 'by shikkaku',
     kiken: 'by kiken',
     tieBreak: 'level \u2014 needs extra time or a decision',
+    goldenScore: 'by golden score',
+    extraTime: 'in extra time',
+    draw: 'level \u2014 a draw',
   }
+  // PRD v1 §6: the penalty ladder and categories are the tournament's.
+  const ladder = view.rules?.penaltyLadder || rules?.penaltyLadder || PENALTY_LADDER
+  const penaltyCategories = (view.rules?.penaltyCategories ?? rules?.penaltyCategories) === 1 ? ['c1'] : PENALTY_CATEGORIES
+  const overtimeMode = view.rules?.overtime || rules?.overtime || 'senshu'
+  // Level at time with an overtime rule: offer extra time / golden score.
+  const overtimeDue = !view.inOvertime && !view.decision && mainClock.expired
+    && evaluateOutcome(view.match, view.rules || DEFAULT_RULES, { expired: true, inOvertime: false }).method === 'overtimeDue'
   const outcome = view.outcome
   const outcomeName = outcome?.winner === 'ao' ? blueComp?.name
     : outcome?.winner === 'aka' ? redComp?.name
@@ -207,11 +220,11 @@ export default function KumiteConsole({
   const renderPenaltyRow = (side, category) => {
     const level = view.match.penalties[side][category]
     return (
-      <Stack direction="row" spacing={1} key={category} alignItems="center">
+      <Stack direction="row" spacing={1} key={category} sx={{ alignItems: 'center' }}>
         <Typography variant="caption" sx={{ width: 72, color: WKF.onPanel, fontWeight: 700 }}>
-          {CATEGORY_LABELS[category]}
+          {penaltyCategories.length === 1 ? 'Penalties' : CATEGORY_LABELS[category]}
         </Typography>
-        {PENALTY_LADDER.map((step, idx) => (
+        {ladder.map((step, idx) => (
           <FormControlLabel
             key={step}
             sx={{ mr: 0.5 }}
@@ -289,8 +302,8 @@ export default function KumiteConsole({
       </Stack>
 
       <Divider sx={{ my: 1, borderColor: 'rgba(255,255,255,0.35)' }} />
-      <Stack spacing={0.5} alignItems="flex-start">
-        {PENALTY_CATEGORIES.map((c) => renderPenaltyRow(side, c))}
+      <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+        {penaltyCategories.map((c) => renderPenaltyRow(side, c))}
       </Stack>
     </Paper>
   )
@@ -335,9 +348,19 @@ export default function KumiteConsole({
           )}
         >
           {outcomeName
-            ? `${outcomeName} wins ${OUTCOME_LABEL[outcome.method]}`
-            : `Scores ${OUTCOME_LABEL.tieBreak}`}
+            ? `${outcomeName} wins ${OUTCOME_LABEL[outcome.method] || ''}`
+            : `Scores ${OUTCOME_LABEL[outcome.method] || OUTCOME_LABEL.tieBreak}`}
         </Alert>
+      )}
+
+      {overtimeDue && !observing && (
+        <Alert severity="warning" sx={{ mb: 2, fontWeight: 700 }}
+          action={<Button color="inherit" size="small" disabled={disabled} onClick={() => send('OVERTIME')}>{overtimeMode === 'golden_score' ? 'Start golden score' : 'Start extra time'}</Button>}>
+          Level at time. This tournament goes to {overtimeMode === 'golden_score' ? 'golden score (first score wins)' : 'extra time'}.
+        </Alert>
+      )}
+      {view.inOvertime && !outcome?.ended && (
+        <Alert severity="info" sx={{ mb: 2, fontWeight: 700 }}>{overtimeMode === 'golden_score' ? 'Golden score: the first score wins.' : 'Extra time.'}</Alert>
       )}
 
       <Grid container spacing={2}>
@@ -364,7 +387,7 @@ export default function KumiteConsole({
                   variant="outlined"
                   startIcon={<UndoIcon />}
                   disabled={disabled}
-                  onClick={() => send(UNDO)}
+                  onClick={() => setPendingAction({ label: 'Undo the last action', run: () => send(UNDO) })}
                   sx={utilityButtonSx}
                 >
                   Undo
@@ -538,10 +561,10 @@ export default function KumiteConsole({
       </Dialog>
 
       <Dialog open={!!pendingAction} onClose={() => setPendingAction(null)}>
-        <DialogTitle>Match clock is running</DialogTitle>
+        <DialogTitle>{clockRunning ? 'Match clock is running' : 'Please confirm'}</DialogTitle>
         <DialogContent>
           <Typography>
-            {pendingAction?.label} while the clock is still running at {mainClock.display}?
+            {pendingAction?.label}{clockRunning ? ` while the clock is still running at ${mainClock.display}` : ''}?
           </Typography>
         </DialogContent>
         <DialogActions>

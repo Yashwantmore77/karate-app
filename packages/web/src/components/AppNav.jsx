@@ -8,6 +8,7 @@ import { Menu as MenuIcon, Logout } from '@mui/icons-material'
 import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
 import { useConnection } from '../state/ConnectionContext'
+import { useT } from '../i18n'
 
 const CONNECTION = {
   online: { label: '● Live', color: 'success' },
@@ -27,6 +28,7 @@ const MENUS = {
     { label: 'Matches', to: '/referee' },
     { label: 'Accounts', to: '/admin/accounts' },
     { label: 'Sign-ins', to: '/admin/sign-ins' },
+    { label: 'System', to: '/admin/system' },
     { label: 'Scoreboard', to: '/display' },
     { label: 'Live board', to: '/live' },
     { label: 'Public site', to: '/tournaments' },
@@ -51,6 +53,16 @@ const MENUS = {
   announcer: [
     { label: 'Call matches', to: '/announcer' },
     { label: 'Live board', to: '/live' },
+    { label: 'Public site', to: '/tournaments' },
+  ],
+  // PRD v1 §4: runs the hall screens.
+  scoreboard_operator: [
+    { label: 'Scoreboard control', to: '/scoreboard_operator' },
+    { label: 'Scoreboard', to: '/display' },
+    { label: 'Live board', to: '/live' },
+  ],
+  coach: [
+    { label: 'My team', to: '/coach' },
     { label: 'Public site', to: '/tournaments' },
   ],
   viewer: [
@@ -87,13 +99,14 @@ export default function AppNav({ user, profile }) {
   const navigate = useNavigate()
   const { logout } = useSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { t, lang, setLanguage } = useT()
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
   const base = profile?.role === 'super_admin'
-    ? [...MENUS.admin.slice(0, 3), { label: 'Organisations', to: '/admin/organizations' }, ...MENUS.admin.slice(3)]
+    ? [...MENUS.admin.slice(0, 3), { label: 'Organisations', to: '/admin/organizations' }, { label: 'Rulesets', to: '/admin/rulesets' }, ...MENUS.admin.slice(3)]
     : MENUS[profile?.role] || []
-  const items = base.length ? [...base, { label: 'My account', to: '/account' }] : base
+  const items = base.length && profile?.role !== 'coach' ? [...base, { label: 'My account', to: '/account' }] : base
   const onPublicScreen = ['/display', '/login', '/live'].includes(location.pathname)
   if (!user || !profile || onPublicScreen || items.length === 0) return null
 
@@ -145,7 +158,7 @@ export default function AppNav({ user, profile }) {
                     ...(isActive ? activeSx : {}),
                   }}
                 >
-                  {item.label}
+                  {t(item.label)}
                 </Button>
               )
             })}
@@ -165,6 +178,14 @@ export default function AppNav({ user, profile }) {
             size="small"
             sx={{ display: { xs: 'none', sm: 'inline-flex' }, mr: 1, textTransform: 'capitalize' }}
           />
+
+          {/* PRD v1 §25: the interface language. */}
+          <Tooltip title={t('Language')}>
+            <Button color="inherit" size="small" aria-label={t('Language')} sx={{ minWidth: 0, mr: 0.5, color: TEXT.secondary }}
+              onClick={() => setLanguage(lang === 'en' ? 'hi' : 'en')}>
+              {lang === 'en' ? 'हिन्दी' : 'EN'}
+            </Button>
+          </Tooltip>
 
           <Tooltip title="Sign out">
             <IconButton
@@ -204,7 +225,7 @@ export default function AppNav({ user, profile }) {
                   aria-current={isActive ? 'page' : undefined}
                   onClick={() => go(item.to)}
                 >
-                  <ListItemText primary={item.label} />
+                  <ListItemText primary={t(item.label)} />
                 </ListItemButton>
               )
             })}

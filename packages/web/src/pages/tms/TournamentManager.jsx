@@ -21,6 +21,9 @@ import CertificatesTab from './CertificatesTab'
 import ReportsTab from './ReportsTab'
 import AuditTab from './AuditTab'
 import { PageLoader } from '../../components/Loader'
+import { ExportAuditContext } from '../../components/tms/exportAudit'
+import { tms } from '../../data/tms'
+import { useT } from '../../i18n'
 
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
 // only when the signed-in role holds its permission (section 3).
@@ -48,7 +51,10 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   const [missing, setMissing] = useState(false)
   const [version, setVersion] = useState(0)
   const action = useAction()
-  const role = profile?.role || 'admin'
+  const { t: tr } = useT()
+  // PRD v1 §4: an account may hold a different role inside this one tournament.
+  const role = profile?.tournamentRoles?.[tournamentId] || profile?.role || 'admin'
+  const logExport = useCallback((entry) => tms.logExport(tournamentId, entry), [tournamentId])
 
   const reload = useCallback(async () => {
     const t = await tournamentStore.get(tournamentId)
@@ -86,14 +92,18 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
             <StatusBadge status={status} />
             <StatusBadge status={tournament.entriesLocked ? 'COMPLETED' : 'DRAFT'} label={tournament.entriesLocked ? 'Entries locked' : 'Entries open'} />
             <StatusBadge status={tournament.drawLocked ? 'COMPLETED' : 'DRAFT'} label={tournament.drawLocked ? 'Draw locked' : 'Draw open'} />
+            {tournament.softLocked && !tournament.entriesLocked && <StatusBadge status="PENDING_VERIFICATION" label="Coach entries closed" />}
+            {tournament.weighInClosed && <StatusBadge status="COMPLETED" label="Weigh-in closed" />}
           </Stack>
         </Toolbar>
         <Tabs value={current?.key || false} onChange={(_e, key) => setParams({ tab: key })} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ px: 1 }}>
-          {tabs.map((t) => <Tab key={t.key} value={t.key} label={t.label} />)}
+          {tabs.map((t) => <Tab key={t.key} value={t.key} label={tr(t.label)} />)}
         </Tabs>
       </PageBar>
       <Container maxWidth="xl" sx={{ py: 3 }}>
-        {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} goTab={(key) => setParams({ tab: key })} />}
+        <ExportAuditContext.Provider value={logExport}>
+          {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} goTab={(key) => setParams({ tab: key })} />}
+        </ExportAuditContext.Provider>
       </Container>
       {action.feedback}
     </Box>

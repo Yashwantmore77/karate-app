@@ -7,6 +7,7 @@ import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import { MatchSides } from './MatchesTab'
 import { PageLoader } from '../../components/Loader'
+import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 
 const UPCOMING = 4
 const number = (m) => Number(String(m.matchNumber).replace(/\D/g, '')) || 0
@@ -20,9 +21,12 @@ const ago = (iso) => {
  * next ones, with a button to call them to the mat; the hall's live board
  * shows what has been called. Results are read out from the finished list.
  */
-export default function CallTab({ tournament, version, action }) {
+export default function CallTab({ tournament, version, action, role }) {
   const tid = tournament.id
   const mats = settingsOf(tournament).mats
+  // PRD v1 §4: the announcer marks who reported when a bout is called.
+  const attendance = settingsOf(tournament).attendanceEnabled !== false && can(role, P.ATTENDANCE_MARK)
+  const mark = (m, side, present) => action.run(() => tms.markAttendance(tid, m.id, { side, present }), `${side === 'aka' ? 'AKA' : 'AO'} marked ${present ? 'present' : 'absent'}`).then(load)
   const [matches, setMatches] = useState(null)
   const [moveTo, setMoveTo] = useState({})
 
@@ -57,10 +61,24 @@ export default function CallTab({ tournament, version, action }) {
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                       <Typography sx={{ fontWeight: 700 }}>{m.matchNumber}</Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>{m.categoryName} · {m.stage === 'knockout' ? m.roundName : `Pool ${m.poolName}`}</Typography>
-                      {['live', 'open'].includes(m.status) && <Chip size="small" color="error" label="On the mat" />}
+                      {['live', 'open', 'paused'].includes(m.status) && <Chip size="small" color="error" label={m.status === 'paused' ? 'Paused' : 'On the mat'} />}{['called', 'ready'].includes(m.status) && <Chip size="small" color="warning" label={m.status === 'called' ? 'Called' : 'Ready'} />}
                       {m.calledAt && <Chip size="small" color="warning" label={`Called ${m.calls > 1 ? `×${m.calls} ` : ''}${ago(m.calledAt)}`} />}
                     </Stack>
                     <MatchSides m={m} />
+                    {attendance && (
+                      <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
+                        {['aka', 'ao'].map((side) => {
+                          const state = m.attendance?.[side]
+                          return (
+                            <Stack key={side} direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                              <Typography variant="body2" sx={{ fontWeight: 700, color: side === 'aka' ? '#FF5B5B' : '#5B7BFF' }}>{side === 'aka' ? 'AKA' : 'AO'}</Typography>
+                              <Button size="small" variant={state === 'present' ? 'contained' : 'outlined'} color="success" onClick={() => mark(m, side, true)}>Present</Button>
+                              <Button size="small" variant={state === 'absent' ? 'contained' : 'outlined'} color="error" onClick={() => mark(m, side, false)}>Absent</Button>
+                            </Stack>
+                          )
+                        })}
+                      </Stack>
+                    )}
                     <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center' }}>
                       <TextField select size="small" label="To mat" value={moveTo[m.id] || m.mat || 1} sx={{ width: 100 }}
                         onChange={(e) => setMoveTo({ ...moveTo, [m.id]: e.target.value })}>

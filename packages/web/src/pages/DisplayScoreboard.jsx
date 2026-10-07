@@ -31,18 +31,25 @@ export default function DisplayScoreboard() {
   const open = live?.status === 'open'
   const stale = open && live.heartbeatAt != null && serverNow() - live.heartbeatAt > STALE_AFTER_MS
 
+  // PRD v1 §4: the scoreboard operator's announcement, shown on every state.
+  const announcement = live?.message && (
+    <Box sx={{ bgcolor: '#FFD54F', py: 1.5, px: 3, textAlign: 'center' }}>
+      <Typography sx={{ color: '#111', fontSize: 34, fontWeight: 800 }}>{live.message}</Typography>
+    </Box>
+  )
+
   if (!open) {
     return (
-      <Box sx={{
-        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        bgcolor: '#111',
-      }}>
-        <Typography sx={{ color: '#888', fontSize: 40, fontWeight: 700 }}>No live match</Typography>
+      <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#111' }}>
+        {announcement}
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Typography sx={{ color: '#888', fontSize: 40, fontWeight: 700 }}>No live match</Typography>
+        </Box>
       </Box>
     )
   }
 
-  const side = (name, score, bg, senshu) => (
+  const side = (name, score, bg, senshu, club) => (
     <Box sx={{
       flex: 1, bgcolor: bg, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', p: 4,
@@ -50,6 +57,7 @@ export default function DisplayScoreboard() {
       <Typography sx={{ color: WKF.onPanel, fontSize: 48, fontWeight: 700, textAlign: 'center' }}>
         {name}
       </Typography>
+      {club && <Typography sx={{ color: WKF.onPanel, fontSize: 28, opacity: 0.85, textAlign: 'center' }}>{club}</Typography>}
       {senshu && <Chip label="SENSHU" sx={{ bgcolor: WKF.onPanel, fontWeight: 700, my: 1 }} />}
       <Typography sx={{ color: WKF.onPanel, fontSize: 200, fontWeight: 800, lineHeight: 1 }}>
         {score}
@@ -61,13 +69,14 @@ export default function DisplayScoreboard() {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {announcement}
       {heading && (
         <Box sx={{ bgcolor: '#111', py: 1.5, textAlign: 'center' }}>
           <Typography sx={{ color: '#FFF', fontSize: 34, fontWeight: 700, letterSpacing: 1 }}>{heading}</Typography>
         </Box>
       )}
       <Stack direction="row" sx={{ flex: 1 }}>
-        {side(live.aoName, live.aoScore, WKF.ao, live.senshu === 'ao')}
+        {side(live.aoName, live.aoScore, WKF.ao, live.senshu === 'ao', live.aoClub)}
         <Box sx={{
           width: 420, bgcolor: '#FFF', display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
@@ -82,7 +91,7 @@ export default function DisplayScoreboard() {
             ? <Chip label="NOT LIVE" color="warning" sx={{ fontWeight: 700 }} />
             : <Typography sx={{ color: '#666' }}>Field {live.fieldNumber}</Typography>}
         </Box>
-        {side(live.akaName, live.akaScore, WKF.aka, live.senshu === 'aka')}
+        {side(live.akaName, live.akaScore, WKF.aka, live.senshu === 'aka', live.akaClub)}
       </Stack>
       {(live.outcome || live.next) && (
         <Box sx={{ bgcolor: '#111', py: 1.5, px: 3, display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>

@@ -8,8 +8,8 @@ export default function JudgeRouter({ uid, profile }) {
     <Routes>
       <Route path="/" element={<JudgeMatchList uid={uid} profile={profile} />} />
       <Route path="/match/:matchId" element={<JudgeMatchView profile={profile} />} />
-      <Route path="/kata" element={<JudgeKata profile={profile} />} />
-      <Route path="/kata/:tournamentId" element={<JudgeKata profile={profile} />} />
+      <Route path="/kata" element={<JudgeKata profile={profile} uid={uid} />} />
+      <Route path="/kata/:tournamentId" element={<JudgeKata profile={profile} uid={uid} />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   )

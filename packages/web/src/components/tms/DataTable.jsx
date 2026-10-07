@@ -6,6 +6,7 @@ import {
 import { Search, FileDownload } from '@mui/icons-material'
 import { downloadCsv, printTable } from './download'
 import { downloadXlsx } from './excel'
+import { useExportAudit } from './exportAudit'
 
 const text = (v) => (v == null ? '' : String(v)).toLowerCase()
 
@@ -83,6 +84,7 @@ export default function DataTable({
   }, [rows, columns, query, sort, server, picked, filters])
 
   const [exporting, setExporting] = useState(false)
+  const audit = useExportAudit()
   const doExport = async (kind) => {
     setExportAnchor(null)
     setExporting(true)
@@ -93,6 +95,7 @@ export default function DataTable({
       if (kind === 'csv') downloadCsv(`${exportName}-${stamp}.csv`, data)
       else if (kind === 'xlsx') await downloadXlsx(`${exportName}-${stamp}.xlsx`, data, String(exportTitle || exportName).slice(0, 31))
       else printTable(exportTitle || exportName, data)
+      audit?.({ report: String(exportName).slice(0, 60), format: kind === 'print' ? 'pdf' : kind, rows: all.length })
     } finally {
       setExporting(false)
     }

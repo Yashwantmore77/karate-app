@@ -70,9 +70,12 @@ export function coachRoutes(tms) {
   })
   router.get('/files/:id', async (req, res) => sendFile(res, await tms.readFile(req.user, req.params.id)))
 
-  const bulkBody = (req) => validate(req.body, { csv: { type: 'string', required: true, max: 2_000_000, trim: false } })
+  const bulkBody = (req) => validate(req.body, { csv: { type: 'string', required: true, max: 2_000_000, trim: false }, confirmDuplicates: { type: 'boolean' } })
   router.post('/players/bulk/preview', async (req, res) => res.json(await tms.previewBulk(withMeta(req), t(req), bulkBody(req).csv)))
-  router.post('/players/bulk', async (req, res) => res.status(201).json(await tms.importBulk(withMeta(req), t(req), bulkBody(req).csv)))
+  router.post('/players/bulk', async (req, res) => {
+    const { csv, confirmDuplicates } = bulkBody(req)
+    res.status(201).json(await tms.importBulk(withMeta(req), t(req), csv, { confirmDuplicates }))
+  })
 
   return router
 }

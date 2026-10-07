@@ -20,7 +20,12 @@ export function matchRules(tournament, match, category = null) {
   // A category's own rules (PRD point 3), written when its bouts were made,
   // win over the tournament's.
   const s = { ...settingsOf(tournament), ...(category?.rules || {}) }
-  return { durationMs: s.matchDurationSec * 1000, pointGap: s.pointGap, points: s.points }
+  // PRD v1 §6: overtime, senshu and the penalty ladder come from the tournament's ruleset too.
+  return {
+    durationMs: s.matchDurationSec * 1000, pointGap: s.pointGap, points: s.points,
+    senshu: s.senshu !== false, overtime: s.overtime, extraTimeMs: (s.extraTimeSec || 60) * 1000,
+    penaltyCategories: s.penaltyCategories, penaltyLadder: Array.isArray(s.penaltyLadder) ? s.penaltyLadder : undefined,
+  }
 }
 
 /**

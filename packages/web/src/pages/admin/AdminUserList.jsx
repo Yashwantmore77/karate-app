@@ -81,6 +81,7 @@ export default function AdminUserList({ uid }) {
       seat: editing?.seat ?? '',
       tournamentIds: editing?.tournamentIds || [],
       organizationId: editing?.organizationId || '',
+      tournamentRoles: Object.entries(editing?.tournamentRoles || {}).map(([tournamentId, role]) => ({ tournamentId, role })),
     },
     enableReinitialize: true,
     validationSchema: schemaFor(!!editingId),
@@ -94,6 +95,9 @@ export default function AdminUserList({ uid }) {
       // Sent only when changed, so saving an account never rewrites its access.
       if (JSON.stringify(values.tournamentIds) !== JSON.stringify(editing?.tournamentIds || [])) fields.tournamentIds = values.tournamentIds
       if (values.password) fields.password = values.password
+      // PRD v1 §4: a different role inside particular tournaments.
+      const scoped = Object.fromEntries(values.tournamentRoles.filter((r) => r.tournamentId && r.role).map((r) => [r.tournamentId, r.role]))
+      if (JSON.stringify(scoped) !== JSON.stringify(editing?.tournamentRoles || {})) fields.tournamentRoles = scoped
       if (orgs.length && values.organizationId !== (editing?.organizationId || '')) fields.organizationId = values.organizationId || null
 
       try {
@@ -150,7 +154,7 @@ export default function AdminUserList({ uid }) {
         <>
           {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
 
-          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+          <Stack direction="row" spacing={2} sx={{ mb: 3, justifyContent: 'space-between', alignItems: 'center' }}>
             <TableSearch value={search} onChange={setSearch} placeholder="Search email or role" />
             <Button
               variant="contained"
@@ -185,6 +189,7 @@ export default function AdminUserList({ uid }) {
                       <TableCell>{account.email}</TableCell>
                       <TableCell>
                         <Chip label={account.role} size="small" color={roleColour(account.role)} />
+                        {Object.keys(account.tournamentRoles || {}).length > 0 && <Chip size="small" variant="outlined" sx={{ ml: 0.5 }} label={`+${Object.keys(account.tournamentRoles).length} event role${Object.keys(account.tournamentRoles).length > 1 ? 's' : ''}`} />}
                       </TableCell>
                       <TableCell>{account.seat ?? '—'}</TableCell>
                       <TableCell>{account.tournamentIds?.length ? account.tournamentIds.map(tournamentName).join(', ') : 'All'}</TableCell>
@@ -266,6 +271,22 @@ export default function AdminUserList({ uid }) {
             >
               {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
             </TextField>
+            <Typography variant="subtitle2" sx={{ mt: 2 }}>Role in particular tournaments</Typography>
+            <Typography variant="body2" color="text.secondary">e.g. a referee who is the weigh-in officer at one event. Elsewhere the account keeps the role above.</Typography>
+            {formik.values.tournamentRoles.map((row, i) => (
+              <Box key={i} sx={{ display: 'flex', gap: 1, mt: 1, alignItems: 'center' }}>
+                <TextField select size="small" label="Tournament" sx={{ flex: 2 }} value={row.tournamentId}
+                  onChange={(e) => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.map((r, j) => (j === i ? { ...r, tournamentId: e.target.value } : r)))}>
+                  {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
+                </TextField>
+                <TextField select size="small" label="Role there" sx={{ flex: 1.5 }} value={row.role}
+                  onChange={(e) => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.map((r, j) => (j === i ? { ...r, role: e.target.value } : r)))}>
+                  {users.TOURNAMENT_ROLES.map((r) => <MenuItem key={r} value={r}>{ROLE_LABEL[r] || r}</MenuItem>)}
+                </TextField>
+                <Button size="small" onClick={() => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.filter((_, j) => j !== i))}>Remove</Button>
+              </Box>
+            ))}
+            <Button size="small" sx={{ mt: 1 }} onClick={() => formik.setFieldValue('tournamentRoles', [...formik.values.tournamentRoles, { tournamentId: '', role: 'viewer' }])}>Add tournament role</Button>
             {orgs.length > 0 && (
               <TextField select fullWidth margin="normal" label="Organisation" value={formik.values.organizationId}
                 onChange={(e) => formik.setFieldValue('organizationId', e.target.value)}

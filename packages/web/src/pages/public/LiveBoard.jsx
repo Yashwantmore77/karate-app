@@ -97,7 +97,7 @@ function Board({ slug }) {
             {!mats.length && <Grid size={{ xs: 12 }}><Paper sx={{ p: 3 }}><Typography color="text.secondary">No bouts waiting.</Typography></Paper></Grid>}
             {mats.map((mat) => {
               const queue = pending.filter((m) => (m.mat || 1) === mat)
-              const now = queue.find((m) => ['live', 'open'].includes(m.status)) || null
+              const now = queue.find((m) => ['live', 'open', 'paused'].includes(m.status)) || null
               const next = queue.filter((m) => m !== now).slice(0, NEXT_PER_MAT)
               const showScore = now && scoreboardOpen && String(live.fieldNumber || '') === String(mat)
               return (

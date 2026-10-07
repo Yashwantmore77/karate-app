@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Stack, TextField, MenuItem, Button, Dialog, DialogTitle, DialogContent, DialogActions, Grid, Typography, Box, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, Alert,
+  Stack, TextField, MenuItem, Button, Dialog, DialogTitle, DialogContent, DialogActions, Grid, Typography, Box, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, Alert, Menu,
 } from '@mui/material'
-import { Schedule, EditNote, SportsMma, SwapHoriz, History } from '@mui/icons-material'
+import { Schedule, EditNote, SportsMma, SwapHoriz, History, PlaylistPlay } from '@mui/icons-material'
+import { matchLifecycle } from '@kumite/shared/lifecycle.js'
+import { humanize } from '../../components/tms/StatusBadge'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { settingsOf } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
@@ -27,6 +29,18 @@ export const MatchSides = ({ m }) => {
 }
 
 const SIDE = { aka: 'AKA', ao: 'AO' }
+// PRD v1 §13: a bout on the mat (live or paused) versus one waiting to be called.
+export const ON_MAT = ['live', 'open', 'paused']
+// PRD v1 §13 result types, as the scoring table says them.
+export const RESULT_TYPE_LABEL = {
+  COMPLETED: 'Fought (points / decision)',
+  WALKOVER: 'Walkover (opponent withdrew / absent)',
+  NO_SHOW: 'No-show (opponent did not report)',
+  KIKEN: 'Kiken (opponent forfeited)',
+  DISQUALIFIED: 'Disqualification (opponent disqualified)',
+  MANUAL_OVERRIDE: 'Manual decision (official override)',
+  CANCELLED: 'Cancelled (no result)',
+}
 const POINT_NAME = { yuko: 'Yuko', wazaAri: 'Waza-ari', ippon: 'Ippon' }
 
 /** One live command as a sentence: "Waza-ari to AKA — AKA 2 → 4". */
@@ -61,6 +75,7 @@ export default function MatchesTab({ tournament, version, action }) {
   const [correct, setCorrect] = useState(null)
   const [officials, setOfficials] = useState([])
   const [log, setLog] = useState(null) // { m, events }
+  const [statusMenu, setStatusMenu] = useState(null) // { anchor, m }
   useEffect(() => { listOfficials().then(setOfficials) }, [])
   const officialName = (uid) => officials.find((o) => o.uid === uid)?.label || uid
 
@@ -71,15 +86,15 @@ export default function MatchesTab({ tournament, version, action }) {
   const rows = useMemo(() => matches.filter((m) => {
     if (mat && String(m.mat) !== String(mat)) return false
     const done = !!boutOutcome(m)
-    if (view === 'queue') return !done && !['live', 'open'].includes(m.status)
-    if (view === 'live') return ['live', 'open'].includes(m.status) && !done
+    if (view === 'queue') return !done && !ON_MAT.includes(m.status)
+    if (view === 'live') return ON_MAT.includes(m.status) && !done
     if (view === 'completed') return done
     return true
   }), [matches, mat, view])
 
   const counts = {
-    queue: matches.filter((m) => !boutOutcome(m) && !['live', 'open'].includes(m.status)).length,
-    live: matches.filter((m) => ['live', 'open'].includes(m.status) && !boutOutcome(m)).length,
+    queue: matches.filter((m) => !boutOutcome(m) && !ON_MAT.includes(m.status)).length,
+    live: matches.filter((m) => ON_MAT.includes(m.status) && !boutOutcome(m)).length,
     completed: matches.filter((m) => boutOutcome(m)).length,
   }
 
@@ -120,14 +135,27 @@ export default function MatchesTab({ tournament, version, action }) {
               <Tooltip title="Open scoring console"><span><IconButton size="small" aria-label="Open scoring console" disabled={!m.redId || !m.blueId} onClick={() => navigate(`/admin/match/${m.id}`)}><SportsMma fontSize="small" /></IconButton></span></Tooltip>
               <Tooltip title="Schedule"><IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, categoryId: m.categoryId, number: m.matchNumber, mat: m.mat || 1, scheduledAt: m.scheduledAt ? m.scheduledAt.slice(0, 16) : '', refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton></Tooltip>
               {/* PRD point 15: swap AKA and AO before the bout. */}
-              <Tooltip title="Swap AKA / AO"><span><IconButton size="small" aria-label="Swap AKA and AO" disabled={!!boutOutcome(m) || ['live', 'open'].includes(m.status) || (!m.redId && !m.blueId)}
+              <Tooltip title="Swap AKA / AO"><span><IconButton size="small" aria-label="Swap AKA and AO" disabled={!!boutOutcome(m) || ON_MAT.includes(m.status) || (!m.redId && !m.blueId)}
                 onClick={() => action.run(() => tms.swapCorners(tid, m.id), `${m.matchNumber}: corners swapped`).then(load)}><SwapHoriz fontSize="small" /></IconButton></span></Tooltip>
+              {!boutOutcome(m) && matchLifecycle.next(m.status || 'scheduled').length > 0 && (
+                <Tooltip title="Change status (called, ready, paused…)"><IconButton size="small" aria-label="Change status" onClick={(e) => setStatusMenu({ anchor: e.currentTarget, m })}><PlaylistPlay fontSize="small" /></IconButton></Tooltip>
+              )}
               <Tooltip title="Live score log"><IconButton size="small" aria-label="Live score log" onClick={async () => setLog({ m, events: await tms.matchEvents(tid, m.id).catch(() => []) })}><History fontSize="small" /></IconButton></Tooltip>
-              <Tooltip title={boutOutcome(m) ? 'Correct result' : 'Enter result'}><span><IconButton size="small" aria-label={boutOutcome(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '' })}><EditNote fontSize="small" /></IconButton></span></Tooltip>
+              <Tooltip title={boutOutcome(m) ? 'Correct result' : 'Enter result'}><span><IconButton size="small" aria-label={boutOutcome(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '', finishReason: m.finishReason || '' })}><EditNote fontSize="small" /></IconButton></span></Tooltip>
             </Stack>
           ) },
         ]}
       />
+
+      <Menu open={!!statusMenu} anchorEl={statusMenu?.anchor} onClose={() => setStatusMenu(null)}>
+        {statusMenu && matchLifecycle.next(statusMenu.m.status || 'scheduled').filter((st) => !['completed', 'cancelled'].includes(st)).map((st) => (
+          <MenuItem key={st} onClick={() => {
+            const { m } = statusMenu
+            setStatusMenu(null)
+            action.run(() => tms.setMatchStatus(tid, m.id, st), `${m.matchNumber}: ${humanize(st)}`).then(load)
+          }}>{humanize(st)}</MenuItem>
+        ))}
+      </Menu>
 
       <Dialog open={!!log} onClose={() => setLog(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Live score log — {log?.m.matchNumber}</DialogTitle>
@@ -184,11 +212,12 @@ export default function MatchesTab({ tournament, version, action }) {
             <Grid size={{ xs: 12 }}>
               <TextField select fullWidth label="Result" value={correct?.resultType || 'COMPLETED'} sx={{ mb: 2 }}
                 onChange={(e) => setCorrect({ ...correct, resultType: e.target.value, winner: correct.winner === 'tie' && e.target.value !== 'COMPLETED' ? 'red' : correct.winner })}>
-                <MenuItem value="COMPLETED">Fought (points / decision)</MenuItem>
-                <MenuItem value="WALKOVER">Walkover (opponent withdrew / absent)</MenuItem>
-                <MenuItem value="DISQUALIFIED">Disqualification (opponent disqualified)</MenuItem>
-                <MenuItem value="CANCELLED">Cancelled (no result)</MenuItem>
+                {Object.entries(RESULT_TYPE_LABEL).map(([k, label]) => <MenuItem key={k} value={k}>{label}</MenuItem>)}
               </TextField>
+              {!['COMPLETED', 'CANCELLED'].includes(correct?.resultType) && (
+                <TextField fullWidth required sx={{ mb: 2 }} label="Finish reason" helperText="e.g. Injury, did not report at call 3, hansoku"
+                  value={correct?.finishReason || ''} onChange={(e) => setCorrect({ ...correct, finishReason: e.target.value })} />
+              )}
               {correct?.resultType !== 'CANCELLED' && <TextField select fullWidth label="Winner" value={correct?.winner || 'red'} onChange={(e) => setCorrect({ ...correct, winner: e.target.value })}>
                 <MenuItem value="red">AKA — {correct?.m.akaName}</MenuItem>
                 <MenuItem value="blue">AO — {correct?.m.aoName}</MenuItem>
@@ -202,10 +231,13 @@ export default function MatchesTab({ tournament, version, action }) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCorrect(null)}>Cancel</Button>
-          <Button variant="contained" disabled={!!(correct && boutOutcome(correct.m) && !correct.reason.trim())} onClick={async () => {
+          <Button variant="contained" disabled={!!(correct && ((boutOutcome(correct.m) && !correct.reason.trim()) || (!['COMPLETED', 'CANCELLED'].includes(correct.resultType) && !correct.finishReason?.trim())))} onClick={async () => {
             const c = correct
             setCorrect(null)
-            await action.run(() => tms.correctResult(tid, c.m.id, { winner: c.resultType === 'CANCELLED' ? null : c.winner, resultType: c.resultType, avgRed: Number(c.avgRed) || 0, avgBlue: Number(c.avgBlue) || 0 }, c.reason || null), 'Result saved')
+            await action.run(() => tms.correctResult(tid, c.m.id, {
+              winner: c.resultType === 'CANCELLED' ? null : c.winner, resultType: c.resultType, avgRed: Number(c.avgRed) || 0, avgBlue: Number(c.avgBlue) || 0,
+              ...(c.finishReason?.trim() ? { finishReason: c.finishReason.trim() } : {}),
+            }, c.reason || null), 'Result saved')
             load()
           }}>Save result</Button>
         </DialogActions>

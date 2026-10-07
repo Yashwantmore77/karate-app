@@ -16,6 +16,9 @@ import PasswordReset from './pages/account/PasswordReset'
 import MyAccount from './pages/account/MyAccount'
 import DisplayScoreboard from './pages/DisplayScoreboard'
 import LiveBoard from './pages/public/LiveBoard'
+import VerifyCertificate from './pages/public/VerifyCertificate'
+import ScoreboardOperator from './pages/ScoreboardOperator'
+import { getToken } from './data/session'
 import RequireAuth from './routes/RequireAuth'
 import RequireRole from './routes/RequireRole'
 import { ConnectionProvider } from './state/ConnectionContext'
@@ -163,7 +166,7 @@ export default function App() {
 // provider itself picks the API or the local mock, and everything below this
 // line is identical either way.
 function AppShell() {
-  const { user, profile, loading } = useSession()
+  const { user, profile, loading, logout } = useSession()
   const isPortal = new URLSearchParams(location.search).has('portal')
 
   if (isPortal) return <ConnectionProvider><DisplayScoreboard /></ConnectionProvider>
@@ -198,6 +201,27 @@ function AppShell() {
             <Route path="/tournaments" element={<PublicTournamentList />} />
             <Route path="/tournament/:slug" element={<PublicTournament />} />
             <Route path="/register/:token" element={<RegisterPortal />} />
+            {/* PRD v1 §18: where a certificate's QR code points. */}
+            <Route path="/verify" element={<VerifyCertificate />} />
+            <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
+            {/* PRD v1 §7: a team manager's own login opens their team panel. */}
+            <Route
+              path="/coach/*"
+              element={
+                <RequireAuth user={user}>
+                  <RequireRole role="coach" profile={profile}><RegisterPortal accountToken={getToken()} onSignOut={logout} /></RequireRole>
+                </RequireAuth>
+              }
+            />
+            {/* PRD v1 §4: the scoreboard operator runs the hall screens. */}
+            <Route
+              path="/scoreboard_operator/*"
+              element={
+                <RequireAuth user={user}>
+                  <RequireRole role="scoreboard_operator" profile={profile}><ScoreboardOperator /></RequireRole>
+                </RequireAuth>
+              }
+            />
             <Route path="/forgot-password" element={<PasswordReset />} />
             <Route path="/reset-password" element={<PasswordReset />} />
             <Route path="/account" element={<RequireAuth user={user}><MyAccount /></RequireAuth>} />

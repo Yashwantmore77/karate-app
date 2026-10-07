@@ -20,7 +20,9 @@ export default function OverviewTab({ tournament, reload, version, action, role 
   const status = tournament.lifecycleStatus || 'DRAFT'
   const manage = can(role, P.TOURNAMENT_MANAGE)
 
+  const [windowInfo, setWindowInfo] = useState(null)
   useEffect(() => {
+    tms.registrationWindow(tid).then(setWindowInfo).catch(() => setWindowInfo(null))
     tms.dashboard(tid).then(setStats).catch(() => setStats({}))
     tms.notifications(tid).then(setNotes).catch(() => setNotes([]))
   }, [tid, version])
@@ -32,14 +34,18 @@ export default function OverviewTab({ tournament, reload, version, action, role 
     run: (reason) => action.run(() => tms.setLifecycle(tid, to, reason), `Tournament is now ${humanize(to)}`).then(reload),
   })
 
+  const LOCK_NAME = { draw: 'the draw', entries: 'entries', soft: 'coach entries' }
+  const LOCK_DONE = { draw: 'Draw', entries: 'Entries', soft: 'Coach entries' }
   const lock = (which, locked) => setConfirm({
-    title: `${locked ? 'Lock' : 'Unlock'} ${which === 'draw' ? 'the draw' : 'entries'}?`,
+    title: `${locked ? 'Lock' : 'Unlock'} ${LOCK_NAME[which]}?`,
     message: locked
-      ? which === 'draw' ? 'Players can no longer be moved between pools (Rule 5). Matches can then be generated.' : 'Coaches can no longer change players, categories are frozen and no entries can be added (Rule 7).'
+      ? which === 'draw' ? 'Players can no longer be moved between pools (Rule 5). Matches can then be generated.'
+        : which === 'soft' ? 'Soft lock (PRD v1 §11): coaches can no longer add or edit players; organisers still can.'
+          : 'Coaches can no longer change players, categories are frozen and no entries can be added (Rule 7).'
       : 'Unlocking is recorded in the audit log with your reason.',
     requireReason: !locked,
     danger: !locked,
-    run: (reason) => action.run(() => tms.setLock(tid, which, locked, reason), `${which === 'draw' ? 'Draw' : 'Entries'} ${locked ? 'locked' : 'unlocked'}`).then(reload),
+    run: (reason) => action.run(() => tms.setLock(tid, which, locked, reason), `${LOCK_DONE[which]} ${locked ? 'locked' : 'unlocked'}`).then(reload),
   })
 
   const publicUrl = `${window.location.origin}/tournament/${tournament.slug || tid}`
@@ -69,8 +75,20 @@ export default function OverviewTab({ tournament, reload, version, action, role 
             ))}
           </Stack>
         )}
+        {windowInfo && (
+          <Alert severity={windowInfo.open ? 'success' : 'info'} sx={{ mt: 2 }}>
+            {windowInfo.open ? 'Registration is open for coaches' : `Coaches cannot register now${windowInfo.reason ? ` (${humanize(windowInfo.reason)})` : ''}`}
+            {windowInfo.opensAt || windowInfo.closesAt ? ` · ${[windowInfo.opensAt && `opens ${new Date(windowInfo.opensAt).toLocaleString()}`, windowInfo.closesAt && `closes ${new Date(windowInfo.closesAt).toLocaleString()}`].filter(Boolean).join(', ')}` : ''}
+            {` (${tournament.timezone || 'Asia/Kolkata'})`}
+          </Alert>
+        )}
         {can(role, P.POOL_MANAGE) && (
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', gap: 1 }}>
+            {can(role, P.REGISTRATION_MANAGE) && !tournament.entriesLocked && (
+              <Button size="large" variant="outlined" startIcon={<LockIcon locked={!tournament.softLocked} />} onClick={() => lock('soft', !tournament.softLocked)}>
+                {tournament.softLocked ? 'Reopen coach entries' : 'Soft-lock coach entries'}
+              </Button>
+            )}
             <Button size="large" variant="outlined" startIcon={<LockIcon locked={!tournament.entriesLocked} />} onClick={() => lock('entries', !tournament.entriesLocked)}>
               {tournament.entriesLocked ? 'Unlock entries' : 'Lock entries'}
             </Button>
