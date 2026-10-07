@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireAuth, requireRole, mayAccessTournament } from '../auth/middleware.js'
+import { matchAuthority } from '../auth/matchAccess.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { badRequest, conflict } from '../lib/errors.js'
@@ -213,6 +214,20 @@ export function matchRoutes(stores, tms = null) {
   nested.use(requireAuth)
   flat.use(requireAuth)
 
+  // A category's bouts belong to its tournament: reachable only by accounts
+  // that may work that tournament (PRD section 4, point 33).
+  nested.param('categoryId', async (req, _res, next, id) => {
+    try {
+      const category = await categories.get(id)
+      if (!category?.tournamentId || req.user.role === 'super_admin') return next()
+      const account = await findUserRecord(req.user.uid)
+      const tournament = await tournaments.get(category.tournamentId)
+      return next(account && mayAccessTournament(account, category.tournamentId, tournament) ? undefined : forbidden('tournament_forbidden'))
+    } catch (err) {
+      return next(err)
+    }
+  })
+
   nested.get('/:categoryId/matches', async (req, res) => {
     await loadOrFail(categories, req.params.categoryId)
     const { page, limit, q } = readPageQuery(req.query)
@@ -358,6 +373,10 @@ export function matchRoutes(stores, tms = null) {
   flat.patch('/:id', requireRole('referee'), async (req, res) => {
     const { correctionReason, ...patch } = body.forPatch(req.body)
     const existing = await loadOrFail(matches, req.params.id)
+    // AC-14: only within a tournament the account works, and a referee only
+    // on their own bout (or one nobody is on yet).
+    const authority = await matchAuthority(req.user, existing, stores)
+    if (!authority.ok) throw forbidden(authority.error)
     await assertCompetitorsInCategory(patch, existing.categoryId)
 
     // Rule 6: a completed result is never changed silently. Saving the same

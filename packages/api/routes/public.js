@@ -6,12 +6,46 @@ import { sendFile } from './files.js'
 import { certificatesPdf } from '../lib/pdf.js'
 
 /**
+ * One public tournament view, worked out once and shared by every spectator
+ * until something changes (PRD v1 §23: hundreds of phones polling during
+ * finals). Concurrent requests wait on the same computation; any write
+ * through the stores calls `invalidate`, and a short age limit covers writes
+ * made by another server instance. Refusals (an unknown or private
+ * tournament) are never cached.
+ */
+export function publicViewCache(tms, { maxAgeMs = 2000, maxEntries = 500 } = {}) {
+  let generation = 0
+  const cache = new Map()
+  return {
+    invalidate() { generation += 1 },
+    get(idOrSlug) {
+      const key = String(idOrSlug)
+      const hit = cache.get(key)
+      if (hit && hit.generation === generation && Date.now() - hit.at < maxAgeMs) return hit.promise
+      const promise = tms.publicView(key)
+      // Serialised once too: the view is large, and stringifying it per
+      // request was most of the cost under load.
+      const entry = { generation, at: Date.now(), promise, body: promise.then((view) => JSON.stringify(view)) }
+      cache.set(key, entry)
+      entry.body.catch(() => { if (cache.get(key) === entry) cache.delete(key) })
+      if (cache.size > maxEntries) cache.delete(cache.keys().next().value)
+      return entry.promise
+    },
+    /** The same view as JSON text, ready to send. */
+    async json(idOrSlug) {
+      await this.get(idOrSlug)
+      return cache.get(String(idOrSlug))?.body ?? JSON.stringify(await tms.publicView(String(idOrSlug)))
+    },
+  }
+}
+
+/**
  * PRD sections 39 and 54, and the registration link of section 14. No sign-in,
  * so everything here is either read-only and stripped of private fields by the
  * service (Rule 8), or the password check that opens a coach session — which is
  * rate limited like the login it effectively is.
  */
-export function publicRoutes(tms) {
+export function publicRoutes(tms, { views = publicViewCache(tms) } = {}) {
   const router = Router()
 
   const linkAttempts = rateLimit({
@@ -28,7 +62,7 @@ export function publicRoutes(tms) {
 
   router.get('/tournaments/:idOrSlug', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
-    res.json(await tms.publicView(req.params.idOrSlug))
+    res.type('application/json').send(await views.json(req.params.idOrSlug))
   })
 
   // PRD v1 §18: the QR on a certificate opens this. Only what the
@@ -44,7 +78,7 @@ export function publicRoutes(tms) {
     res.json({ certificates: await tms.publicCertificates(req.params.idOrSlug, q) })
   })
   router.get('/tournaments/:idOrSlug/certificates/:certificateId.pdf', lookups, async (req, res) => {
-    const view = await tms.publicView(req.params.idOrSlug)
+    const view = await views.get(req.params.idOrSlug)
     if (!view.tournament.publicCertificates) return res.status(404).json({ error: 'certificates_not_public' })
     const cert = await tms.verifyCertificate(req.params.certificateId)
     if (cert.tournament?.name !== view.tournament.name || ['coach', 'official'].includes(cert.type)) return res.status(404).json({ error: 'certificate_not_found' })

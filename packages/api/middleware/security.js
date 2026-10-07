@@ -13,7 +13,8 @@ export function security({ allowedOrigin }) {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
     res.setHeader('Vary', 'Origin')
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'content-type,authorization')
+    // Idempotency-Key lets a browser retry a write safely (PRD v1 §25).
+    res.setHeader('Access-Control-Allow-Headers', 'content-type,authorization,idempotency-key')
     res.setHeader('Access-Control-Max-Age', '600')
 
     res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -21,6 +22,11 @@ export function security({ allowedOrigin }) {
     // Nothing here is meant to be framed, and a JSON API has no reason to be.
     res.setHeader('X-Frame-Options', 'DENY')
     res.setHeader('Cross-Origin-Resource-Policy', 'same-site')
+    // Browsers that reached the API over HTTPS keep using it (production only,
+    // so a local http server is never pinned).
+    if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
+    // Responses carry tokens and private data; no shared cache may keep them.
+    if (!res.getHeader('Cache-Control')) res.setHeader('Cache-Control', 'no-store')
 
     if (req.method === 'OPTIONS') return res.sendStatus(204)
     return next()

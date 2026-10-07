@@ -23,6 +23,19 @@ const TEAM_FIELDS = [
 ]
 const sessionKey = (token) => `kt:coach:${token}`
 
+// PRD v1 §6/§11: why a coach cannot register right now, in their words.
+const when = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '')
+export function closedMessage(w) {
+  switch (w?.closedReason) {
+    case 'registration_not_yet_open': return `Registration opens ${when(w.opensAt)}.`
+    case 'registration_closed': return w.closesAt && new Date(w.closesAt) < new Date() ? `Registration closed ${when(w.closesAt)}.` : 'Registration is not open.'
+    case 'entry_lock_deadline_passed': return 'The deadline for changing entries has passed.'
+    case 'entries_soft_locked': return 'The organisers have closed entries for coaches.'
+    case 'entries_locked': return 'Entries are locked: player details can no longer change (Rule 7).'
+    default: return 'Registration is not open.'
+  }
+}
+
 /**
  * PRD sections 14 and 52: a coach opens the tournament's registration link,
  * gives the password if there is one, registers their team and its players,
@@ -61,7 +74,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
     if (err?.status === 401) { keep(null); setMe(null) } else action.notify({ severity: 'error', text: describeError(err) })
   })
   useEffect(() => { load() }, [session])
-  const info = accountToken ? (me && { tournament: me.tournament, registrationOpen: me.registrationOpen, requiresPassword: false, form: me.form }) : linkInfo
+  const info = accountToken ? (me && { ...me, requiresPassword: false }) : linkInfo
 
   const fields = useMemo(() => me?.form || info?.form || [], [me, info])
 
@@ -87,7 +100,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
       <Container maxWidth="sm" sx={{ py: 6 }}>
         {header}
         <Paper sx={{ p: 3 }}>
-          {!info.registrationOpen && <Alert severity="warning" sx={{ mb: 2 }}>Registration is currently closed. You can still sign in to see your team's status.</Alert>}
+          {!info.registrationOpen && <Alert severity="warning" sx={{ mb: 2 }}>{closedMessage(info)} You can still sign in to see your team's status.</Alert>}
           {info.requiresPassword ? (
             <Stack spacing={2}>
               <TextField type="password" label="Registration password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && open()} autoFocus />
@@ -173,7 +186,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {header}
-      {!canWrite && <Alert severity="info" sx={{ mb: 2 }}>{me.tournament.entriesLocked ? 'Entries are locked: player details can no longer change (Rule 7).' : 'Registration is not open.'} You can still follow your players' status.</Alert>}
+      {!canWrite && <Alert severity="info" sx={{ mb: 2 }}>{closedMessage(me)} You can still follow your players' status.</Alert>}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Typography variant="h3">{me.team.name}</Typography>
         <Typography color="text.secondary">{[me.team.club, me.team.coachName && `Coach ${me.team.coachName}`, me.team.state].filter(Boolean).join(' · ')}</Typography>

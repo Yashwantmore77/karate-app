@@ -3,12 +3,13 @@ import { createApp } from './index.js'
 import { createStores } from './lib/store.js'
 import { createBackup, restoreBackup, BACKUP_FORMAT } from './lib/backup.js'
 import { emailNotifier } from './lib/emailNotifier.js'
+import { io as connect } from 'socket.io-client'
 
 // PRD v1 platform pieces over HTTP: partner import, coach accounts, sessions,
 // rulesets, system audit and backup, the scoreboard operator, idempotency,
 // tournament-scoped roles and the notification channels.
 
-let http, port
+let http, port, stores
 const tokens = {}
 
 const call = async (method, path, body, token, headers = {}) => {
@@ -44,6 +45,7 @@ const tournament = async (slug = 'partner-open') => {
 beforeEach(async () => {
   const app = createApp()
   http = app.http
+  stores = app.stores
   port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
   tokens.admin = await login('admin@kata.local')
   tokens.superadmin = await login('superadmin@kata.local')
@@ -200,5 +202,52 @@ describe('notification channels (PRD v1 §19)', () => {
     posted.length = 0
     await notify({ audience: 'team', teamId: team.id, tournamentId: 't1', type: 'draw_published', message: 'Draw is out' }, { name: 'Open' }, { email: true, sms: false })
     expect(posted).toEqual([])
+  })
+})
+
+describe('who may score a bout (PRD v1 AC-14)', () => {
+  const socketFor = (token) => connect(`http://localhost:${port}`, { transports: ['websocket'], auth: { token } })
+  const emit = (socket, event, payload) => new Promise((resolve) => socket.emit(event, payload, resolve))
+
+  it('gives a mat only to the assigned referee or an admin of that tournament', async () => {
+    const t = await tournament('mat-open')
+    const other = await tournament('mat-other')
+    const category = await stores.categories.insert({ tournamentId: t, name: 'Boys -35' })
+    const mine = await stores.matches.insert({ categoryId: category.id, status: 'open', refereeId: 'ref-uid-001', judgeIds: [] })
+    const theirs = await stores.matches.insert({ categoryId: category.id, status: 'open', refereeId: 'someone-else', judgeIds: [] })
+    // a referee limited to the other tournament
+    await call('POST', '/users', { email: 'ref.other@kata.local', password: 'password1', role: 'referee', tournamentIds: [other] }, tokens.admin)
+    // a viewer who referees in this tournament only
+    await call('POST', '/users', { email: 'ref.scoped@kata.local', password: 'password1', role: 'viewer', tournamentRoles: { [t]: 'referee' } }, tokens.admin)
+    const referee = await login('referee@kata.local')
+    const outsider = await login('ref.other@kata.local', 'password1')
+    const scoped = await login('ref.scoped@kata.local', 'password1')
+
+    const sockets = [referee, outsider, scoped, tokens.admin].map(socketFor)
+    try {
+      const [ref, out, sc, adm] = sockets
+      expect((await emit(ref, 'match:join', { matchId: 'made-up' })).error).toBe('unknown_match')
+      // assigned: control
+      expect((await emit(ref, 'match:join', { matchId: mine.id, control: true })).controllerId).toBeTruthy()
+      expect((await emit(ref, 'match:cmd', { matchId: mine.id, cmd: 'SCORE', payload: { side: 'aka', type: 'yuko' } })).ok).toBe(true)
+      // assigned to someone else: may watch, may not hold or seize the mat
+      expect((await emit(ref, 'match:join', { matchId: theirs.id, control: true })).controllerId).toBeNull()
+      expect((await emit(ref, 'match:takeover', { matchId: theirs.id })).error).toBe('forbidden')
+      expect((await emit(ref, 'match:cmd', { matchId: theirs.id, cmd: 'SCORE', payload: { side: 'aka', type: 'yuko' } })).error).toBe('forbidden')
+      // another tournament's referee: nothing
+      expect((await emit(out, 'match:takeover', { matchId: mine.id })).error).toBe('forbidden')
+      // a tournament-scoped referee, on an unassigned bout of their tournament
+      const open = await stores.matches.insert({ categoryId: category.id, status: 'open', refereeId: null, judgeIds: [] })
+      expect((await emit(sc, 'match:join', { matchId: open.id, control: true })).controllerId).toBeTruthy()
+      // the tournament admin may take over any bout
+      expect((await emit(adm, 'match:takeover', { matchId: theirs.id })).ok).toBe(true)
+    } finally {
+      sockets.forEach((x) => x.close())
+    }
+
+    // the same rule over REST
+    expect((await call('PATCH', `/matches/${theirs.id}`, { status: 'paused' }, referee)).status).toBe(403)
+    expect((await call('PATCH', `/matches/${mine.id}`, { status: 'paused' }, outsider)).status).toBe(403)
+    expect((await call('GET', `/categories/${category.id}/matches`, undefined, outsider)).status).toBe(403)
   })
 })

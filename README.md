@@ -101,9 +101,16 @@ production:
 | Variable | Meaning |
 | --- | --- |
 | `MONGODB_URI`, `MONGODB_DB` | Atlas connection. Unset means in-memory. |
-| `JWT_SECRET` | Token signing secret. Unset means a random one per boot, which signs everyone out on every restart. |
+| `NODE_ENV` | Set to `production` on the live server. It turns on the production safety checks below. |
+| `JWT_SECRET` | Token signing secret, **32+ characters; required in production** (the server will not start without it). In development, leaving it unset means a random secret per boot. |
+| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | The first super admin of an empty production database (password 12+ characters). Production never seeds the demo accounts. |
+| `SEED_DEMO_ACCOUNTS` | `true` to seed the demo accounts (password `test123`) into a database anyway; for staging only. |
 | `CORS_ORIGIN` | The front end's origin, exactly — no trailing slash. |
 | `TRUST_PROXY` | Set only when a proxy sits in front (Render does). |
+| `APP_URL` | The front end's address, for certificate QR codes and email links. |
+| `SMS_WEBHOOK_URL`, `WHATSAPP_WEBHOOK_URL` | Optional gateways for SMS / WhatsApp notices. |
+
+Security review notes, and what to check before going live, are in `SECURITY-REVIEW.md`.
 
 ## Deploying
 

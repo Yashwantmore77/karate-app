@@ -1,4 +1,4 @@
-import { toCsv } from '@kumite/shared/registration.js'
+import { toExportCsv } from '@kumite/shared/registration.js'
 
 /** Hands the browser a file to save. CSV opens directly in Excel. */
 export function downloadText(filename, text, type = 'text/csv;charset=utf-8') {
@@ -14,7 +14,7 @@ export function downloadText(filename, text, type = 'text/csv;charset=utf-8') {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export const downloadCsv = (filename, rows) => downloadText(filename, toCsv(rows))
+export const downloadCsv = (filename, rows) => downloadText(filename, toExportCsv(rows))
 
 export const readFileText = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader()

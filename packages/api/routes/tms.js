@@ -548,6 +548,11 @@ export function tmsRoutes(tms, stores) {
     const { divisionKey, verified } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, verified: { type: 'boolean', default: true } })
     res.json(await tms.verifyResult(withMeta(req), tid(req), divisionKey, verified))
   })
+  // PRD v1 §16: freeze (or, with the override privilege and a reason, unfreeze) one category's result.
+  router.post('/:tid/results/lock', requirePermission(P.RESULT_PUBLISH), async (req, res) => {
+    const { divisionKey, locked, reason } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, locked: { type: 'boolean', required: true }, reason: REASON })
+    res.json(await tms.setDivisionLock(withMeta(req), tid(req), divisionKey, locked, reason))
+  })
   router.post('/:tid/brackets/generate', requirePermission(P.MATCH_GENERATE), async (req, res) => {
     const { divisionKey } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 } })
     res.status(201).json({ bracket: await tms.generateBracket(withMeta(req), tid(req), divisionKey) })

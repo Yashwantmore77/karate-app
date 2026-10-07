@@ -332,6 +332,18 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   const isCoach = (actor) => actor?.role === 'coach'
 
+  /**
+   * What the coach portal shows: open exactly when a coach may write
+   * (assertCoachMayWrite), and if not, why — so the screen never says "open"
+   * while every save is refused.
+   */
+  const coachWindow = (tournament) => {
+    const w = registrationWindow(tournament)
+    const reason = tournament.entriesLocked ? 'entries_locked'
+      : lifecycleOf(tournament) !== T.REGISTRATION_OPEN ? 'registration_closed' : w.reason
+    return { registrationOpen: !reason, closedReason: reason, opensAt: w.opensAt, closesAt: w.closesAt }
+  }
+
   /** Rule 7, and a coach only ever reaches their own team. */
   const assertCoachMayWrite = (actor, tournament, teamId) => {
     if (!isCoach(actor)) return
@@ -530,16 +542,25 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   // --- rulesets (PRD v1 §6, §14, §24) ----------------------------------------
 
+  /** The stored edit that currently stands in for a standard ruleset, if any. */
+  const editedStandard = (stored, builtinId) => stored.find((r) => r.family === builtinId && !r.superseded) || null
+
   async function listRulesets({ includeSuperseded = false } = {}) {
     const stored = stores.rulesets ? await stores.rulesets.list({}) : []
-    const rows = [...BUILTIN_RULESETS, ...stored.filter((r) => includeSuperseded || !r.superseded)]
+    // A standard ruleset that has been edited is replaced in the list by its
+    // newest version; the original stays usable by tournaments that applied it.
+    const builtins = BUILTIN_RULESETS.map((r) => {
+      const edit = editedStandard(stored, r.id)
+      return edit ? { ...r, superseded: true, supersededBy: edit.id } : r
+    })
+    const rows = [...builtins, ...stored].filter((r) => includeSuperseded || !r.superseded)
     const inUse = new Map()
     for (const t of await stores.tournaments.list({})) {
       const id = t.rulesetId || DEFAULT_RULESET_ID
       inUse.set(id, (inUse.get(id) || 0) + 1)
     }
     return rows.map((r) => ({ ...r, tournaments: inUse.get(r.id) || 0 }))
-      .sort((a, b) => Number(!!b.builtIn) - Number(!!a.builtIn) || String(a.name).localeCompare(String(b.name)) || a.version - b.version)
+      .sort((a, b) => Number(!!(b.builtIn || b.standard)) - Number(!!(a.builtIn || a.standard)) || String(a.name).localeCompare(String(b.name)) || a.version - b.version)
   }
 
   async function resolveRuleset(id, { activeOnly = false } = {}) {
@@ -564,7 +585,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * new version, so that tournament keeps the rules it was run under.
    */
   async function updateRuleset(actor, id, input) {
-    if (BUILTIN_RULESETS.some((r) => r.id === id)) throw rule('builtin_ruleset')
+    const builtin = BUILTIN_RULESETS.find((r) => r.id === id)
+    if (builtin) return editStandard(actor, builtin, input)
     const current = await resolveRuleset(id)
     if (current.superseded) throw rule('ruleset_superseded')
     const doc = cleanRuleset({ ...current, ...input, kumite: { ...current.kumite, ...(input.kumite || {}) }, kata: { ...current.kata, ...(input.kata || {}) } })
@@ -580,6 +602,38 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     await stores.rulesets.update(id, { superseded: true, supersededBy: next.id })
     await record(actor, { tournamentId: null, action: A.RULESET_CHANGED, entity: 'ruleset', entityId: next.id, before: { version: current.version }, after: { version: next.version, name: doc.name }, reason: 'In use: saved as a new version' })
     return next
+  }
+
+  /**
+   * Editing a standard ruleset (owner's decision: the standard rules may need
+   * to change later). The original is never altered: the edit is saved as the
+   * next version of the same family and takes its place in the list, so a
+   * tournament that applied the original keeps it.
+   */
+  async function editStandard(actor, builtin, input) {
+    const stored = await stores.rulesets.list({})
+    if (editedStandard(stored, builtin.id)) throw rule('ruleset_superseded')
+    const doc = cleanRuleset({ ...builtin, ...input, kumite: { ...builtin.kumite, ...(input.kumite || {}) }, kata: { ...builtin.kata, ...(input.kata || {}) } })
+    const problems = rulesetProblems(doc)
+    if (problems.length) throw invalid('invalid_ruleset', { errors: problems.map((field) => ({ field, message: `Check ${field}` })) })
+    const version = Math.max(builtin.version, ...stored.filter((r) => r.family === builtin.id).map((r) => r.version)) + 1
+    const next = await stores.rulesets.insert({ ...doc, family: builtin.id, standard: true, version, active: true, superseded: false, previousId: builtin.id, createdBy: actor?.uid || null })
+    await record(actor, { tournamentId: null, action: A.RULESET_CHANGED, entity: 'ruleset', entityId: next.id, before: { ruleset: builtin.id, version: builtin.version }, after: { version, name: doc.name }, reason: 'Standard ruleset edited: saved as a new version' })
+    return next
+  }
+
+  /** Puts a standard ruleset back as it shipped; the edits stay on record. */
+  async function restoreStandard(actor, builtinId) {
+    const builtin = BUILTIN_RULESETS.find((r) => r.id === builtinId)
+    if (!builtin) throw invalid('invalid_ruleset')
+    let restored = 0
+    for (const r of await stores.rulesets.list({ family: builtinId })) {
+      if (r.superseded) continue
+      await stores.rulesets.update(r.id, { superseded: true, supersededBy: builtinId })
+      restored += 1
+    }
+    if (restored) await record(actor, { tournamentId: null, action: A.RULESET_CHANGED, entity: 'ruleset', entityId: builtinId, reason: 'Standard ruleset restored' })
+    return builtin
   }
 
   async function setRulesetActive(actor, id, active) {
@@ -1917,6 +1971,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (!reason) throw invalid('reason_required')
     const round = await inTournament('kataRounds', tournamentId, roundId)
     if (round.status !== 'completed') throw rule('round_still_open')
+    await assertNotLocked(tournamentId, round.divisionKey)
     if (!round.performerIds.includes(playerId)) throw invalid('invalid_playerId')
     const judgeSeat = Number(seat)
     if (!Number.isInteger(judgeSeat) || judgeSeat < 1 || judgeSeat > round.judges) throw invalid('invalid_seat')
@@ -1932,6 +1987,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   async function setKataPenalty(actor, tournamentId, roundId, playerId, deduction, reason) {
     await writableTournament(tournamentId)
     const round = await inTournament('kataRounds', tournamentId, roundId)
+    await assertNotLocked(tournamentId, round.divisionKey)
     if (!round.performerIds.includes(playerId)) throw invalid('invalid_playerId')
     const value = Number(deduction)
     if (!(value >= 0 && value <= 10)) throw invalid('invalid_deduction')
@@ -2254,6 +2310,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    */
   async function overrideMedals(actor, tournamentId, key, medals, reason) {
     if (!reason) throw invalid('reason_required')
+    await assertNotLocked(tournamentId, key)
     const division = (await divisions(tournamentId)).find((d) => d.key === key)
     if (!division) throw missing('division_not_found')
     const before = (await results(tournamentId)).find((d) => d.key === key)?.medals || []
@@ -2294,8 +2351,40 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (!divisionKeyValue) return
     const row = (await stores.divisionResults.list({ tournamentId, divisionKey: divisionKeyValue }))[0]
     if (!row || ![RESULT_STATUS.PUBLISHED, RESULT_STATUS.LOCKED].includes(row.status)) return
-    if (!actor || !can(actor.role, P.RESULT_OVERRIDE)) throw denied(row.status === RESULT_STATUS.LOCKED ? 'results_locked' : 'results_published')
+    // A locked category is frozen for everyone: unlock it (with a reason) first.
+    if (row.status === RESULT_STATUS.LOCKED) throw rule('results_locked')
+    if (!actor || !can(actor.role, P.RESULT_OVERRIDE)) throw denied('results_published')
     if (!reason) throw invalid('reason_required')
+  }
+
+  async function assertNotLocked(tournamentId, divisionKeyValue) {
+    const row = (await stores.divisionResults.list({ tournamentId, divisionKey: divisionKeyValue }))[0]
+    if (row?.status === RESULT_STATUS.LOCKED) throw rule('results_locked')
+  }
+
+  /**
+   * One category's result, frozen or unfrozen on its own (PRD v1 §16), so a
+   * finished category is safe while the rest of the event goes on. Locking
+   * needs a published result; unlocking needs the result-override privilege
+   * and a reason, and goes back to Published.
+   */
+  async function setDivisionLock(actor, tournamentId, key, locked, reason = null) {
+    await writableTournament(tournamentId)
+    const division = (await results(tournamentId)).find((d) => d.key === key)
+    if (!division) throw missing('division_not_found')
+    if (locked) {
+      if (division.resultStatus === RESULT_STATUS.LOCKED) return { status: RESULT_STATUS.LOCKED }
+      if (division.resultStatus !== RESULT_STATUS.PUBLISHED) throw rule('invalid_transition', { from: division.resultStatus, to: RESULT_STATUS.LOCKED })
+      await setResultStatus(actor, tournamentId, key, RESULT_STATUS.LOCKED)
+      await record(actor, { tournamentId, action: A.RESULT_LOCKED, entity: 'division', entityId: key, after: { medals: division.medals.map((m) => `${m.medal}:${m.name}`) }, reason })
+      return { status: RESULT_STATUS.LOCKED }
+    }
+    if (division.resultStatus !== RESULT_STATUS.LOCKED) return { status: division.resultStatus }
+    if (!actor || !can(actor.role, P.RESULT_OVERRIDE)) throw denied('result_override_forbidden')
+    if (!reason) throw invalid('reason_required')
+    await setResultStatus(actor, tournamentId, key, RESULT_STATUS.PUBLISHED)
+    await record(actor, { tournamentId, action: A.RESULT_UNLOCKED, entity: 'division', entityId: key, reason })
+    return { status: RESULT_STATUS.PUBLISHED }
   }
 
   async function setResultStatus(actor, tournamentId, key, status, extra = {}) {
@@ -2555,7 +2644,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return {
       tournament: publicTournament(tournament),
       requiresPassword: !!link.passwordHash,
-      registrationOpen: lifecycleOf(tournament) === T.REGISTRATION_OPEN && !tournament.entriesLocked,
+      ...coachWindow(tournament),
       form: formFields(tournament).filter((f) => f.visible !== false),
     }
   }
@@ -2576,7 +2665,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       .filter((n) => !n.teamId || n.teamId === team.id) : []
     return {
       tournament: { ...publicTournament(tournament), entriesLocked: !!tournament.entriesLocked },
-      registrationOpen: lifecycleOf(tournament) === T.REGISTRATION_OPEN && !tournament.entriesLocked,
+      ...coachWindow(tournament),
       form: formFields(tournament).filter((f) => f.visible !== false),
       team,
       players: players.sort(byName),
@@ -2781,9 +2870,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket,
-    publishResults, verifyResult, assertResultEditable, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
+    publishResults, verifyResult, assertResultEditable, setDivisionLock, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
     // rulesets and locks
-    listRulesets, resolveRuleset, createRuleset, updateRuleset, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
+    listRulesets, resolveRuleset, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
     // links and coaches
     getLink, saveLink, linkInfo, openLink, coachOverview,
     // public, dashboard, audit

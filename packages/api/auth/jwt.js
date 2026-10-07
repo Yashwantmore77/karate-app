@@ -8,6 +8,16 @@ export const TOKEN_TTL = '12h' // a tournament day
 // Falling back to a random one per boot is deliberate: it keeps tokens
 // unforgeable and makes a missing secret obvious (tokens stop surviving a
 // restart) instead of shipping a known default.
+// In production a missing or short secret stops the server: a restart would
+// otherwise sign every referee out mid-event, and a guessable secret lets
+// anyone mint an admin token.
+export function checkSecret(env = process.env) {
+  if (env.NODE_ENV === 'production' && String(env.JWT_SECRET || '').length < 32) {
+    throw new Error('JWT_SECRET must be set to at least 32 characters in production')
+  }
+}
+checkSecret()
+
 const secret = process.env.JWT_SECRET || randomBytes(32).toString('hex')
 
 if (!process.env.JWT_SECRET) {

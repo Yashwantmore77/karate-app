@@ -66,11 +66,12 @@ export const verifyPassword = async (password, stored) => {
   return timingSafeEqual(expectedBuf, derived)
 }
 
-// The demo roster. Seeded into MongoDB on first connect when the users
-// collection is empty, and used directly, in memory, when no MONGODB_URI is
-// configured at all — so local development and the test suite need no
-// database, while a real deployment gets the same accounts in Mongo the
-// moment MONGODB_URI is set.
+// The demo roster, password "test123". Used directly, in memory, when no
+// MONGODB_URI is configured, so local development and the test suite need no
+// database. Into MongoDB it is seeded only outside production, or when
+// SEED_DEMO_ACCOUNTS=true: a published password must never open a real
+// event. A production database starts with one super admin instead, from
+// BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD.
 const SEED = [
   { uid: 'admin-uid-001', email: 'admin@kata.local', role: 'admin', password: 'test123' },
   { uid: 'ref-uid-001', email: 'referee@kata.local', role: 'referee', password: 'test123' },
@@ -179,17 +180,45 @@ async function deleteMemoryUser(uid) {
 
 let seeded = false
 
+const isProduction = () => process.env.NODE_ENV === 'production'
+export const seedDemoAccounts = () => process.env.SEED_DEMO_ACCOUNTS === 'true'
+  || (!isProduction() && process.env.SEED_DEMO_ACCOUNTS !== 'false')
+
+/** The first accounts of an empty database: the demo roster, or one super admin. */
+export async function initialAccounts(env = process.env) {
+  if (seedDemoAccounts()) {
+    return Promise.all(SEED.map(async ({ password, ...user }) => ({ ...user, passwordHash: await hashPassword(password) })))
+  }
+  const email = normalizeEmail(env.BOOTSTRAP_ADMIN_EMAIL || '')
+  const password = env.BOOTSTRAP_ADMIN_PASSWORD || ''
+  if (!email || password.length < 12) {
+    console.warn('[auth] No accounts yet. Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD (12+ characters) to create the first super admin.')
+    return []
+  }
+  return [{ uid: randomUUID(), email, role: 'super_admin', passwordHash: await hashPassword(password) }]
+}
+
+/** In production, names any demo account that still has the demo password. */
+async function warnAboutDemoPasswords(collection) {
+  if (!isProduction()) return
+  const exposed = []
+  for (const { email, password } of SEED) {
+    const row = await collection.findOne({ email }, { projection: { passwordHash: 1 } })
+    if (row && (await verifyPassword(password, row.passwordHash))) exposed.push(email)
+  }
+  if (exposed.length) console.warn(`[auth] SECURITY: these accounts still use the published demo password; change or delete them: ${exposed.join(', ')}`)
+}
+
 async function usersCollection() {
   const db = await getDb()
   const collection = db.collection(COLLECTION)
   if (!seeded) {
     seeded = true // set before awaiting: two near-simultaneous callers must not both seed
     if ((await collection.countDocuments()) === 0) {
-      const docs = await Promise.all(
-        SEED.map(async ({ password, ...user }) => ({ ...user, passwordHash: await hashPassword(password) }))
-      )
-      await collection.insertMany(docs)
+      const docs = await initialAccounts()
+      if (docs.length) await collection.insertMany(docs)
     }
+    warnAboutDemoPasswords(collection).catch(() => {})
     await collection.createIndex({ email: 1 }, { unique: true })
     await collection.createIndex({ uid: 1 }, { unique: true })
   }

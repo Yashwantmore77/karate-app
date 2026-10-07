@@ -6,7 +6,8 @@ import { forbidden } from '../lib/errors.js'
 
 // PRD v1 §6, §14, §24: versioned rulesets. Everyone on staff can read them
 // (a tournament admin picks one); only those with the ruleset privilege
-// (the super admin) write them.
+// (the super admin) write them. The standard ones can be edited too: an edit
+// is saved as a new version and the original can be restored.
 
 const RULESET = {
   name: { type: 'string', required: true, min: 2, max: 80 },
@@ -27,6 +28,10 @@ export function rulesetRoutes(tms) {
   })
   router.patch('/:id', manage, async (req, res) => {
     res.json({ ruleset: await tms.updateRuleset(req.user, req.params.id, validate(req.body, RULESET, { partial: true })) })
+  })
+  // A standard ruleset back as it shipped (its edits stay on record).
+  router.post('/:id/restore', manage, async (req, res) => {
+    res.json({ ruleset: await tms.restoreStandard(req.user, req.params.id) })
   })
   router.post('/:id/active', manage, async (req, res) => {
     const { active } = validate(req.body, { active: { type: 'boolean', required: true } })

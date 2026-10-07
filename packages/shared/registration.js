@@ -102,8 +102,16 @@ export function normalizeForm(fields) {
 }
 
 /** A pattern an admin typed, if it is a usable regular expression. */
+// A quantified group that is itself repeated — (a+)+, (\w*)*, (x|y+){2,} —
+// can take exponential time on a crafted input. An admin types the pattern
+// and a coach types the input, so such patterns are refused outright.
+const NESTED_QUANTIFIER = /\((?:[^()\\]|\\.)*[+*}](?:[^()\\]|\\.)*\)\s*(?:[+*]|\{\d+,\d*\})/
+// Backreferences are refused for the same reason.
+const BACKREFERENCE = /\\[1-9]/
+
 export function safePattern(pattern) {
   if (!pattern || typeof pattern !== 'string' || pattern.length > 200) return null
+  if (NESTED_QUANTIFIER.test(pattern) || BACKREFERENCE.test(pattern)) return null
   try {
     return new RegExp(`^(?:${pattern})$`)
   } catch {
@@ -382,6 +390,22 @@ const csvCell = (value) => {
 
 export const toCsv = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n')
 
+/**
+ * A cell a spreadsheet would run as a formula ("=HYPERLINK(…)", "@SUM(…)",
+ * "-1+1|cmd!A0"), made inert with a leading apostrophe. Coaches type names
+ * and clubs, so every exported CSV goes through this. "-35 KG" and "+91 …"
+ * are left alone: a sign alone is not a formula.
+ */
+export const neutralizeFormula = (value) => {
+  if (typeof value !== 'string' || !value) return value
+  if (/^[=@\t\r]/.test(value)) return `'${value}`
+  if (/^[+-]/.test(value) && /[=(|!@;]/.test(value)) return `'${value}`
+  return value
+}
+
+/** CSV for people to open in a spreadsheet: as toCsv, with formulas neutralised. */
+export const toExportCsv = (rows) => toCsv(rows.map((r) => r.map((v) => neutralizeFormula(Array.isArray(v) ? v.join('+') : v))))
+
 const squash = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
 /** Maps spreadsheet headers to field keys by key or label, forgivingly. */
@@ -461,7 +485,7 @@ export function withTeamDefaults(input, team, defaultCountry = null) {
 }
 
 export const errorReportCsv = (errors) =>
-  toCsv([['Row', 'Field', 'Error'], ...errors.map((e) => [e.row, e.field || '', e.message])])
+  toExportCsv([['Row', 'Field', 'Error'], ...errors.map((e) => [e.row, e.field || '', e.message])])
 
 // --- privacy (Rule 8) -------------------------------------------------------
 
