@@ -11,6 +11,7 @@ import AdminDashboard from '../pages/admin/AdminDashboard'
 import AdminOrganizations from '../pages/admin/AdminOrganizations'
 import AdminRulesets from '../pages/admin/AdminRulesets'
 import AdminSystem from '../pages/admin/AdminSystem'
+import Analytics from '../pages/Analytics'
 
 export default function AdminRouter({ uid, profile }) {
   return (
@@ -20,6 +21,7 @@ export default function AdminRouter({ uid, profile }) {
       {profile?.role === 'super_admin' && <Route path="/organizations" element={<AdminOrganizations />} />}
       {profile?.role === 'super_admin' && <Route path="/rulesets" element={<AdminRulesets />} />}
       <Route path="/system" element={<AdminSystem profile={profile} />} />
+      <Route path="/analytics" element={<Analytics />} />
       <Route path="/accounts" element={<AdminUserList uid={uid} />} />
       <Route path="/sign-ins" element={<AdminLoginLog />} />
       <Route path="/tournament/:tournamentId" element={<AdminTournamentDetail uid={uid} />} />

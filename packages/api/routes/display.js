@@ -34,42 +34,67 @@ const DISPLAY_SCHEMA = {
   message: { type: 'string', max: 200, nullable: true },
 }
 
+// PRD v1 §17: one screen per mat. Each mat has its own document ("mat-2");
+// the original "live" document keeps showing whichever mat published last,
+// so a single hall screen still works. An announcement can go to the whole
+// hall (on "live") or to one mat.
+const MAX_MAT = 20
+const matOf = (req) => {
+  const n = Number(req.query.mat)
+  return Number.isInteger(n) && n >= 1 && n <= MAX_MAT ? n : null
+}
+const docId = (mat) => (mat ? `mat-${mat}` : LIVE_ID)
+
 export function displayRoutes(stores) {
   const router = Router()
   const { display } = stores
+
+  const upsert = async (id, patch) => {
+    const existing = await display.get(id)
+    return existing ? display.update(id, patch) : display.insert({ status: 'closed', ...patch, id })
+  }
 
   /**
    * Public by design: a scoreboard is a screen bolted to a wall in a sports
    * hall, and nobody is going to sign it in. It exposes only what the audience
    * is already watching — names, scores, the clock — and it is read-only.
    */
-  router.get('/', async (_req, res) => {
+  router.get('/', async (req, res) => {
     // A stale score on a wall is worse than no score, so nothing may cache it.
     res.setHeader('Cache-Control', 'no-store')
-    res.json({ display: (await display.get(LIVE_ID)) ?? null })
+    const mat = matOf(req)
+    const hall = await display.get(LIVE_ID)
+    if (!mat) return res.json({ display: hall ?? null })
+    const row = await display.get(docId(mat))
+    // A mat screen shows its own announcement, or else the hall's.
+    res.json({ display: { ...(row || { status: 'closed' }), mat, message: row?.message || hall?.message || null } })
   })
 
   // Publishing stays with whoever is running the mat, or the scoreboard
   // operator (PRD v1 §4: display control, no scoring authority).
   router.put('/', requireAuth, requireRole('referee', 'scoreboard_operator'), async (req, res) => {
     const payload = validate(req.body, DISPLAY_SCHEMA)
-    const existing = await display.get(LIVE_ID)
-    // A referee's update keeps the operator's announcement.
-    const keep = existing?.message && payload.message === undefined ? { message: existing.message } : {}
-    const saved = existing
-      ? await display.update(LIVE_ID, { ...payload, ...keep })
-      : await display.insert({ ...payload, id: LIVE_ID })
+    const mat = matOf(req) || (Number.isInteger(Number(payload.fieldNumber)) ? matOf({ query: { mat: payload.fieldNumber } }) : null)
+    // A referee's update never carries the operator's announcement away.
+    const { message, ...scores } = payload
+    const hall = await display.get(LIVE_ID)
+    let saved
+    if (mat) {
+      const before = await display.get(docId(mat))
+      saved = await upsert(docId(mat), { ...scores, ...(message !== undefined ? { message } : {}) })
+      // The hall screen follows the latest bout, and closes with it.
+      const hallShowsThis = !hall || hall.status !== 'open' || hall.matchId === (scores.matchId ?? before?.matchId) || String(hall.fieldNumber) === String(mat)
+      if (scores.status === 'open' || hallShowsThis) await upsert(LIVE_ID, { ...scores, fieldNumber: scores.fieldNumber ?? String(mat) })
+    } else {
+      saved = await upsert(LIVE_ID, { ...scores, ...(message !== undefined ? { message } : {}) })
+    }
     res.json({ display: saved })
   })
 
-  // Just the announcement line, without touching the scores.
+  // Just the announcement line, without touching the scores; ?mat=N for one mat.
   router.patch('/message', requireAuth, requireRole('referee', 'scoreboard_operator'), async (req, res) => {
     const { message } = validate(req.body, { message: { type: 'string', max: 200, nullable: true } })
-    const existing = await display.get(LIVE_ID)
-    const saved = existing
-      ? await display.update(LIVE_ID, { message: message || null })
-      : await display.insert({ id: LIVE_ID, status: 'closed', message: message || null })
-    res.json({ display: saved })
+    res.json({ display: await upsert(docId(matOf(req)), { message: message || null }) })
   })
 
   return router

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 // PRD v1 §15, §25: "idempotent scoring/payment callbacks". A write sent with
 // an Idempotency-Key header is carried out once; a retry with the same key
 // (same caller, same route) gets the first answer back instead of a second
@@ -11,7 +13,12 @@ export function idempotency() {
   return (req, res, next) => {
     const key = req.headers['idempotency-key']
     if (!key || !['POST', 'PUT', 'PATCH'].includes(req.method)) return next()
-    const caller = String(req.headers.authorization || '').slice(-24) || req.ip
+    // Signed-in callers only, keyed on the whole token: an anonymous replay
+    // keyed on an address could hand one venue-Wi-Fi user another's answer
+    // (a coach session token, say).
+    const auth = String(req.headers.authorization || '')
+    if (!auth.startsWith('Bearer ')) return next()
+    const caller = createHash('sha256').update(auth).digest('hex')
     const id = `${caller}|${req.method}|${req.originalUrl}|${String(key).slice(0, 100)}`
     const now = Date.now()
     const hit = seen.get(id)

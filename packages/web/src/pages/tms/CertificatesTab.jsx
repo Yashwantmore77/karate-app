@@ -9,6 +9,7 @@ import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import { MEDAL_ICON } from './ResultsTab'
 import { useLoading } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const TYPES = { medal: 'Medal winners', participation: 'Participation (every player who took part)', coach: 'Coaches', official: 'Referees and judges who worked' }
 const TYPE_LABEL = { medal: 'Medal', participation: 'Participation', coach: 'Coach', official: 'Official', custom: 'Special award' }
@@ -35,7 +36,7 @@ export default function CertificatesTab({ tournament, version, action, basePath 
     <Stack spacing={2}>
       {!tournament.resultsPublished && <Alert severity="info">Publish results first for medal certificates; participation, coach and official certificates can be issued any time.</Alert>}
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Issue certificates</Typography>
+        <HelpTitle id="certificates.issue" variant="h3" gutterBottom>Issue certificates</HelpTitle>
         <FormGroup row sx={{ mb: 1 }}>
           {Object.entries(TYPES).map(([k, label]) => (
             <FormControlLabel key={k} label={label} control={

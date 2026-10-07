@@ -6,11 +6,16 @@ import { formatClock } from '@kumite/shared/format.js'
 
 let http, port, clients, refereeToken, judgeToken
 
+// The bout every socket test scores. A room is only opened for a bout that
+// exists (a made-up id is refused), so it is stored first; unassigned, so
+// any referee may hold its mat (AC-14).
 const listen = () =>
   new Promise((resolve) => {
     const app = createApp()
     http = app.http
-    http.listen(0, () => resolve(http.address().port))
+    app.stores.matches.insert({ id: 'm1', status: 'open', refereeId: null, judgeIds: [] }).then(() => {
+      http.listen(0, () => resolve(http.address().port))
+    })
   })
 
 const login = (email, password = 'test123') =>
@@ -68,6 +73,41 @@ describe('BE-1 match server', () => {
     const { t1, t2 } = await emit(socket, 'time:ping', { t0 })
     expect(t1).toBeGreaterThanOrEqual(t0 - 1000)
     expect(t2).toBeGreaterThanOrEqual(t1)
+  })
+
+  it('replays offline actions in order with their own times, and counts hand-overs (offline scoring)', async () => {
+    const first = client()
+    await emit(first, 'match:join', { matchId: 'm1', control: true })
+    const t0 = Date.now()
+    const live = await emit(first, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'aka', type: 'yuko' }, clientEventId: 'on-1' })
+    expect(live.ok).toBe(true)
+    first.disconnect()
+
+    // the same referee back on a new connection: not a hand-over
+    const again = client()
+    const snap = await emit(again, 'match:join', { matchId: 'm1', control: true })
+    expect(snap.handoffs).toBe(0)
+    // an action scored offline a moment ago keeps its time, never before the last change
+    const events = []
+    again.on('match:event', (e) => events.push(e))
+    const replayed = await emit(again, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'ao', type: 'yuko' }, clientEventId: 'off-1', offlineAt: t0 - 60_000 })
+    expect(replayed.ok).toBe(true)
+    // sending it twice applies it once
+    expect((await emit(again, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'ao', type: 'yuko' }, clientEventId: 'off-1', offlineAt: t0 })).duplicate).toBe(true)
+    await new Promise((r) => setTimeout(r, 50))
+    expect(events[0].at).toBeGreaterThanOrEqual(t0 - 1000)
+    expect(events[0].at).toBeLessThanOrEqual(Date.now())
+    // a time in the future is brought back to now
+    await emit(again, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'ao', type: 'yuko' }, clientEventId: 'off-2', offlineAt: Date.now() + 3_600_000 })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(events.at(-1).at).toBeLessThanOrEqual(Date.now())
+
+    // another person taking the mat is a hand-over
+    const admin = client(await tokenFor('admin@kata.local'))
+    await emit(admin, 'match:join', { matchId: 'm1' })
+    await emit(admin, 'match:takeover', { matchId: 'm1' })
+    const after = await emit(client(), 'match:join', { matchId: 'm1' })
+    expect(after.handoffs).toBe(1)
   })
 
   it('hands a joining device the current snapshot', async () => {

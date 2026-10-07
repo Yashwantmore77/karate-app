@@ -4,7 +4,9 @@ import {
   AppBar, Toolbar, Box, Button, IconButton, Drawer, List, ListItemButton,
   ListItemText, Typography, Divider, Chip, Tooltip,
 } from '@mui/material'
-import { Menu as MenuIcon, Logout } from '@mui/icons-material'
+import { Menu as MenuIcon, Logout, InstallMobile, HelpOutlineOutlined as HelpOutline } from '@mui/icons-material'
+import GuideDialog from './help/GuideDialog'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
 import { useConnection } from '../state/ConnectionContext'
@@ -22,6 +24,7 @@ const MENUS = {
   admin: [
     { label: 'Dashboard', to: '/admin/dashboard' },
     { label: 'Tournaments', to: '/admin' },
+    { label: 'Analytics', to: '/admin/analytics' },
     // The referee screens, which an admin may also use: scheduling, panels,
     // the draw, and deleting a bout.
     { label: 'Matches', to: '/referee' },
@@ -66,6 +69,7 @@ const MENUS = {
   ],
   viewer: [
     { label: 'Tournaments', to: '/viewer' },
+    { label: 'Analytics', to: '/viewer/analytics' },
     { label: 'Live board', to: '/live' },
     { label: 'Public site', to: '/tournaments' },
   ],
@@ -98,6 +102,8 @@ export default function AppNav({ user, profile }) {
   const navigate = useNavigate()
   const { logout } = useSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
+  const { canInstall, install } = useInstallPrompt()
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
@@ -177,6 +183,19 @@ export default function AppNav({ user, profile }) {
             sx={{ display: { xs: 'none', sm: 'inline-flex' }, mr: 1, textTransform: 'capitalize' }}
           />
 
+          {/* The step-by-step guide, from any page: what to do, in what order. */}
+          <Tooltip title="How it works: step-by-step guide">
+            <Button color="inherit" startIcon={<HelpOutline />} onClick={() => setGuideOpen(true)} sx={{ mr: 0.5, minWidth: 0, px: { xs: 1, sm: 1.5 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }} aria-label="Guide">
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Guide</Box>
+            </Button>
+          </Tooltip>
+
+          {canInstall && (
+            <Tooltip title="Install the app on this device">
+              <IconButton color="inherit" aria-label="Install app" onClick={install} sx={{ mr: 0.5 }}><InstallMobile /></IconButton>
+            </Tooltip>
+          )}
+
           <Tooltip title="Sign out">
             <IconButton
               color="inherit"
@@ -222,6 +241,7 @@ export default function AppNav({ user, profile }) {
           </List>
         </Box>
       </Drawer>
+      <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} role={profile.role} />
     </>
   )
 }

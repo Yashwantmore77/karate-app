@@ -15,6 +15,7 @@ import { KATA_METHOD_LABEL } from '@kumite/shared/kata.js'
 import { tms } from '../../data/tms'
 import { readFileBase64 } from '../../components/tms/download'
 import { checkFile } from '@kumite/shared/files.js'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const DETAIL_FIELDS = [
   ['name', 'Tournament name', 12], ['description', 'Description', 12],
@@ -130,7 +131,7 @@ export default function SetupTab({ tournament, reload, action }) {
         </Alert>
       )}
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Tournament details</Typography>
+        <HelpTitle id="setup.details" variant="h3" gutterBottom>Tournament details</HelpTitle>
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 4 }}>
             <TextField select fullWidth label="Tournament type" value={details.type || ''} onChange={(e) => setDetails({ ...details, type: e.target.value })}>
@@ -205,7 +206,7 @@ export default function SetupTab({ tournament, reload, action }) {
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Competition rules</Typography>
+        <HelpTitle id="setup.rules" variant="h3" gutterBottom>Competition rules</HelpTitle>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Configured per tournament, never hard-coded (sections 22, 29, 34, 35).</Typography>
         <Grid container spacing={2}>
           {NUMBER_SETTINGS.map(([k, label, help]) => (
@@ -290,7 +291,7 @@ export default function SetupTab({ tournament, reload, action }) {
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Registration link</Typography>
+        <HelpTitle id="setup.link" variant="h3" gutterBottom>Registration link</HelpTitle>
         {!link && <Button variant="contained" onClick={() => saveLink({})}>Generate link</Button>}
         {link && (
           <Stack spacing={2}>
@@ -319,7 +320,7 @@ export default function SetupTab({ tournament, reload, action }) {
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Registration form</Typography>
+        <HelpTitle id="setup.form" variant="h3" gutterBottom>Registration form</HelpTitle>
         <Alert severity="info" sx={{ mb: 2 }}>Name, DOB, gender, event and weight drive categorisation: they can be renamed but not removed or hidden. Player ID is given by the system. Read-only fields are shown to coaches but filled in by the organisers.</Alert>
         <TableContainer sx={{ overflowX: 'auto' }}>
           <Table size="small">
@@ -375,7 +376,7 @@ export default function SetupTab({ tournament, reload, action }) {
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h3" gutterBottom>Partner API</Typography>
+        <HelpTitle id="setup.partner" variant="h3" gutterBottom>Partner API</HelpTitle>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           A federation or club system can send entries with this tournament&apos;s key (POST /api/v1/partner/tournaments/{tid}/players, header X-API-Key).
           Entries go through the same checks and duplicate review as any other.

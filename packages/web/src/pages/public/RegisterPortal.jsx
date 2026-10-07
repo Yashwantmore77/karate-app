@@ -15,6 +15,7 @@ import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import useAction from '../../components/tms/useAction'
 import { openStoredFile } from '../../components/tms/download'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -22,6 +23,19 @@ const TEAM_FIELDS = [
   ['state', 'State', 4], ['country', 'Country', 4], ['address', 'Address', 12],
 ]
 const sessionKey = (token) => `kt:coach:${token}`
+
+// PRD v1 §6/§11: why a coach cannot register right now, in their words.
+const when = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '')
+export function closedMessage(w) {
+  switch (w?.closedReason) {
+    case 'registration_not_yet_open': return `Registration opens ${when(w.opensAt)}.`
+    case 'registration_closed': return w.closesAt && new Date(w.closesAt) < new Date() ? `Registration closed ${when(w.closesAt)}.` : 'Registration is not open.'
+    case 'entry_lock_deadline_passed': return 'The deadline for changing entries has passed.'
+    case 'entries_soft_locked': return 'The organisers have closed entries for coaches.'
+    case 'entries_locked': return 'Entries are locked: player details can no longer change (Rule 7).'
+    default: return 'Registration is not open.'
+  }
+}
 
 /**
  * PRD sections 14 and 52: a coach opens the tournament's registration link,
@@ -40,6 +54,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   })
   const [duplicates, setDuplicates] = useState(null)
   const [account, setAccount] = useState(null)
+  const [certificates, setCertificates] = useState(null)
   const [password, setPassword] = useState('')
   const [me, setMe] = useState(null)
   const [team, setTeam] = useState({})
@@ -61,7 +76,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
     if (err?.status === 401) { keep(null); setMe(null) } else action.notify({ severity: 'error', text: describeError(err) })
   })
   useEffect(() => { load() }, [session])
-  const info = accountToken ? (me && { tournament: me.tournament, registrationOpen: me.registrationOpen, requiresPassword: false, form: me.form }) : linkInfo
+  const info = accountToken ? (me && { ...me, requiresPassword: false }) : linkInfo
 
   const fields = useMemo(() => me?.form || info?.form || [], [me, info])
 
@@ -87,7 +102,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
       <Container maxWidth="sm" sx={{ py: 6 }}>
         {header}
         <Paper sx={{ p: 3 }}>
-          {!info.registrationOpen && <Alert severity="warning" sx={{ mb: 2 }}>Registration is currently closed. You can still sign in to see your team's status.</Alert>}
+          {!info.registrationOpen && <Alert severity="warning" sx={{ mb: 2 }}>{closedMessage(info)} You can still sign in to see your team's status.</Alert>}
           {info.requiresPassword ? (
             <Stack spacing={2}>
               <TextField type="password" label="Registration password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && open()} autoFocus />
@@ -111,7 +126,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
       <Container maxWidth="md" sx={{ py: 6 }}>
         {header}
         <Paper sx={{ p: 3 }}>
-          <Typography variant="h3" gutterBottom>Register your team</Typography>
+          <HelpTitle id="coach.register" variant="h3" gutterBottom>Register your team</HelpTitle>
           <Grid container spacing={2}>
             {TEAM_FIELDS.map(([k, label, w, required]) => (
               <Grid key={k} size={{ xs: 12, sm: w }}>
@@ -173,9 +188,9 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {header}
-      {!canWrite && <Alert severity="info" sx={{ mb: 2 }}>{me.tournament.entriesLocked ? 'Entries are locked: player details can no longer change (Rule 7).' : 'Registration is not open.'} You can still follow your players' status.</Alert>}
+      {!canWrite && <Alert severity="info" sx={{ mb: 2 }}>{closedMessage(me)} You can still follow your players' status.</Alert>}
       <Paper sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h3">{me.team.name}</Typography>
+        <HelpTitle id="coach.portal" variant="h3">{me.team.name}</HelpTitle>
         <Typography color="text.secondary">{[me.team.club, me.team.coachName && `Coach ${me.team.coachName}`, me.team.state].filter(Boolean).join(' · ')}</Typography>
         <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: 'wrap' }}>
           <Typography><b>{players.length}</b> players</Typography>
@@ -191,6 +206,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
         <ToggleButton value="players">Players</ToggleButton>
         <ToggleButton value="bulk" disabled={!canWrite}>Bulk upload</ToggleButton>
         <ToggleButton value="notes">Notifications ({me.notifications.length})</ToggleButton>
+        <ToggleButton value="certificates" onClick={() => tms.coach.certificates(session).then(setCertificates).catch(() => setCertificates([]))}>Certificates</ToggleButton>
       </ToggleButtonGroup>
 
       {view === 'players' && (
@@ -220,6 +236,20 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
         <BulkUpload fields={fields} withTeamColumn={false} action={action}
           onPreview={(csv) => tms.coach.bulkPreview(session, csv)} onImport={(csv, opts) => tms.coach.bulkImport(session, csv, opts)}
           onDone={() => { setView('players'); load() }} />
+      )}
+
+      {view === 'certificates' && (
+        <DataTable rows={certificates || []} rowKey={(c) => c.certificateId} loading={!certificates}
+          empty="No certificates yet. They appear once the organisers issue them after the results."
+          columns={[
+            { key: 'name', label: 'Name' },
+            { key: 'type', label: 'Type', render: (c) => (c.medal ? `${c.medal[0].toUpperCase()}${c.medal.slice(1)} medal` : c.type === 'coach' ? 'Coach' : c.type === 'participation' ? 'Participation' : c.title || 'Award') },
+            { key: 'category', label: 'Category / award', value: (c) => c.award || c.category, render: (c) => c.award || c.category || '—' },
+            { key: 'certificateId', label: 'Certificate ID' },
+            { key: 'pdf', label: '', sortable: false, render: (c) => (
+              <Button size="small" variant="outlined" onClick={() => action.run(() => tms.coach.certificatePdf(session, c.certificateId))}>Download</Button>
+            ) },
+          ]} />
       )}
 
       {view === 'notes' && (

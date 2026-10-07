@@ -3,12 +3,13 @@ import { createApp } from './index.js'
 import { createStores } from './lib/store.js'
 import { createBackup, restoreBackup, BACKUP_FORMAT } from './lib/backup.js'
 import { emailNotifier } from './lib/emailNotifier.js'
+import { io as connect } from 'socket.io-client'
 
 // PRD v1 platform pieces over HTTP: partner import, coach accounts, sessions,
 // rulesets, system audit and backup, the scoreboard operator, idempotency,
 // tournament-scoped roles and the notification channels.
 
-let http, port
+let http, port, stores
 const tokens = {}
 
 const call = async (method, path, body, token, headers = {}) => {
@@ -44,6 +45,7 @@ const tournament = async (slug = 'partner-open') => {
 beforeEach(async () => {
   const app = createApp()
   http = app.http
+  stores = app.stores
   port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
   tokens.admin = await login('admin@kata.local')
   tokens.superadmin = await login('superadmin@kata.local')
@@ -200,5 +202,181 @@ describe('notification channels (PRD v1 §19)', () => {
     posted.length = 0
     await notify({ audience: 'team', teamId: team.id, tournamentId: 't1', type: 'draw_published', message: 'Draw is out' }, { name: 'Open' }, { email: true, sms: false })
     expect(posted).toEqual([])
+  })
+})
+
+describe('who may score a bout (PRD v1 AC-14)', () => {
+  const socketFor = (token) => connect(`http://localhost:${port}`, { transports: ['websocket'], auth: { token } })
+  const emit = (socket, event, payload) => new Promise((resolve) => socket.emit(event, payload, resolve))
+
+  it('gives a mat only to the assigned referee or an admin of that tournament', async () => {
+    const t = await tournament('mat-open')
+    const other = await tournament('mat-other')
+    const category = await stores.categories.insert({ tournamentId: t, name: 'Boys -35' })
+    const mine = await stores.matches.insert({ categoryId: category.id, status: 'open', refereeId: 'ref-uid-001', judgeIds: [] })
+    const theirs = await stores.matches.insert({ categoryId: category.id, status: 'open', refereeId: 'someone-else', judgeIds: [] })
+    // a referee limited to the other tournament
+    await call('POST', '/users', { email: 'ref.other@kata.local', password: 'password1', role: 'referee', tournamentIds: [other] }, tokens.admin)
+    // a viewer who referees in this tournament only
+    await call('POST', '/users', { email: 'ref.scoped@kata.local', password: 'password1', role: 'viewer', tournamentRoles: { [t]: 'referee' } }, tokens.admin)
+    const referee = await login('referee@kata.local')
+    const outsider = await login('ref.other@kata.local', 'password1')
+    const scoped = await login('ref.scoped@kata.local', 'password1')
+
+    const sockets = [referee, outsider, scoped, tokens.admin].map(socketFor)
+    try {
+      const [ref, out, sc, adm] = sockets
+      expect((await emit(ref, 'match:join', { matchId: 'made-up' })).error).toBe('unknown_match')
+      // assigned: control
+      expect((await emit(ref, 'match:join', { matchId: mine.id, control: true })).controllerId).toBeTruthy()
+      expect((await emit(ref, 'match:cmd', { matchId: mine.id, cmd: 'SCORE', payload: { side: 'aka', type: 'yuko' } })).ok).toBe(true)
+      // assigned to someone else: may watch, may not hold or seize the mat
+      expect((await emit(ref, 'match:join', { matchId: theirs.id, control: true })).controllerId).toBeNull()
+      expect((await emit(ref, 'match:takeover', { matchId: theirs.id })).error).toBe('forbidden')
+      expect((await emit(ref, 'match:cmd', { matchId: theirs.id, cmd: 'SCORE', payload: { side: 'aka', type: 'yuko' } })).error).toBe('forbidden')
+      // another tournament's referee: nothing
+      expect((await emit(out, 'match:takeover', { matchId: mine.id })).error).toBe('forbidden')
+      // a tournament-scoped referee, on an unassigned bout of their tournament
+      const open = await stores.matches.insert({ categoryId: category.id, status: 'open', refereeId: null, judgeIds: [] })
+      expect((await emit(sc, 'match:join', { matchId: open.id, control: true })).controllerId).toBeTruthy()
+      // the tournament admin may take over any bout
+      expect((await emit(adm, 'match:takeover', { matchId: theirs.id })).ok).toBe(true)
+    } finally {
+      sockets.forEach((x) => x.close())
+    }
+
+    // the same rule over REST
+    expect((await call('PATCH', `/matches/${theirs.id}`, { status: 'paused' }, referee)).status).toBe(403)
+    expect((await call('PATCH', `/matches/${mine.id}`, { status: 'paused' }, outsider)).status).toBe(403)
+    expect((await call('GET', `/categories/${category.id}/matches`, undefined, outsider)).status).toBe(403)
+  })
+})
+
+describe('one scoreboard per mat (PRD v1 §17)', () => {
+  it('keeps each mat on its own screen while the hall screen follows the latest bout', async () => {
+    const referee = await login('referee@kata.local')
+    const bout = (id, name) => ({ status: 'open', matchId: id, fieldNumber: id === 'b1' ? '1' : '2', akaName: name, aoName: 'X', akaScore: 0, aoScore: 0 })
+    await call('PUT', '/display', bout('b1', 'Asha'), referee)
+    await call('PUT', '/display', bout('b2', 'Ravi'), referee)
+    expect((await call('GET', '/display?mat=1')).body.display).toMatchObject({ mat: 1, akaName: 'Asha', status: 'open' })
+    expect((await call('GET', '/display?mat=2')).body.display).toMatchObject({ mat: 2, akaName: 'Ravi' })
+    expect((await call('GET', '/display')).body.display.akaName).toBe('Ravi')
+    // closing mat 1 leaves the hall screen, which shows mat 2, alone
+    await call('PUT', '/display', { status: 'closed', matchId: 'b1', fieldNumber: '1' }, referee)
+    expect((await call('GET', '/display?mat=1')).body.display.status).toBe('closed')
+    expect((await call('GET', '/display')).body.display).toMatchObject({ status: 'open', akaName: 'Ravi' })
+    // a hall announcement shows on every mat; a mat's own one replaces it there
+    await call('PATCH', '/display/message', { message: 'Finals at 3 pm' }, tokens.scoreboard)
+    await call('PATCH', '/display/message?mat=2', { message: 'Mat 2: next is the final' }, tokens.scoreboard)
+    expect((await call('GET', '/display?mat=1')).body.display.message).toBe('Finals at 3 pm')
+    expect((await call('GET', '/display?mat=2')).body.display.message).toBe('Mat 2: next is the final')
+    // a referee's score update keeps the announcement
+    await call('PUT', '/display', { ...bout('b2', 'Ravi'), akaScore: 3 }, referee)
+    expect((await call('GET', '/display?mat=2')).body.display).toMatchObject({ akaScore: 3, message: 'Mat 2: next is the final' })
+  })
+})
+
+describe('coach portal certificates', () => {
+  it("shows a coach only their own team's certificates, and prints them", async () => {
+    const t = await tournament('certs-open')
+    const { body: { link } } = await call('PUT', `/tournaments/${t}/registration-link`, { password: 'dojo-pass' }, tokens.admin)
+    const session = (await call('POST', `/public/register/${link.token}/session`, { password: 'dojo-pass' })).body.token
+    const coach = (await call('POST', '/coach/team', { name: 'ABC Karate', club: 'ABC Karate', coachName: 'Sensei Rao' }, session)).body.token
+    const mine = (await call('POST', '/coach/players', { name: 'Asha Rao', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)).body.player
+    const other = (await call('POST', `/tournaments/${t}/teams`, { name: 'XYZ Dojo' }, tokens.admin)).body.team
+    const theirs = (await call('POST', `/tournaments/${t}/players`, { teamId: other.id, name: 'Ravi Kumar', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, tokens.admin)).body.player
+    await stores.certificates.insertMany([
+      { tournamentId: t, certificateId: 'CERT-MINE', type: 'gold', medal: 'gold', playerId: mine.id, name: 'Asha Rao', issuedAt: new Date().toISOString() },
+      { tournamentId: t, certificateId: 'CERT-THEIRS', type: 'silver', medal: 'silver', playerId: theirs.id, name: 'Ravi Kumar', issuedAt: new Date().toISOString() },
+    ])
+    const team = (await call('GET', '/coach/me', undefined, coach)).body.team
+    await stores.certificates.insert({ tournamentId: t, certificateId: 'CERT-COACH', type: 'coach', personKey: `coach:${team.id}`, name: 'Sensei Rao', issuedAt: new Date().toISOString() })
+
+    const listed = (await call('GET', '/coach/certificates', undefined, coach)).body.certificates
+    expect(listed.map((c) => c.certificateId).sort()).toEqual(['CERT-COACH', 'CERT-MINE'])
+    expect(Object.keys(listed[0])).not.toContain('playerId')
+    const pdf = await fetch(`http://localhost:${port}/api/v1/coach/certificates/CERT-MINE.pdf`, { headers: { authorization: `Bearer ${coach}` } })
+    expect(pdf.headers.get('content-type')).toBe('application/pdf')
+    expect((await fetch(`http://localhost:${port}/api/v1/coach/certificates/CERT-THEIRS.pdf`, { headers: { authorization: `Bearer ${coach}` } })).status).toBe(404)
+  })
+})
+
+describe('accreditation passes and QR check-in', () => {
+  it('issues passes once, prints them, and checks people in at the door and the mat', async () => {
+    const t = await tournament('pass-open')
+    await call('PATCH', `/tournaments/${t}/settings`, { requireWeighInForDraw: false }, tokens.admin)
+    const team = (await call('POST', `/tournaments/${t}/teams`, { name: 'ABC Karate', club: 'ABC Karate', coachName: 'Sensei Rao' }, tokens.admin)).body.team
+    for (const name of ['Asha Rao', 'Ravi Kumar']) {
+      const { player } = (await call('POST', `/tournaments/${t}/players`, { teamId: team.id, name, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, tokens.admin)).body
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    }
+    const first = (await call('POST', `/tournaments/${t}/passes/generate`, { kinds: ['player', 'coach', 'official'] }, tokens.admin)).body
+    expect(first.passes.filter((p) => p.kind === 'player')).toHaveLength(2)
+    expect(first.passes.some((p) => p.kind === 'coach' && p.name === 'Sensei Rao')).toBe(true)
+    expect(first.passes.some((p) => p.kind === 'official')).toBe(true)
+    // generating again keeps every printed code
+    const again = (await call('POST', `/tournaments/${t}/passes/generate`, { kinds: ['player', 'coach'] }, tokens.admin)).body
+    expect(again.created).toBe(0)
+    const pdf = await fetch(`http://localhost:${port}/api/v1/tournaments/${t}/passes.pdf`, { headers: { authorization: `Bearer ${tokens.admin}` } })
+    expect(pdf.headers.get('content-type')).toBe('application/pdf')
+
+    const asha = first.passes.find((p) => p.name === 'Asha Rao')
+    const announcer = await login('announcer@kata.local')
+    // the door: a QR holding the full check-in link works as well as the bare code
+    const door = (await call('POST', `/tournaments/${t}/checkin`, { code: `https://scores.example.org/checkin/${asha.code}` }, announcer)).body
+    expect(door).toMatchObject({ pass: { name: 'Asha Rao', role: 'Athlete' }, alreadyCheckedIn: false })
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: asha.code.toLowerCase() }, announcer)).body.alreadyCheckedIn).toBe(true)
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: 'NOPE123456' }, announcer)).status).toBe(404)
+    // the mat: needs a bout
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: asha.code, point: 'mat' }, announcer)).body.error).toBe('no_pending_bout')
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)
+    await call('POST', `/tournaments/${t}/locks/draw`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
+    const mat = (await call('POST', `/tournaments/${t}/checkin`, { code: asha.code, point: 'mat' }, announcer)).body
+    expect(mat.bout).toMatchObject({ matchNumber: 'M-001' })
+    const [bout] = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
+    expect(bout.attendance[mat.bout.side]).toBe('present')
+    // a coach's pass is not an athlete's
+    const coachPass = first.passes.find((p) => p.kind === 'coach')
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: coachPass.code, point: 'mat' }, announcer)).body.error).toBe('not_an_athlete')
+    // a viewer may not scan
+    expect((await call('POST', `/tournaments/${t}/checkin`, { code: asha.code }, tokens.viewer)).status).toBe(403)
+  })
+})
+
+describe('analytics across tournaments', () => {
+  it('follows an athlete and a club from one tournament to the next, without birth dates', async () => {
+    const seasons = []
+    for (const slug of ['spring-open', 'autumn-open']) {
+      const t = await tournament(slug)
+      await call('PATCH', `/tournaments/${t}/settings`, { requireWeighInForDraw: false }, tokens.admin)
+      const team = (await call('POST', `/tournaments/${t}/teams`, { name: 'ABC Karate', club: 'ABC Karate' }, tokens.admin)).body.team
+      const other = (await call('POST', `/tournaments/${t}/teams`, { name: 'XYZ Dojo', club: 'XYZ Dojo' }, tokens.admin)).body.team
+      for (const [teamId, name] of [[team.id, 'Asha Rao'], [other.id, 'Ravi Kumar']]) {
+        const { player } = (await call('POST', `/tournaments/${t}/players`, { teamId, name, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, tokens.admin)).body
+        await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+      }
+      await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+      await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)
+      await call('POST', `/tournaments/${t}/locks/draw`, { locked: true }, tokens.admin)
+      await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
+      const [final] = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
+      const ashaRed = final.akaName === 'Asha Rao'
+      await call('POST', `/tournaments/${t}/matches/${final.id}/correct`, { winner: ashaRed ? 'red' : 'blue', avgRed: 3, avgBlue: 1 }, tokens.admin)
+      await call('POST', `/tournaments/${t}/results/publish`, {}, tokens.admin)
+      seasons.push(t)
+    }
+    const res = await call('GET', '/analytics', undefined, tokens.admin)
+    expect(res.status).toBe(200)
+    const asha = res.body.athletes.find((a) => a.name === 'Asha Rao')
+    expect(asha).toMatchObject({ tournaments: 2, gold: 2, won: 2, lost: 0, winRate: 100 })
+    expect(asha.history.map((h) => h.medals[0]?.medal)).toEqual(['gold', 'gold'])
+    const abc = res.body.clubs.find((c) => c.name === 'ABC Karate')
+    expect(abc).toMatchObject({ tournaments: 2, gold: 2, entries: 2 })
+    expect(res.body.tournaments.map((t) => t.id).sort()).toEqual(seasons.sort())
+    expect(JSON.stringify(res.body)).not.toContain('2014-06-15')
+    // no reporting permission, no analytics
+    expect((await call('GET', '/analytics', undefined, await login('referee@kata.local'))).status).toBe(403)
   })
 })

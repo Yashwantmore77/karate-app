@@ -7,6 +7,7 @@ import { drawPools, poolSizes, seededRandom } from './pools.js'
 import { buildReport } from './reports.js'
 import { kataFinal, componentScore, rankKata } from './kata.js'
 import { zonedInstant } from './timezone.js'
+import { safePattern, neutralizeFormula, toExportCsv, toCsv } from './registration.js'
 
 const LEGACY = ['tournaments', 'categories', 'competitors', 'matches']
 const admin = { uid: 'admin-1', role: 'admin' }
@@ -80,6 +81,12 @@ describe('PRD v1 §5-6 lifecycle and configuration', () => {
     await expect(tms.createPlayer(coach, t.id, body)).rejects.toMatchObject({ code: 'entries_soft_locked' })
     // a soft lock stops coaches only
     await expect(tms.createPlayer(admin, t.id, { ...body, teamId: team.id })).resolves.toBeTruthy()
+    // the coach portal says closed, and why, whenever a coach save would be refused
+    expect(await tms.coachOverview(coach)).toMatchObject({ registrationOpen: false, closedReason: 'entries_soft_locked' })
+    await tms.setSoftLock(admin, t.id, false, 'Late entries allowed')
+    expect(await tms.coachOverview(coach)).toMatchObject({ registrationOpen: true, closedReason: null })
+    setClock('2026-10-15T10:00:00Z')
+    expect(await tms.coachOverview(coach)).toMatchObject({ registrationOpen: false, closedReason: 'registration_not_yet_open' })
     expect(zonedInstant('2026-12-31', 'Asia/Kolkata', { endOfDay: true }).toISOString()).toBe('2026-12-31T18:29:59.000Z')
   })
 
@@ -310,6 +317,34 @@ describe('PRD v1 §16 results lifecycle', () => {
     await expect(tms.publishResults(admin, t.id, false)).rejects.toMatchObject({ code: 'results_locked' })
   })
 
+  it('locks and unlocks one category on its own', async () => {
+    const w = await world({ settings: { requireWeighInForDraw: false } })
+    const { tms, t } = w
+    await w.add(2)
+    await tms.setEntriesLock(admin, t.id, true)
+    await tms.generatePools(admin, t.id)
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    const [m] = await tms.listMatches(t.id)
+    await tms.correctResult(admin, t.id, m.id, { winner: 'red', avgRed: 1, avgBlue: 0 })
+    let [res] = await tms.results(t.id)
+    // only a published result can be locked
+    await expect(tms.setDivisionLock(admin, t.id, res.key, true)).rejects.toMatchObject({ code: 'invalid_transition' })
+    await tms.publishResults(admin, t.id, true)
+    expect((await tms.setDivisionLock(admin, t.id, res.key, true)).status).toBe('LOCKED')
+    ;[res] = await tms.results(t.id)
+    expect(res.resultStatus).toBe('LOCKED')
+    // frozen for everyone, the override holder included, until unlocked
+    await expect(tms.correctResult(admin, t.id, m.id, { winner: 'blue', avgRed: 0, avgBlue: 1 }, 'Protest')).rejects.toMatchObject({ code: 'results_locked' })
+    await expect(tms.overrideMedals(admin, t.id, res.key, [], 'Protest')).rejects.toMatchObject({ code: 'results_locked' })
+    await expect(tms.setDivisionLock(officer, t.id, res.key, false, 'Protest')).rejects.toMatchObject({ code: 'result_override_forbidden' })
+    await expect(tms.setDivisionLock(admin, t.id, res.key, false)).rejects.toMatchObject({ code: 'reason_required' })
+    expect((await tms.setDivisionLock(admin, t.id, res.key, false, 'Protest upheld')).status).toBe('PUBLISHED')
+    await tms.correctResult(admin, t.id, m.id, { winner: 'blue', avgRed: 0, avgBlue: 1 }, 'Protest upheld')
+    const audit = await w.stores.auditLog.list({ tournamentId: t.id })
+    expect(audit.filter((a) => a.entity === 'division' && ['results.locked', 'results.unlocked'].includes(a.action))).toHaveLength(2)
+  })
+
   it('publishes a verified category at once in automatic mode', async () => {
     const w = await world({ settings: { requireWeighInForDraw: false, resultPublishing: 'auto' } })
     await w.add(2)
@@ -417,6 +452,29 @@ describe('PRD v1 §6/§14 rulesets', () => {
     // the tournament keeps the version it applied
     expect((await stores.tournaments.get(t.id))).toMatchObject({ rulesetId: mine.id, rulesetVersion: 1 })
   })
+
+  it('lets a standard ruleset be edited as a new version, and restored', async () => {
+    const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
+    const tms = createTms(stores)
+    const t = await stores.tournaments.insert({ ...READY })
+    await tms.applyRuleset(admin, t.id, 'builtin-wkf')
+    const v2 = await tms.updateRuleset(admin, 'builtin-wkf', { kumite: { matchDurationSec: 150 } })
+    expect(v2).toMatchObject({ family: 'builtin-wkf', version: 2, standard: true, name: 'WKF (standard)' })
+    expect(v2.kumite.matchDurationSec).toBe(150)
+    // the list shows the edited version in place of the original
+    const listed = await tms.listRulesets()
+    expect(listed.filter((r) => (r.family || r.id) === 'builtin-wkf').map((r) => r.version)).toEqual([2])
+    // the tournament that applied the original keeps it
+    expect(await stores.tournaments.get(t.id)).toMatchObject({ rulesetId: 'builtin-wkf', rulesetVersion: 1 })
+    expect((await stores.tournaments.get(t.id)).settings.matchDurationSec).toBe(180)
+    // the original is never edited twice: edit the current version instead
+    await expect(tms.updateRuleset(admin, 'builtin-wkf', { kumite: { matchDurationSec: 160 } })).rejects.toMatchObject({ code: 'ruleset_superseded' })
+    await tms.restoreStandard(admin, 'builtin-wkf')
+    const back = (await tms.listRulesets()).filter((r) => (r.family || r.id) === 'builtin-wkf')
+    expect(back.map((r) => r.id)).toEqual(['builtin-wkf'])
+    // editing again after a restore continues the numbering
+    expect((await tms.updateRuleset(admin, 'builtin-wkf', { kumite: { pointGap: 6 } })).version).toBe(3)
+  })
 })
 
 describe('PRD v1 kumite rules and performance', () => {
@@ -439,5 +497,22 @@ describe('PRD v1 kumite rules and performance', () => {
     const pools = drawPools(players, { poolSize: 8, method: 'seeded', random: seededRandom(5) })
     expect(Date.now() - started).toBeLessThan(30_000)
     expect(pools.reduce((n, p) => n + p.players.length, 0)).toBe(5000)
+  })
+})
+
+describe('security review: input and export helpers', () => {
+  it('refuses field patterns that can backtrack forever, keeps ordinary ones', () => {
+    for (const bad of ['(a+)+b', '(\\w*)*', '(x|y+){2,}', '(a)\\1']) expect(safePattern(bad)).toBeNull()
+    for (const ok of ['[A-Z]{2}[0-9]{6}', '([0-9]{3})-[0-9]{4}', '(ab)+', 'KA-[0-9]+']) expect(safePattern(ok)).toBeTruthy()
+  })
+
+  it('makes spreadsheet formulas inert in exported CSV, not in imports', () => {
+    expect(neutralizeFormula('=HYPERLINK("http://x","y")')).toBe(`'=HYPERLINK("http://x","y")`)
+    expect(neutralizeFormula('@SUM(A1)')).toBe("'@SUM(A1)")
+    expect(neutralizeFormula('-1+1|cmd!A0')).toBe("'-1+1|cmd!A0")
+    expect(neutralizeFormula('-35 KG')).toBe('-35 KG')
+    expect(neutralizeFormula('+91 98765 43210')).toBe('+91 98765 43210')
+    expect(toExportCsv([['Name'], ['=1+1']])).toBe("Name\r\n'=1+1")
+    expect(toCsv([['=1+1']])).toBe('=1+1')
   })
 })

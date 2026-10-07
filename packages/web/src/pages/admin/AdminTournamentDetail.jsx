@@ -9,6 +9,7 @@ import { TableSearch, TablePager, NoResults } from '../../components/TableToolba
 import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const validationSchema = Yup.object({
   catName: Yup.string().required('Category name required'),
@@ -111,7 +112,7 @@ export default function AdminTournamentDetail({ uid }) {
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">{tournament.name}</Typography>
+            <HelpTitle id="admin.tournamentDetail" variant="h6">{tournament.name}</HelpTitle>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
               {tournament.location} • {new Date(tournament.date).toLocaleDateString()}
             </Typography>

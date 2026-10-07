@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url'
 import express from 'express'
 import { Server } from 'socket.io'
 import { MatchRoom, serverNow } from './matchRoom.js'
-import { socketAuth, canControlMat, setTournamentLookup } from './auth/middleware.js'
+import { socketAuth, setTournamentLookup } from './auth/middleware.js'
 import { createStores } from './lib/store.js'
 import { withChangeEvents } from './lib/changes.js'
 import { security } from './middleware/security.js'
@@ -17,7 +17,9 @@ import { competitorRoutes } from './routes/competitors.js'
 import { matchRoutes } from './routes/matches.js'
 import { displayRoutes } from './routes/display.js'
 import { tmsRoutes } from './routes/tms.js'
-import { publicRoutes } from './routes/public.js'
+import { publicRoutes, publicViewCache } from './routes/public.js'
+import { matchAuthority } from './auth/matchAccess.js'
+import { analyticsRoutes } from './routes/analytics.js'
 import { coachRoutes } from './routes/coach.js'
 import { fileRoutes } from './routes/files.js'
 import { organizationRoutes } from './routes/organizations.js'
@@ -73,7 +75,12 @@ export function createApp() {
 
   // Built per instance and announced over the socket, so a device that is
   // already looking at a list finds out it changed without polling for it.
+  // Writes the public page never shows do not throw away its cached view:
+  // every live score command saves its state, and the audit log grows with it.
+  const PRIVATE_COLLECTIONS = new Set(['auditLog', 'registrationLinks', 'liveStates', 'matchEvents', 'apiKeys', 'display'])
+  let publicViews = null
   const emitChange = (collection) => {
+    if (!PRIVATE_COLLECTIONS.has(collection)) publicViews?.invalidate()
     io.emit('data:changed', { collection })
     announcePublic(collection)
   }
@@ -82,6 +89,7 @@ export function createApp() {
 
   // The PRD's tournament management, on the same stores as everything else.
   const tms = createTms(stores, { onNotify: emailNotifier(stores) })
+  publicViews = publicViewCache(tms)
 
   const categories = categoryRoutes(stores)
   const competitors = competitorRoutes(stores)
@@ -94,12 +102,13 @@ export function createApp() {
   app.use(`${API_BASE}/organizations`, organizationRoutes(stores, { audit: systemAudit }))
   app.use(`${API_BASE}/rulesets`, rulesetRoutes(tms))
   app.use(`${API_BASE}/system`, systemRoutes(stores, tms))
+  app.use(`${API_BASE}/analytics`, analyticsRoutes(stores, tms))
   app.use(`${API_BASE}/partner`, partnerRoutes(tms, stores))
   app.use(`${API_BASE}/officials`, officialRoutes())
   app.use(`${API_BASE}/tournaments`, tournamentRoutes(stores, tms))
   app.use(`${API_BASE}/tournaments`, tmsRoutes(tms, stores))
   // Public APIs are kept apart from the admin ones (section 56).
-  app.use(`${API_BASE}/public`, publicRoutes(tms))
+  app.use(`${API_BASE}/public`, publicRoutes(tms, { views: publicViews }))
   app.use(`${API_BASE}/coach`, coachRoutes(tms))
   app.use(`${API_BASE}/files`, fileRoutes(tms))
   app.use(`${API_BASE}/categories`, categories.flat)
@@ -117,7 +126,9 @@ export function createApp() {
   app.use(errorHandler())
 
   const http = createServer(app)
-  const io = new Server(http, { cors: { origin: true } })
+  // A shorter heartbeat than the default (25 s + 20 s) notices a dead venue
+  // link within about 15 s, so a console switches to offline scoring sooner.
+  const io = new Server(http, { cors: { origin: true }, pingInterval: 10_000, pingTimeout: 5_000 })
   io.use(socketAuth)
 
   // PRD section 57: public pages and hall screens have no session, so they get
@@ -140,6 +151,8 @@ export function createApp() {
   function announcePublic(collection) {
     if (collection === 'display') {
       stores.display.get('live').then((row) => publicIo.emit('display:update', row ?? null)).catch(() => {})
+      // A screen for one mat re-reads its own document on this.
+      publicIo.emit('display:changed', { at: serverNow() })
       return
     }
     if (['auditLog', 'registrationLinks'].includes(collection)) return
@@ -158,6 +171,15 @@ export function createApp() {
 
   const broadcast = (matchId, event) => io.to(matchId).emit('match:event', event)
 
+  // AC-14, decided per socket and bout, so a referee cannot pick up a bout in
+  // a tournament they do not work or one assigned to someone else.
+  const mayControl = async (socket, matchId) => {
+    if (!socket.user?.uid) return false
+    const match = await stores.matches.get(matchId).catch(() => null)
+    if (!match) return false
+    return (await matchAuthority(socket.user, match, stores)).ok
+  }
+
   io.on('connection', (socket) => {
     socket.on('time:ping', ({ t0 } = {}, ack) => {
       const t1 = serverNow()
@@ -167,7 +189,11 @@ export function createApp() {
     })
 
     socket.on('match:join', async ({ matchId, control } = {}, ack) => {
-      if (!matchId) return
+      if (!matchId || typeof matchId !== 'string') return ack?.({ error: 'unknown_match' })
+      // Only real bouts get a room: a made-up id must not create state, or
+      // live-state rows, on the server.
+      const match = rooms.has(matchId) ? null : await stores.matches.get(matchId).catch(() => null)
+      if (!rooms.has(matchId) && !match) return ack?.({ error: 'unknown_match' })
       const room = roomFor(matchId)
       // A bout interrupted by a restart picks up where it was.
       if (!room.restored) {
@@ -176,8 +202,9 @@ export function createApp() {
         if (saved && room.seq === 0) room.restore(saved)
       }
       socket.join(matchId)
-      // A judge may ask for control; only a referee or admin is given it.
-      if (control && canControlMat(socket.user)) room.claim(socket.id)
+      // Anyone signed in may watch; control goes only to an admin of this
+      // tournament or the bout's referee (AC-14).
+      if (control && (await mayControl(socket, matchId))) room.claim(socket.id, { uid: socket.user.uid })
       const snapshot = room.snapshot()
       if (typeof ack === 'function') ack(snapshot)
       else socket.emit('match:snapshot', snapshot)
@@ -192,13 +219,13 @@ export function createApp() {
      * forever, and every referee after it presses dead buttons. The loser is
      * told, so a mat never changes hands silently mid-bout.
      */
-    socket.on('match:takeover', ({ matchId } = {}, ack) => {
+    socket.on('match:takeover', async ({ matchId } = {}, ack) => {
       const room = rooms.get(matchId)
       if (!room) return ack?.({ error: 'unknown_match' })
-      if (!canControlMat(socket.user)) return ack?.({ error: 'forbidden' })
+      if (!(await mayControl(socket, matchId))) return ack?.({ error: 'forbidden' })
 
       const previousId = room.controllerId
-      room.claim(socket.id, { force: true })
+      room.claim(socket.id, { force: true, uid: socket.user.uid })
       io.to(matchId).emit('match:control', {
         matchId,
         controllerId: room.controllerId,
@@ -210,10 +237,12 @@ export function createApp() {
     // Commands that change nothing about the score are allowed on a decided bout.
     const HARMLESS = new Set(['FIELD_NUMBER', 'SCOREBOARD'])
 
-    socket.on('match:cmd', ({ matchId, cmd, payload, clientEventId } = {}, ack) => {
+    socket.on('match:cmd', ({ matchId, cmd, payload, clientEventId, offlineAt } = {}, ack) => {
       const room = rooms.get(matchId)
       if (!room) return ack?.({ error: 'unknown_match' })
-      if (!canControlMat(socket.user)) return ack?.({ error: 'forbidden' })
+      // Holding the mat is the authority: it was granted only after the
+      // checks in mayControl.
+      if (!room.controls(socket.id)) return ack?.({ error: room.controllerId ? 'not_controller' : 'forbidden' })
       room.queue = room.queue.then(async () => {
         // PRD v1 §15 idempotency: a network retry is applied once.
         const already = room.duplicateOf(clientEventId)
@@ -228,13 +257,14 @@ export function createApp() {
         }
         try {
           const before = room.state
-          const event = room.apply(cmd, payload, socket.id)
+          // An action scored offline keeps the time it happened (clamped in the room).
+          const event = room.apply(cmd, payload, socket.id, { at: Number.isFinite(offlineAt) ? offlineAt : null })
           if (event) {
             room.remember(clientEventId, event.seq)
             broadcast(matchId, { ...event, matchId, clientEventId })
             // PRD point 33: every live change is logged, corrections audited.
             tms.recordLiveEvent(socket.user, matchId, { seq: event.seq, cmd, payload, before, after: event.state, at: event.at }).catch(() => {})
-            tms.saveLiveState(matchId, { seq: room.seq, state: room.state, history: room.history }).catch(() => {})
+            tms.saveLiveState(matchId, { seq: room.seq, state: room.state, history: room.history, handoffs: room.handoffs, controllerUid: room.controllerUid, lastAt: room.lastAt }).catch(() => {})
           }
           ack?.({ ok: true, seq: room.seq })
         } catch (err) {

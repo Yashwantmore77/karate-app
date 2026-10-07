@@ -14,6 +14,7 @@ import {
 } from '../../data/domain'
 import { downloadCSV } from '../../utils/csvExport'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const validationSchema = Yup.object({
   name: Yup.string().required('Name required').min(2, 'Name too short'),
@@ -128,7 +129,7 @@ export default function AdminCategoryDetail({ uid }) {
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">{category.name}</Typography>
+            <HelpTitle id="admin.category" variant="h6">{category.name}</HelpTitle>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
               {tournament.name} • {category.ageGroup} • {category.gender}
             </Typography>

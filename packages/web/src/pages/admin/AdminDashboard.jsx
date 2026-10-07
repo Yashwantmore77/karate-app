@@ -10,6 +10,7 @@ import { tms } from '../../data/tms'
 import StatCard from '../../components/tms/StatCard'
 import StatusBadge from '../../components/tms/StatusBadge'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const SUM_KEYS = ['teams', 'players', 'kataPlayers', 'kumitePlayers', 'pendingVerification', 'pendingPayment', 'pendingWeighIn', 'matches', 'completedMatches', 'liveMatches', 'pendingMatches', 'gold', 'silver', 'bronze']
 
@@ -50,7 +51,7 @@ export default function AdminDashboard({ profile }) {
 
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
-      <Typography variant="h1" sx={{ mb: 2 }}>Dashboard</Typography>
+      <HelpTitle id="admin.dashboard" variant="h1" sx={{ mb: 2 }}>Dashboard</HelpTitle>
 
       <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: 'wrap', gap: 1 }}>
         {actions.map((a) => (

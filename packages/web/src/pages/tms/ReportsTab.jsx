@@ -7,6 +7,7 @@ import { tms } from '../../data/tms'
 import { downloadCsv } from '../../components/tms/download'
 import { downloadXlsx } from '../../components/tms/excel'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const BLANK = { gender: '', event: '', ageGroupId: '', divisionKey: '', club: '', district: '', state: '' }
 const clean = (f) => Object.fromEntries(Object.entries(f).filter(([, v]) => v))
@@ -43,7 +44,7 @@ export default function ReportsTab({ tournament, version, action, role }) {
   return (
     <Stack spacing={2}>
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h4" sx={{ mb: 1 }}>Filters</Typography>
+        <HelpTitle id="reports.list" variant="h4" sx={{ mb: 1 }}>Filters</HelpTitle>
         <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
           {select('gender', 'Gender', [['M', 'Male'], ['F', 'Female']])}
           {select('event', 'Event', [['kata', 'Kata'], ['kumite', 'Kumite']])}

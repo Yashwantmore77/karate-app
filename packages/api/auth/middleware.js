@@ -53,9 +53,11 @@ export function requirePermission(permission) {
  */
 export const mayAccessTournament = (account, tournamentId, tournament = null) => {
   if (account?.role === 'super_admin') return true
+  // The organisation boundary comes first: nothing granted on an account,
+  // a role for one tournament included, reaches another organisation's events.
+  if (account?.organizationId && tournament && tournament.organizationId !== account.organizationId) return false
   // A role given for this tournament is access to it.
   if (account?.tournamentRoles?.[tournamentId]) return true
-  if (account?.organizationId && tournament && tournament.organizationId !== account.organizationId) return false
   return !account?.tournamentIds?.length || account.tournamentIds.includes(tournamentId)
 }
 

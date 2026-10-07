@@ -332,6 +332,18 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   const isCoach = (actor) => actor?.role === 'coach'
 
+  /**
+   * What the coach portal shows: open exactly when a coach may write
+   * (assertCoachMayWrite), and if not, why — so the screen never says "open"
+   * while every save is refused.
+   */
+  const coachWindow = (tournament) => {
+    const w = registrationWindow(tournament)
+    const reason = tournament.entriesLocked ? 'entries_locked'
+      : lifecycleOf(tournament) !== T.REGISTRATION_OPEN ? 'registration_closed' : w.reason
+    return { registrationOpen: !reason, closedReason: reason, opensAt: w.opensAt, closesAt: w.closesAt }
+  }
+
   /** Rule 7, and a coach only ever reaches their own team. */
   const assertCoachMayWrite = (actor, tournament, teamId) => {
     if (!isCoach(actor)) return
@@ -530,16 +542,25 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   // --- rulesets (PRD v1 §6, §14, §24) ----------------------------------------
 
+  /** The stored edit that currently stands in for a standard ruleset, if any. */
+  const editedStandard = (stored, builtinId) => stored.find((r) => r.family === builtinId && !r.superseded) || null
+
   async function listRulesets({ includeSuperseded = false } = {}) {
     const stored = stores.rulesets ? await stores.rulesets.list({}) : []
-    const rows = [...BUILTIN_RULESETS, ...stored.filter((r) => includeSuperseded || !r.superseded)]
+    // A standard ruleset that has been edited is replaced in the list by its
+    // newest version; the original stays usable by tournaments that applied it.
+    const builtins = BUILTIN_RULESETS.map((r) => {
+      const edit = editedStandard(stored, r.id)
+      return edit ? { ...r, superseded: true, supersededBy: edit.id } : r
+    })
+    const rows = [...builtins, ...stored].filter((r) => includeSuperseded || !r.superseded)
     const inUse = new Map()
     for (const t of await stores.tournaments.list({})) {
       const id = t.rulesetId || DEFAULT_RULESET_ID
       inUse.set(id, (inUse.get(id) || 0) + 1)
     }
     return rows.map((r) => ({ ...r, tournaments: inUse.get(r.id) || 0 }))
-      .sort((a, b) => Number(!!b.builtIn) - Number(!!a.builtIn) || String(a.name).localeCompare(String(b.name)) || a.version - b.version)
+      .sort((a, b) => Number(!!(b.builtIn || b.standard)) - Number(!!(a.builtIn || a.standard)) || String(a.name).localeCompare(String(b.name)) || a.version - b.version)
   }
 
   async function resolveRuleset(id, { activeOnly = false } = {}) {
@@ -564,7 +585,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * new version, so that tournament keeps the rules it was run under.
    */
   async function updateRuleset(actor, id, input) {
-    if (BUILTIN_RULESETS.some((r) => r.id === id)) throw rule('builtin_ruleset')
+    const builtin = BUILTIN_RULESETS.find((r) => r.id === id)
+    if (builtin) return editStandard(actor, builtin, input)
     const current = await resolveRuleset(id)
     if (current.superseded) throw rule('ruleset_superseded')
     const doc = cleanRuleset({ ...current, ...input, kumite: { ...current.kumite, ...(input.kumite || {}) }, kata: { ...current.kata, ...(input.kata || {}) } })
@@ -580,6 +602,38 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     await stores.rulesets.update(id, { superseded: true, supersededBy: next.id })
     await record(actor, { tournamentId: null, action: A.RULESET_CHANGED, entity: 'ruleset', entityId: next.id, before: { version: current.version }, after: { version: next.version, name: doc.name }, reason: 'In use: saved as a new version' })
     return next
+  }
+
+  /**
+   * Editing a standard ruleset (owner's decision: the standard rules may need
+   * to change later). The original is never altered: the edit is saved as the
+   * next version of the same family and takes its place in the list, so a
+   * tournament that applied the original keeps it.
+   */
+  async function editStandard(actor, builtin, input) {
+    const stored = await stores.rulesets.list({})
+    if (editedStandard(stored, builtin.id)) throw rule('ruleset_superseded')
+    const doc = cleanRuleset({ ...builtin, ...input, kumite: { ...builtin.kumite, ...(input.kumite || {}) }, kata: { ...builtin.kata, ...(input.kata || {}) } })
+    const problems = rulesetProblems(doc)
+    if (problems.length) throw invalid('invalid_ruleset', { errors: problems.map((field) => ({ field, message: `Check ${field}` })) })
+    const version = Math.max(builtin.version, ...stored.filter((r) => r.family === builtin.id).map((r) => r.version)) + 1
+    const next = await stores.rulesets.insert({ ...doc, family: builtin.id, standard: true, version, active: true, superseded: false, previousId: builtin.id, createdBy: actor?.uid || null })
+    await record(actor, { tournamentId: null, action: A.RULESET_CHANGED, entity: 'ruleset', entityId: next.id, before: { ruleset: builtin.id, version: builtin.version }, after: { version, name: doc.name }, reason: 'Standard ruleset edited: saved as a new version' })
+    return next
+  }
+
+  /** Puts a standard ruleset back as it shipped; the edits stay on record. */
+  async function restoreStandard(actor, builtinId) {
+    const builtin = BUILTIN_RULESETS.find((r) => r.id === builtinId)
+    if (!builtin) throw invalid('invalid_ruleset')
+    let restored = 0
+    for (const r of await stores.rulesets.list({ family: builtinId })) {
+      if (r.superseded) continue
+      await stores.rulesets.update(r.id, { superseded: true, supersededBy: builtinId })
+      restored += 1
+    }
+    if (restored) await record(actor, { tournamentId: null, action: A.RULESET_CHANGED, entity: 'ruleset', entityId: builtinId, reason: 'Standard ruleset restored' })
+    return builtin
   }
 
   async function setRulesetActive(actor, id, active) {
@@ -743,18 +797,51 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return true
   }
 
+  /**
+   * The player filters as a store query (shared/query.js), so a store with a
+   * database filters, sorts and pages in the database (PRD section 62). A
+   * text search also matches team names and codes, by the teams' ids.
+   */
+  async function playerQuery(tournamentId, f = {}) {
+    const and = [{ tournamentId }]
+    if (f.teamId) and.push({ teamId: f.teamId })
+    if (f.gender) and.push({ gender: f.gender })
+    if (f.event) and.push({ events: f.event })
+    if (f.registrationStatus) and.push({ registrationStatus: f.registrationStatus })
+    // Never set means still pending.
+    if (f.paymentStatus) and.push(f.paymentStatus === 'PENDING' ? { $or: [{ 'payment.status': 'PENDING' }, { 'payment.status': { $missing: true } }] } : { 'payment.status': f.paymentStatus })
+    if (f.weighInStatus) and.push(f.weighInStatus === 'PENDING' ? { $or: [{ 'weighIn.status': 'PENDING' }, { 'weighIn.status': { $missing: true } }] } : { 'weighIn.status': f.weighInStatus })
+    if (f.ageGroupId) and.push({ $or: Object.values(EVENTS).map((e) => ({ [`entries.${e}.ageGroupId`]: f.ageGroupId })) })
+    if (f.weightCategoryId) and.push({ 'entries.kumite.weightCategoryId': f.weightCategoryId })
+    for (const key of ['club', 'district', 'state', 'country']) if (f[key]) and.push({ [key]: { $ieq: f[key] } })
+    if (f.q) {
+      const q = String(f.q)
+      const teamIds = (await stores.teams.list({ tournamentId }))
+        .filter((t) => [t.name, t.code].some((v) => String(v || '').toLowerCase().includes(q.toLowerCase()))).map((t) => t.id)
+      and.push({ $or: [
+        { name: { $contains: q } }, { playerNumber: { $contains: q } }, { club: { $contains: q } }, { id: q },
+        ...(teamIds.length ? [{ teamId: { $in: teamIds } }] : []),
+      ] })
+    }
+    return { $and: and }
+  }
+
   async function listPlayers(tournamentId, filter = {}) {
-    const [rows, teamRows] = await Promise.all([
-      stores.players.list({ tournamentId }),
-      stores.teams.list({ tournamentId }),
-    ])
+    if (stores.players.search) return (await stores.players.search(await playerQuery(tournamentId, filter), { sort: { name: 1 } })).rows
+    // A store without search (an older adapter): filter what it returns.
+    const [rows, teamRows] = await Promise.all([stores.players.list({ tournamentId }), stores.teams.list({ tournamentId })])
     const teamsById = new Map(teamRows.map((t) => [t.id, t]))
     return rows.filter((p) => matchesFilter(p, filter, { teamsById })).sort(byName)
   }
 
-  /** A page of players (section 62), with the same filters as listPlayers. */
+  /** A page of players (section 62), with the same filters as listPlayers, paged by the store. */
   async function pagePlayers(tournamentId, filter = {}, options = {}) {
-    return paginate(await listPlayers(tournamentId, filter), { sort: 'name', ...options })
+    const { page, pageSize, sort, dir } = pageOptions({ sort: 'name', ...options })
+    if (!stores.players.search) return paginate(await listPlayers(tournamentId, filter), { sort: 'name', ...options })
+    const { rows, total } = await stores.players.search(await playerQuery(tournamentId, filter), {
+      sort: { [sort || 'name']: dir === 'desc' ? -1 : 1 }, skip: page * pageSize, limit: pageSize,
+    })
+    return { rows, total, page, pageSize }
   }
 
   /**
@@ -1619,9 +1706,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   // --- live state (PRD v1 §28 "Interrupted match: preserve state and resume")
 
-  const saveLiveState = (matchId, snapshot) => stores.liveStates.get(matchId).then((row) => (row
-    ? stores.liveStates.update(matchId, { seq: snapshot.seq, state: snapshot.state, history: snapshot.history || [], savedAt: iso() })
-    : stores.liveStates.insert({ id: matchId, seq: snapshot.seq, state: snapshot.state, history: snapshot.history || [], savedAt: iso() })))
+  const saveLiveState = (matchId, snapshot) => {
+    // Who held the mat is kept too, so offline scoring knows after a restart
+    // whether someone else took over meanwhile.
+    const doc = {
+      seq: snapshot.seq, state: snapshot.state, history: snapshot.history || [], savedAt: iso(),
+      handoffs: snapshot.handoffs || 0, controllerUid: snapshot.controllerUid || null, lastAt: snapshot.lastAt || 0,
+    }
+    return stores.liveStates.get(matchId).then((row) => (row ? stores.liveStates.update(matchId, doc) : stores.liveStates.insert({ id: matchId, ...doc })))
+  }
   const loadLiveState = (matchId) => stores.liveStates.get(matchId)
 
   /**
@@ -1917,6 +2010,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (!reason) throw invalid('reason_required')
     const round = await inTournament('kataRounds', tournamentId, roundId)
     if (round.status !== 'completed') throw rule('round_still_open')
+    await assertNotLocked(tournamentId, round.divisionKey)
     if (!round.performerIds.includes(playerId)) throw invalid('invalid_playerId')
     const judgeSeat = Number(seat)
     if (!Number.isInteger(judgeSeat) || judgeSeat < 1 || judgeSeat > round.judges) throw invalid('invalid_seat')
@@ -1932,6 +2026,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   async function setKataPenalty(actor, tournamentId, roundId, playerId, deduction, reason) {
     await writableTournament(tournamentId)
     const round = await inTournament('kataRounds', tournamentId, roundId)
+    await assertNotLocked(tournamentId, round.divisionKey)
     if (!round.performerIds.includes(playerId)) throw invalid('invalid_playerId')
     const value = Number(deduction)
     if (!(value >= 0 && value <= 10)) throw invalid('invalid_deduction')
@@ -2254,6 +2349,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    */
   async function overrideMedals(actor, tournamentId, key, medals, reason) {
     if (!reason) throw invalid('reason_required')
+    await assertNotLocked(tournamentId, key)
     const division = (await divisions(tournamentId)).find((d) => d.key === key)
     if (!division) throw missing('division_not_found')
     const before = (await results(tournamentId)).find((d) => d.key === key)?.medals || []
@@ -2294,8 +2390,40 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (!divisionKeyValue) return
     const row = (await stores.divisionResults.list({ tournamentId, divisionKey: divisionKeyValue }))[0]
     if (!row || ![RESULT_STATUS.PUBLISHED, RESULT_STATUS.LOCKED].includes(row.status)) return
-    if (!actor || !can(actor.role, P.RESULT_OVERRIDE)) throw denied(row.status === RESULT_STATUS.LOCKED ? 'results_locked' : 'results_published')
+    // A locked category is frozen for everyone: unlock it (with a reason) first.
+    if (row.status === RESULT_STATUS.LOCKED) throw rule('results_locked')
+    if (!actor || !can(actor.role, P.RESULT_OVERRIDE)) throw denied('results_published')
     if (!reason) throw invalid('reason_required')
+  }
+
+  async function assertNotLocked(tournamentId, divisionKeyValue) {
+    const row = (await stores.divisionResults.list({ tournamentId, divisionKey: divisionKeyValue }))[0]
+    if (row?.status === RESULT_STATUS.LOCKED) throw rule('results_locked')
+  }
+
+  /**
+   * One category's result, frozen or unfrozen on its own (PRD v1 §16), so a
+   * finished category is safe while the rest of the event goes on. Locking
+   * needs a published result; unlocking needs the result-override privilege
+   * and a reason, and goes back to Published.
+   */
+  async function setDivisionLock(actor, tournamentId, key, locked, reason = null) {
+    await writableTournament(tournamentId)
+    const division = (await results(tournamentId)).find((d) => d.key === key)
+    if (!division) throw missing('division_not_found')
+    if (locked) {
+      if (division.resultStatus === RESULT_STATUS.LOCKED) return { status: RESULT_STATUS.LOCKED }
+      if (division.resultStatus !== RESULT_STATUS.PUBLISHED) throw rule('invalid_transition', { from: division.resultStatus, to: RESULT_STATUS.LOCKED })
+      await setResultStatus(actor, tournamentId, key, RESULT_STATUS.LOCKED)
+      await record(actor, { tournamentId, action: A.RESULT_LOCKED, entity: 'division', entityId: key, after: { medals: division.medals.map((m) => `${m.medal}:${m.name}`) }, reason })
+      return { status: RESULT_STATUS.LOCKED }
+    }
+    if (division.resultStatus !== RESULT_STATUS.LOCKED) return { status: division.resultStatus }
+    if (!actor || !can(actor.role, P.RESULT_OVERRIDE)) throw denied('result_override_forbidden')
+    if (!reason) throw invalid('reason_required')
+    await setResultStatus(actor, tournamentId, key, RESULT_STATUS.PUBLISHED)
+    await record(actor, { tournamentId, action: A.RESULT_UNLOCKED, entity: 'division', entityId: key, reason })
+    return { status: RESULT_STATUS.PUBLISHED }
   }
 
   async function setResultStatus(actor, tournamentId, key, status, extra = {}) {
@@ -2486,6 +2614,105 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return row
   }
 
+  // --- accreditation passes and QR check-in ------------------------------------
+
+  const PASS_ROLE = { player: 'Athlete', coach: 'Coach', official: 'Technical Official' }
+  const PASS_KINDS = Object.keys(PASS_ROLE)
+  const NOT_ACCREDITED = new Set([R.DRAFT, R.REJECTED, R.WITHDRAWN])
+
+  /**
+   * Accreditation passes: one per athlete, coach and official, each with a
+   * code its QR carries. Generating again only adds passes for people who
+   * have none, so a printed pass keeps working.
+   */
+  async function generatePasses(actor, tournamentId, { kinds = ['player', 'coach'], officials = [] } = {}) {
+    await writableTournament(tournamentId)
+    const wanted = kinds.filter((k) => PASS_KINDS.includes(k))
+    const existing = new Set((await stores.passes.list({ tournamentId })).map((p) => p.refKey))
+    const teams = new Map((await stores.teams.list({ tournamentId })).map((t) => [t.id, t]))
+    const labels = new Map((await divisions(tournamentId)).map((d) => [d.key, d.label]))
+    const fresh = []
+    const add = (doc) => {
+      if (existing.has(doc.refKey)) return
+      existing.add(doc.refKey)
+      fresh.push({ tournamentId, code: randomToken(10).toUpperCase(), role: PASS_ROLE[doc.kind], issuedAt: iso(), ...doc })
+    }
+    if (wanted.includes('player')) {
+      for (const p of await stores.players.list({ tournamentId })) {
+        if (NOT_ACCREDITED.has(p.registrationStatus)) continue
+        const team = teams.get(p.teamId)
+        const category = Object.values(p.entries || {}).map((e) => labels.get(e.divisionKey)).filter(Boolean).join(' · ') || (p.events || []).join(', ')
+        add({ kind: 'player', refId: p.id, refKey: `player:${p.id}`, name: p.name, number: p.playerNumber || null, club: p.club || team?.club || team?.name || null, team: team?.name || null, category, photoFileId: p.photo || null })
+      }
+    }
+    if (wanted.includes('coach')) {
+      for (const t of teams.values()) {
+        if (!t.coachName) continue
+        add({ kind: 'coach', refId: t.id, refKey: `coach:${t.id}`, name: t.coachName, number: t.teamNumber || null, club: t.club || t.name, team: t.name, category: `Coach, ${t.name}` })
+      }
+    }
+    if (wanted.includes('official')) {
+      for (const o of officials) {
+        if (!o?.uid || !o?.name) continue
+        add({ kind: 'official', refId: o.uid, refKey: `official:${o.uid}`, name: String(o.name).slice(0, 120), number: null, club: null, team: null, category: o.role === 'judge' ? 'Kata Judge' : o.role === 'referee' ? 'Referee' : 'Technical Official' })
+      }
+    }
+    if (fresh.length) await stores.passes.insertMany(fresh)
+    await record(actor, { tournamentId, action: A.PASSES_GENERATED, entity: 'tournament', entityId: tournamentId, after: { created: fresh.length, kinds: wanted } })
+    return { created: fresh.length, passes: await listPasses(tournamentId) }
+  }
+
+  const listPasses = async (tournamentId, { kind = null } = {}) =>
+    (await stores.passes.list(kind ? { tournamentId, kind } : { tournamentId }))
+      .sort((a, b) => PASS_KINDS.indexOf(a.kind) - PASS_KINDS.indexOf(b.kind) || byName(a, b))
+
+  /**
+   * Scanning a pass (Phase 2 "QR check-in"). At the door it records arrival;
+   * at a mat it marks the athlete present for their next bout, which the
+   * announcer's attendance shows. Unknown or foreign codes are refused.
+   */
+  async function checkIn(actor, tournamentId, rawCode, { point = 'arrival' } = {}) {
+    await writableTournament(tournamentId)
+    const code = String(rawCode || '').trim().toUpperCase().replace(/^.*\//, '')
+    const pass = (await stores.passes.list({ tournamentId, code }))[0]
+    if (!pass) throw missing('pass_not_found')
+    const result = { pass: { kind: pass.kind, name: pass.name, role: pass.role, club: pass.club, number: pass.number, category: pass.category } }
+    if (point === 'mat') {
+      if (pass.kind !== 'player') throw rule('not_an_athlete')
+      const player = await inTournament('players', tournamentId, pass.refId)
+      if (player.registrationStatus === R.WITHDRAWN) throw rule('player_withdrawn')
+      const next = (await listMatches(tournamentId))
+        .filter((m) => !boutOutcome(m) && m.status !== 'cancelled' && (m.akaPlayerId === player.id || m.aoPlayerId === player.id))
+        .sort((a, b) => String(a.scheduledAt || '9').localeCompare(String(b.scheduledAt || '9')) || String(a.matchNumber).localeCompare(String(b.matchNumber), undefined, { numeric: true }))[0]
+      if (!next) throw rule('no_pending_bout')
+      const side = next.akaPlayerId === player.id ? 'aka' : 'ao'
+      await markAttendance(actor, tournamentId, next.id, side, true)
+      result.bout = { matchId: next.id, matchNumber: next.matchNumber, mat: next.mat || null, side, category: next.categoryName || null }
+    } else {
+      const at = iso()
+      await stores.passes.update(pass.id, { checkedInAt: pass.checkedInAt || at, lastScanAt: at, scans: (pass.scans || 0) + 1 })
+      if (pass.kind === 'player') await stores.players.update(pass.refId, { checkedInAt: pass.checkedInAt || at })
+      result.alreadyCheckedIn = !!pass.checkedInAt
+      result.checkedInAt = pass.checkedInAt || at
+    }
+    await record(actor, { tournamentId, action: A.CHECKED_IN, entity: pass.kind, entityId: pass.refId, after: { point, code, ...(result.bout ? { match: result.bout.matchNumber } : {}) } })
+    return result
+  }
+
+  /**
+   * A coach's own certificates: their team's players' (medal, participation,
+   * special awards) and their own coach certificate. The tournament comes
+   * back too, for the route that prints them; it is never sent to the coach.
+   */
+  async function coachCertificates(actor) {
+    if (!isCoach(actor) || !actor.teamId) return { tournament: null, certificates: [] }
+    const tournament = await tournamentOf(actor.tournamentId)
+    const mine = new Set((await stores.players.list({ tournamentId: tournament.id, teamId: actor.teamId })).map((p) => p.id))
+    const certificates = (await listCertificates(tournament.id))
+      .filter((c) => (c.playerId && mine.has(c.playerId)) || c.personKey === `coach:${actor.teamId}`)
+    return { tournament, certificates }
+  }
+
   const listCertificates = async (tournamentId, { type = null } = {}) =>
     (await stores.certificates.list({ tournamentId }))
       .map((c) => ({ ...c, type: c.type || c.medal }))
@@ -2555,7 +2782,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return {
       tournament: publicTournament(tournament),
       requiresPassword: !!link.passwordHash,
-      registrationOpen: lifecycleOf(tournament) === T.REGISTRATION_OPEN && !tournament.entriesLocked,
+      ...coachWindow(tournament),
       form: formFields(tournament).filter((f) => f.visible !== false),
     }
   }
@@ -2576,7 +2803,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       .filter((n) => !n.teamId || n.teamId === team.id) : []
     return {
       tournament: { ...publicTournament(tournament), entriesLocked: !!tournament.entriesLocked },
-      registrationOpen: lifecycleOf(tournament) === T.REGISTRATION_OPEN && !tournament.entriesLocked,
+      ...coachWindow(tournament),
       form: formFields(tournament).filter((f) => f.visible !== false),
       team,
       players: players.sort(byName),
@@ -2675,8 +2902,21 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const pools = await stores.pools.list({ tournamentId })
     const matches = await listMatches(tournamentId)
     const medals = await stores.medals.list({ tournamentId })
+    // For the step-by-step guide: how far each stage of the event has got.
+    const [ageGroups, weightCategories, certificates, passes, kataRounds] = await Promise.all([
+      stores.ageGroups.list({ tournamentId }), stores.weightCategories.list({ tournamentId }),
+      stores.certificates.list({ tournamentId }), stores.passes.list({ tournamentId }), stores.kataRounds.list({ tournamentId }),
+    ])
     const count = (pred) => players.filter(pred).length
     return {
+      ageGroups: ageGroups.length,
+      weightCategories: weightCategories.length,
+      certificates: certificates.length,
+      passes: passes.length,
+      checkedIn: passes.filter((p) => p.checkedInAt).length,
+      kataRounds: kataRounds.length,
+      scheduledMatches: matches.filter((m) => m.mat || m.scheduledAt).length,
+      matchesWithReferee: matches.filter((m) => m.refereeId).length,
       teams: teamRows.length,
       players: players.length,
       kataPlayers: count((p) => p.events?.includes('kata')),
@@ -2781,9 +3021,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket,
-    publishResults, verifyResult, assertResultEditable, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
+    publishResults, verifyResult, assertResultEditable, setDivisionLock, coachCertificates, generatePasses, listPasses, checkIn, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
     // rulesets and locks
-    listRulesets, resolveRuleset, createRuleset, updateRuleset, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
+    listRulesets, resolveRuleset, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
     // links and coaches
     getLink, saveLink, linkInfo, openLink, coachOverview,
     // public, dashboard, audit
@@ -2799,7 +3039,7 @@ export const TMS_COLLECTIONS = [
   'ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals',
   'certificates', 'registrationLinks', 'notifications', 'auditLog', 'files',
   'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'organizations',
-  'rulesets', 'divisionResults', 'liveStates',
+  'rulesets', 'divisionResults', 'liveStates', 'passes',
 ]
 
 export { DomainError, poolName }

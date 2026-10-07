@@ -10,6 +10,7 @@ import { watchPublicChanges } from '../../data/live'
 import KataRoundTable from '../../components/tms/KataRoundTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { PageLoader } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 /**
  * PRD point 19, sections 32-33: kata judged by a panel. The admin opens each
@@ -80,7 +81,7 @@ export default function KataTab({ tournament, version, action, role }) {
           <Paper key={d.key} sx={{ p: 2 }}>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
               <Box>
-                <Typography variant="h3">{d.label}</Typography>
+                <HelpTitle id="kata.rounds" variant="h3">{d.label}</HelpTitle>
                 <Typography variant="body2" color="text.secondary">
                   {d.count} performers · {d.judges} judges · {KATA_METHOD_LABEL[d.method] || d.method} · {d.plannedRounds} round{d.plannedRounds > 1 ? 's' : ''}, top {d.qualifiers} go through
                   {tournament.settings?.kataComponents ? ' · technical + athletic' : ''}

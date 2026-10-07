@@ -3,6 +3,7 @@ import { Container, Typography, Grid, Card, CardActionArea, CardContent, Box } f
 import { tournaments as tournamentStore } from '../../data/domain'
 import StatusBadge from './StatusBadge'
 import { PageLoader } from '../Loader'
+import { HelpTitle } from '../help/InfoTip'
 
 /** Section 63.6's TournamentSelector: officers pick the event they are working. */
 export default function TournamentSelector({ title = 'Choose a tournament', onPick }) {
@@ -10,7 +11,7 @@ export default function TournamentSelector({ title = 'Choose a tournament', onPi
   useEffect(() => { tournamentStore.list().then(setRows) }, [])
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h1" sx={{ mb: 3 }}>{title}</Typography>
+      <HelpTitle id="tournament.select" variant="h1" sx={{ mb: 3 }}>{title}</HelpTitle>
       {!rows && <PageLoader label="Loading tournaments…" />}
       {rows && !rows.length && <Typography color="text.secondary">No tournaments yet.</Typography>}
       <Grid container spacing={2}>

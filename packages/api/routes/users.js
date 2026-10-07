@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { listUsers, createUser, updateUser, deleteUser, findUserRecord, findUser } from '../auth/users.js'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireAuth, requireRole, tournamentFor } from '../auth/middleware.js'
 import { badRequest, forbidden, notFound } from '../lib/errors.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 
@@ -30,6 +30,16 @@ export function userRoutes({ audit = async () => {} } = {}) {
     }
     return out
   }
+  // Tournament roles and assignments may only name tournaments the acting
+  // admin's organisation runs (PRD point 33, PRD v1 §4).
+  const assertTournamentsInScope = async (body, org) => {
+    if (!org) return
+    const ids = [...Object.keys(body?.tournamentRoles || {}), ...(Array.isArray(body?.tournamentIds) ? body.tournamentIds : [])]
+    for (const id of ids) {
+      const tournament = await tournamentFor(String(id))
+      if (!tournament || tournament.organizationId !== org) throw forbidden('organization_forbidden')
+    }
+  }
   const assertInScope = async (uid, org) => {
     if (!org) return
     const target = await findUser(uid)
@@ -45,7 +55,9 @@ export function userRoutes({ audit = async () => {} } = {}) {
   })
 
   router.post('/', async (req, res) => {
-    const user = await createUser(scopedBody(req.body, await scopeOf(req)))
+    const org = await scopeOf(req)
+    await assertTournamentsInScope(req.body, org)
+    const user = await createUser(scopedBody(req.body, org))
     // PRD v1 §22 audit: account and role changes.
     await audit(req.user, { action: 'user.changed', entity: 'user', entityId: user.uid, after: { email: user.email, role: user.role, tournamentRoles: user.tournamentRoles || null, organizationId: user.organizationId || null }, reason: 'created' })
     res.status(201).json({ user })
@@ -54,6 +66,7 @@ export function userRoutes({ audit = async () => {} } = {}) {
   router.patch('/:uid', async (req, res) => {
     const org = await scopeOf(req)
     await assertInScope(req.params.uid, org)
+    await assertTournamentsInScope(req.body, org)
     const body = scopedBody(req.body, org)
     if (org && req.body?.organizationId === undefined) delete body.organizationId
     const before = await findUser(req.params.uid)

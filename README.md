@@ -39,6 +39,13 @@ REST lives under `/api/v1`. `/health` sits outside it for uptime checks.
 
 There is no signup. Accounts are created by an admin.
 
+## Help inside the app
+
+- **ⓘ icons** next to page titles, section headings and key buttons explain what each one does. Hover on a computer; tap on a phone or tablet.
+- **Guide** (top bar, every signed-in page) opens "How to run a tournament — step by step", plus what the signed-in role does.
+- On the tournament screen, the **guide bar** under the tabs shows the current page, what comes before and after it, and the next step still to do for this tournament, with a **Go** button for each. **Full guide** lists all the steps and ticks the ones that are done.
+- All help text lives in `packages/web/src/help/guide.js`, so it can be updated in one place. A test checks that every ⓘ icon has text.
+
 ## Scheduling rules
 
 - A tournament sets the **slot length** (default 15 min) and **panel size**
@@ -76,6 +83,8 @@ restart. Its seeded accounts are listed in `packages/api/auth/users.js`.
 ```bash
 npm run seed:sample -w @kumite/api              # add the sample tournament
 npm run seed:sample -w @kumite/api -- --reset   # rebuild it from scratch
+npm run mock -w @kumite/api                     # rehearse a whole event end to end (19 checked steps)
+npm run loadtest -w @kumite/api                 # mats scoring live while spectators poll
 ```
 
 Writes to the database in `packages/api/.env` (`MONGODB_URI`): one tournament,
@@ -101,9 +110,16 @@ production:
 | Variable | Meaning |
 | --- | --- |
 | `MONGODB_URI`, `MONGODB_DB` | Atlas connection. Unset means in-memory. |
-| `JWT_SECRET` | Token signing secret. Unset means a random one per boot, which signs everyone out on every restart. |
+| `NODE_ENV` | Set to `production` on the live server. It turns on the production safety checks below. |
+| `JWT_SECRET` | Token signing secret, **32+ characters; required in production** (the server will not start without it). In development, leaving it unset means a random secret per boot. |
+| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | The first super admin of an empty production database (password 12+ characters). Production never seeds the demo accounts. |
+| `SEED_DEMO_ACCOUNTS` | `true` to seed the demo accounts (password `test123`) into a database anyway; for staging only. |
 | `CORS_ORIGIN` | The front end's origin, exactly — no trailing slash. |
 | `TRUST_PROXY` | Set only when a proxy sits in front (Render does). |
+| `APP_URL` | The front end's address, for certificate QR codes and email links. |
+| `SMS_WEBHOOK_URL`, `WHATSAPP_WEBHOOK_URL` | Optional gateways for SMS / WhatsApp notices. |
+
+Security review notes, and what to check before going live, are in `SECURITY-REVIEW.md`.
 
 ## Deploying
 
@@ -133,12 +149,10 @@ scoring engine (`packages/web/src/test/memoryMatchChannel.js`).
 
 ## Known gaps
 
-- **Kata** has no console yet; it is parked in the PRD. A kata tournament still
-  opens the kumite console.
-- **The scoreboard shows one mat.** `/display` is a single "what is on now"
-  document, so with two mats live the last referee to publish wins.
-- **Assignment is not enforced live.** The schedule refuses double-booking, but
-  nothing yet stops an unassigned referee from opening and running a bout.
-- **Seeded accounts use a known password**, and the login page offers them as
-  one-click sign-ins. Change the passwords on any deployment that anyone else
-  can reach; the one-click buttons stop working once you do.
+The current focus is the MVP, which is complete. Everything deferred is recorded in `FUTURE-BACKLOG.md`:
+
+- what to check before a large event (penetration test, mock tournament, load test against the real server)
+- the final phase (payment gateway)
+- the Phase 2 features
+- smaller improvements, for example a hall scoreboard per mat (`/display` shows one bout; `/live` shows every mat)
+- decisions not to do something (other languages, public player photos)

@@ -1,6 +1,6 @@
 import { remainingNow } from '@kumite/shared/clock.js'
 import {
-  applyCommand, applyExpiry, initialMatchState, withOutcome, pushHistory, UNDO
+  applyExpiry, initialMatchState, withOutcome, stepBout
 } from '@kumite/shared/commands.js'
 
 export const serverNow = () => Date.now()
@@ -23,14 +23,24 @@ export class MatchRoom {
     // Commands run one after another, in arrival order, even with async checks.
     this.queue = Promise.resolve()
     this.restored = false
+    // Offline scoring: how many times the mat has passed to a different
+    // person, and when the last change was stamped. A referee's device that
+    // scored offline replays its actions only if nobody else took the mat
+    // meanwhile (its own reconnection does not count).
+    this.controllerUid = null
+    this.handoffs = 0
+    this.lastAt = 0
   }
 
   /** PRD v1 §28 "Interrupted match: preserve state and resume". */
-  restore({ seq = 0, state = null, history = [] } = {}) {
+  restore({ seq = 0, state = null, history = [], handoffs = 0, controllerUid = null, lastAt = 0 } = {}) {
     if (!state) return
     this.seq = seq
     this.state = state
     this.history = Array.isArray(history) ? history : []
+    this.handoffs = Number(handoffs) || 0
+    this.controllerUid = controllerUid || null
+    this.lastAt = Number(lastAt) || 0
   }
 
   /** The seq a client event was already applied at, or undefined. */
@@ -45,7 +55,7 @@ export class MatchRoom {
   }
 
   snapshot() {
-    return { matchId: this.matchId, seq: this.seq, controllerId: this.controllerId, state: this.state }
+    return { matchId: this.matchId, seq: this.seq, controllerId: this.controllerId, handoffs: this.handoffs, state: this.state }
   }
 
   /**
@@ -58,9 +68,11 @@ export class MatchRoom {
    * deliberate act by someone with the whistle, never automatic: quietly
    * moving control mid-bout is worse than refusing it.
    */
-  claim(socketId, { force = false } = {}) {
+  claim(socketId, { force = false, uid = null } = {}) {
     if (this.controllerId && this.controllerId !== socketId && !force) return false
     this.controllerId = socketId
+    if (uid && this.controllerUid && uid !== this.controllerUid) this.handoffs += 1
+    if (uid) this.controllerUid = uid
     return true
   }
 
@@ -72,30 +84,29 @@ export class MatchRoom {
     return this.controllerId === socketId
   }
 
-  apply(cmd, payload, socketId) {
+  /**
+   * `at` is the server's time, except for an action scored offline and
+   * replayed: then it is when the action happened, kept in order (never
+   * before the last stamped change) and never in the future.
+   */
+  apply(cmd, payload, socketId, { at: clientAt = null } = {}) {
     if (!this.controls(socketId)) {
       throw Object.assign(new Error('not the controller'), { code: 'not_controller' })
     }
-    const at = serverNow()
-    const before = this.state
-
-    if (cmd === UNDO) {
-      if (!this.history.length) return null
-      this.state = this.history[this.history.length - 1]
-      this.history = this.history.slice(0, -1)
-      this.seq += 1
-      return { seq: this.seq, cmd, at, state: this.state }
-    }
-
-    this.state = withOutcome(applyCommand(before, cmd, payload, at), undefined, at)
-    if (this.state === before) return null
-    this.history = pushHistory(this.history, before)
+    const now = serverNow()
+    const at = Number.isFinite(clientAt) ? Math.min(now, Math.max(this.lastAt, clientAt)) : now
+    this.lastAt = Math.max(this.lastAt, at)
+    const step = stepBout({ state: this.state, history: this.history }, cmd, payload, at)
+    if (!step.changed) return null
+    this.state = step.state
+    this.history = step.history
     this.seq += 1
     return { seq: this.seq, cmd, at, state: this.state }
   }
 
   sweepExpiry() {
     const at = serverNow()
+    this.lastAt = Math.max(this.lastAt, at)
     const before = this.state
     const next = withOutcome(applyExpiry(before, at, remainingNow), undefined, at)
     if (next === before) return null

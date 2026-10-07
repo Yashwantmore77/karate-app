@@ -7,6 +7,7 @@ import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
 import { useLoading } from '../../components/Loader'
+import InfoTip, { HelpTitle } from '../../components/help/InfoTip'
 
 const ELIGIBLE = new Set(['APPROVED', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'WEIGH_IN_PENDING', 'WEIGH_IN_VERIFIED', 'CATEGORY_CONFIRMED'])
 
@@ -51,6 +52,7 @@ export default function WeighInTab({ tournament, version, action, reload, role }
       {closed && !tournament.entriesLocked && (
         <Alert severity="warning">Weigh-in is closed{tournament.weighInClosedAt ? ` (${new Date(tournament.weighInClosedAt).toLocaleString()})` : ''}. {mayOverride ? 'You can still record a weight as an override; Notes is the reason.' : 'Ask an admin to reopen it.'}</Alert>
       )}
+      <HelpTitle id="weighin.record" variant="h3">Weigh-in</HelpTitle>
       <Typography variant="body2" color="text.secondary">
         A player whose actual weight fits another category is {tournament.settings?.weighInAutoMove === false ? 'flagged for a recheck' : 'moved to it automatically'}; every move is audited.
       </Typography>
@@ -62,6 +64,7 @@ export default function WeighInTab({ tournament, version, action, reload, role }
           <>
           <Button variant="outlined" disabled={tournament.entriesLocked || closed}
             onClick={() => action.run(() => tms.weighInReminder(tid), (r) => `Reminder sent to ${r.teams} team(s)`)}>Send weigh-in reminder</Button>
+          <InfoTip id="weighin.reminder" />
           {!tournament.entriesLocked && (
             <Button variant="outlined" color={closed ? 'primary' : 'warning'} onClick={() => setConfirm({
               title: closed ? 'Reopen weigh-in?' : 'Close weigh-in?',
@@ -70,6 +73,7 @@ export default function WeighInTab({ tournament, version, action, reload, role }
               run: (reason) => action.run(() => tms.setLock(tid, 'weighin', !closed, reason), closed ? 'Weigh-in reopened' : 'Weigh-in closed').then(reload),
             })}>{closed ? 'Reopen weigh-in' : 'Close weigh-in'}</Button>
           )}
+          {!tournament.entriesLocked && <InfoTip id="weighin.close" />}
           <TextField select size="small" label="Weigh-in status" value={status} onChange={(e) => setStatus(e.target.value)} sx={{ minWidth: 170 }}>
             <MenuItem value="">All</MenuItem>
             {WEIGH_IN_STATUS.map((s) => <MenuItem key={s} value={s}>{humanize(s)}</MenuItem>)}

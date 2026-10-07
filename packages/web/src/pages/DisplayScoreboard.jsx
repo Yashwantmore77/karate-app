@@ -15,11 +15,14 @@ const STALE_AFTER_MS = 5_000
 
 export default function DisplayScoreboard() {
   const [live, setLive] = useState(null)
+  // ?mat=2: this screen shows mat 2 only (PRD v1 §17); without it, the latest bout.
+  // Read straight from the address: the ?portal screen renders outside the router.
+  const mat = Number(new URLSearchParams(window.location.search).get('mat')) || null
   const serverNow = useServerNow()
   const clock = useMatchClock(live?.clock)
   const [, setTick] = useState(0)
 
-  useEffect(() => displayRepo.subscribe(setLive), [])
+  useEffect(() => displayRepo.subscribe(setLive, { mat }), [mat])
 
   // A frozen scoreboard looks broken, so the clock keeps rendering; the badge
   // is what tells the hall the feed is no longer live.
@@ -43,7 +46,7 @@ export default function DisplayScoreboard() {
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#111' }}>
         {announcement}
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography sx={{ color: '#888', fontSize: 40, fontWeight: 700 }}>No live match</Typography>
+          <Typography sx={{ color: '#888', fontSize: 40, fontWeight: 700 }}>{mat ? `Mat ${mat}: no live match` : 'No live match'}</Typography>
         </Box>
       </Box>
     )

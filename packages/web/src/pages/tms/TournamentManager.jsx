@@ -20,9 +20,11 @@ import ResultsTab from './ResultsTab'
 import CertificatesTab from './CertificatesTab'
 import ReportsTab from './ReportsTab'
 import AuditTab from './AuditTab'
+import CheckinTab from './CheckinTab'
 import { PageLoader } from '../../components/Loader'
 import { ExportAuditContext } from '../../components/tms/exportAudit'
 import { tms } from '../../data/tms'
+import WorkflowGuide from '../../components/help/WorkflowGuide'
 
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
 // only when the signed-in role holds its permission (section 3).
@@ -36,6 +38,8 @@ export const TABS = [
   { key: 'matches', label: 'Matches', perm: P.MATCH_GENERATE, Component: MatchesTab },
   { key: 'kata', label: 'Kata panel', perm: P.MATCH_GENERATE, Component: KataTab },
   { key: 'call', label: 'Call matches', perm: P.MATCH_CALL, Component: CallTab },
+  // Passes and QR check-in: the door (registration, weigh-in) and the mat.
+  { key: 'checkin', label: 'Check-in & passes', perm: [P.ATTENDANCE_MARK, P.WEIGHIN_RECORD, P.CERTIFICATE_GENERATE], Component: CheckinTab },
   { key: 'results', label: 'Results', perm: P.RESULT_MANAGE, Component: ResultsTab },
   { key: 'certificates', label: 'Certificates', perm: P.CERTIFICATE_GENERATE, Component: CertificatesTab },
   { key: 'reports', label: 'Reports', perm: P.REPORT_EXPORT, Component: ReportsTab },
@@ -64,7 +68,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
 
   useEffect(() => { reload() }, [reload])
 
-  const tabs = useMemo(() => TABS.filter((t) => can(role, t.perm)), [role])
+  const tabs = useMemo(() => TABS.filter((t) => [].concat(t.perm).some((p) => can(role, p))), [role])
   const current = tabs.find((t) => t.key === params.get('tab')) || tabs[0]
 
   if (missing) return <Container sx={{ py: 4 }}><Alert severity="error">Tournament not found.</Alert></Container>
@@ -99,6 +103,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
         </Tabs>
       </PageBar>
       <Container maxWidth="xl" sx={{ py: 3 }}>
+        {current && <WorkflowGuide tournament={tournament} version={version} tabs={tabs} current={current} goTab={(key) => setParams({ tab: key })} role={role} />}
         <ExportAuditContext.Provider value={logExport}>
           {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} goTab={(key) => setParams({ tab: key })} />}
         </ExportAuditContext.Provider>

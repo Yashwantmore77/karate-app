@@ -5,6 +5,7 @@ import {
 } from '@mui/material'
 import { Delete, Add } from '@mui/icons-material'
 import { settingsOf } from '@kumite/shared/tms.js'
+import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 import { humanize } from '../../components/tms/StatusBadge'
 import { tms } from '../../data/tms'
 import StatusBadge from '../../components/tms/StatusBadge'
@@ -12,6 +13,7 @@ import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import Bracket from '../../components/tms/Bracket'
 import KataRoundTable from '../../components/tms/KataRoundTable'
 import { PageLoader, useLoading } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 export const MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' }
 
@@ -81,7 +83,7 @@ export function TallyTable({ rows }) {
 }
 
 /** Sections 34-36 and 42-43. */
-export default function ResultsTab({ tournament, reload, version, action }) {
+export default function ResultsTab({ tournament, reload, version, action, role }) {
   const tid = tournament.id
   const [results, setResults] = useState([])
   const [tally, setTally] = useState([])
@@ -113,7 +115,7 @@ export default function ResultsTab({ tournament, reload, version, action }) {
       <Paper sx={{ p: 2 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}>
           <Box>
-            <Typography variant="h3">Publish results</Typography>
+            <HelpTitle id="results.publish" variant="h3">Publish results</HelpTitle>
             <Typography variant="body2" color="text.secondary">
               Each category goes Provisional → Verified → Published → Locked (PRD v1 §16). Publishing verifies what is still provisional, shows it on the public page and notifies teams; completing the tournament locks it.
               {settings.resultPublishing === 'auto' && ' Results here are published automatically as each category is verified.'}
@@ -136,9 +138,22 @@ export default function ResultsTab({ tournament, reload, version, action }) {
         <Paper key={d.key} sx={{ p: 2 }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', mb: 1 }} spacing={1}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-              <Typography variant="h3">{d.label}</Typography>
+              <HelpTitle id="results.category" variant="h3">{d.label}</HelpTitle>
               {d.resultStatus && <StatusBadge status={d.resultStatus === 'LOCKED' || d.resultStatus === 'PUBLISHED' ? 'COMPLETED' : d.resultStatus === 'VERIFIED' ? 'APPROVED' : 'DRAFT'} label={humanize(d.resultStatus)} />}
             </Stack>
+            {/* PRD v1 §16: freeze a finished category while the event goes on. */}
+            {d.resultStatus === 'PUBLISHED' && can(role, P.RESULT_PUBLISH) && (
+              <Button variant="outlined" size="small" onClick={() => setConfirm({
+                title: `Lock ${d.label}?`, message: 'Nothing in this category can change until it is unlocked, which needs the result-override privilege and a reason.',
+                run: () => action.run(() => tms.lockResults(tid, d.key, true), 'Category locked').then(load),
+              })}>Lock result</Button>
+            )}
+            {d.resultStatus === 'LOCKED' && can(role, P.RESULT_OVERRIDE) && (
+              <Button variant="outlined" color="warning" size="small" onClick={() => setConfirm({
+                title: `Unlock ${d.label}?`, message: 'The category goes back to Published so it can be corrected. Your reason is recorded.', requireReason: true,
+                run: (reason) => action.run(() => tms.lockResults(tid, d.key, false, reason), 'Category unlocked').then(load),
+              })}>Unlock</Button>
+            )}
             {d.resultStatus === 'PROVISIONAL' && (
               <Button variant="contained" color="success" size="small" onClick={() => setConfirm({
                 title: `Verify ${d.label}?`, message: 'Confirms the medals are correct. Corrections after this need the result-override privilege.',
@@ -216,7 +231,7 @@ export default function ResultsTab({ tournament, reload, version, action }) {
 
       <Paper sx={{ p: 2 }}>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: 1 }}>
-          <Typography variant="h3">Medal tally</Typography>
+          <HelpTitle id="results.tally" variant="h3">Medal tally</HelpTitle>
           <TextField select size="small" value={by} onChange={(e) => setBy(e.target.value)}>
             {['club', 'district', 'state', 'country'].map((k) => <MenuItem key={k} value={k}>By {k}</MenuItem>)}
           </TextField>

@@ -3,7 +3,7 @@ import {
   Container, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Stack, Grid, MenuItem, Switch,
   FormControlLabel, IconButton, Tooltip, Alert,
 } from '@mui/material'
-import { Add, Edit, ContentCopy } from '@mui/icons-material'
+import { Add, Edit, ContentCopy, SettingsBackupRestore } from '@mui/icons-material'
 import { OVERTIME_MODES, KATA_TIE_BREAKS } from '@kumite/shared/rulesets.js'
 import { KATA_METHODS } from '@kumite/shared/tms.js'
 import { KATA_METHOD_LABEL, KATA_TIE_BREAK_LABEL } from '@kumite/shared/kata.js'
@@ -13,6 +13,7 @@ import StatusBadge from '../../components/tms/StatusBadge'
 import useAction from '../../components/tms/useAction'
 import { useLoading } from '../../components/Loader'
 import { OVERTIME_LABEL } from '../../components/tms/AdvancedSettings'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const KUMITE_NUMBERS = [['matchDurationSec', 'Bout length (seconds)'], ['pointGap', 'Winning point gap'], ['extraTimeSec', 'Extra time (seconds)'], ['penaltyCategories', 'Penalty categories (1 or 2)']]
 const KATA_NUMBERS = [['kataJudges', 'Judges'], ['kataMinScore', 'Lowest score'], ['kataMaxScore', 'Highest score'], ['kataPrecision', 'Decimals'], ['kataRounds', 'Rounds'], ['kataQualifiers', 'Qualifiers'], ['kataTechnicalWeight', 'Technical weight']]
@@ -49,8 +50,8 @@ export default function AdminRulesets() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Typography variant="h1" gutterBottom>Rulesets</Typography>
-      <Alert severity="info" sx={{ mb: 2 }}>A tournament applies a ruleset in Settings. Changing one that is in use creates a new version; tournaments keep the version they applied until they apply again. Built-in rulesets cannot be edited — copy one instead.</Alert>
+      <HelpTitle id="admin.rulesets" variant="h1" gutterBottom>Rulesets</HelpTitle>
+      <Alert severity="info" sx={{ mb: 2 }}>A tournament applies a ruleset in Settings. Changing a ruleset saves a new version when a tournament uses it, and tournaments keep the version they applied until they apply again. The standard rulesets can be edited too: the edit becomes the next version and the original can be restored at any time.</Alert>
       <DataTable rows={rows} loading={loading} refreshing={refreshing} empty="No rulesets."
         toolbar={(
           <>
@@ -63,12 +64,16 @@ export default function AdminRulesets() {
           { key: 'version', label: 'Version', render: (r) => `v${r.version}` },
           { key: 'kumite', label: 'Kumite', sortable: false, value: (r) => `${r.kumite.matchDurationSec}s, gap ${r.kumite.pointGap}, ${r.kumite.overtime}`, render: (r) => `${r.kumite.matchDurationSec}s · gap ${r.kumite.pointGap} · ${OVERTIME_LABEL[r.kumite.overtime] || r.kumite.overtime}` },
           { key: 'kata', label: 'Kata', sortable: false, value: (r) => `${r.kata.kataJudges} judges`, render: (r) => `${r.kata.kataJudges} judges · ${r.kata.kataMinScore}–${r.kata.kataMaxScore}${r.kata.kataComponents ? ' · technical/athletic' : ''}` },
-          { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.supersededBy ? 'DRAFT' : r.active === false ? 'REJECTED' : 'APPROVED'} label={r.supersededBy ? 'Superseded' : r.active === false ? 'Inactive' : r.builtIn ? 'Built-in' : 'Active'} /> },
+          { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.supersededBy ? 'DRAFT' : r.active === false ? 'REJECTED' : 'APPROVED'} label={r.supersededBy ? 'Superseded' : r.active === false ? 'Inactive' : r.builtIn ? 'Standard' : r.standard ? 'Standard (edited)' : 'Active'} /> },
           { key: 'actions', label: '', sortable: false, render: (r) => (
             <Stack direction="row">
-              {!r.builtIn && !r.supersededBy && <Tooltip title="Edit"><IconButton size="small" aria-label={`Edit ${r.name}`} onClick={() => open(r)}><Edit fontSize="small" /></IconButton></Tooltip>}
+              {!r.supersededBy && <Tooltip title={r.builtIn ? 'Edit (saved as a new version)' : 'Edit'}><IconButton size="small" aria-label={`Edit ${r.name}`} onClick={() => open(r)}><Edit fontSize="small" /></IconButton></Tooltip>}
+              {r.standard && !r.supersededBy && (
+                <Tooltip title="Restore the standard rules as shipped"><IconButton size="small" aria-label={`Restore ${r.name}`}
+                  onClick={() => action.run(() => tms.restoreRuleset(r.family), 'Standard rules restored').then(load)}><SettingsBackupRestore fontSize="small" /></IconButton></Tooltip>
+              )}
               <Tooltip title="Copy"><IconButton size="small" aria-label={`Copy ${r.name}`} onClick={() => open(r, true)}><ContentCopy fontSize="small" /></IconButton></Tooltip>
-              {!r.builtIn && !r.supersededBy && (
+              {!r.builtIn && !r.standard && !r.supersededBy && (
                 <Switch size="small" checked={r.active !== false} slotProps={{ input: { 'aria-label': `${r.name} active` } }}
                   onChange={(e) => action.run(() => tms.setRulesetActive(r.id, e.target.checked), e.target.checked ? 'Activated' : 'Deactivated').then(load)} />
               )}

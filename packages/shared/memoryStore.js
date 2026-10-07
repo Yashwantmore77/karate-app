@@ -1,3 +1,5 @@
+import { searchRows } from './query.js'
+
 // The store contract over a Map. Used by the tests here and by any caller that
 // needs a throwaway store; the API keeps its own (with Mongo beside it).
 
@@ -16,6 +18,8 @@ export function memoryCollection() {
       return limit ? out.slice(skip, skip + limit) : out.slice(skip)
     },
     async count(filter = {}) { return [...rows.values()].filter((r) => matches(r, filter)).length },
+    // The portable query of query.js: filtered, sorted and paged here.
+    async search(query = {}, options = {}) { return searchRows([...rows.values()].map((r) => ({ ...r })), query, options) },
     async get(id) { const r = rows.get(id); return r ? { ...r } : null },
     async insert(doc) {
       counter += 1

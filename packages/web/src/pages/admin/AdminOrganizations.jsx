@@ -10,6 +10,7 @@ import StatusBadge from '../../components/tms/StatusBadge'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import useAction from '../../components/tms/useAction'
 import { useLoading } from '../../components/Loader'
+import { HelpTitle } from '../../components/help/InfoTip'
 
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
 
@@ -37,7 +38,7 @@ export default function AdminOrganizations() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Typography variant="h1" gutterBottom>Organisations</Typography>
+      <HelpTitle id="admin.organizations" variant="h1" gutterBottom>Organisations</HelpTitle>
       <Alert severity="info" sx={{ mb: 2 }}>
         Each organisation runs its own tournaments. Give an organisation an admin from the Accounts page; tournaments that admin creates belong to the organisation, and the public site can list them at /tournaments?org=short-name.
       </Alert>
