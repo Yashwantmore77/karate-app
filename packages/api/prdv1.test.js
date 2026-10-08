@@ -29,7 +29,7 @@ const call = async (method, path, body, token, headers = {}) => {
 const login = async (email, password = 'test123') => (await call('POST', '/auth/login', { email, password })).body.token
 
 const READY = {
-  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2027-01-16',
+  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2099-12-31',
   registrationStart: '2020-01-01', registrationClose: '2099-12-31', contactMobile: '+91 98765 43210', contactEmail: 'office@open.example', country: 'India',
 }
 

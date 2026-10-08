@@ -12,13 +12,14 @@ import { usePagedList } from '../../components/usePagedList'
 import * as loginLog from '../../data/loginLog'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { describeError } from '../../data/tms'
 
 // The server answers with a code; these are the ones a person can act on.
 const MESSAGES = {
   forbidden: 'Only an administrator can read the sign-in log.',
   unauthorized: 'Your session has expired. Sign in again.',
 }
-const messageFor = (err) => MESSAGES[err?.code] || 'Something went wrong. Try again.'
+const messageFor = (err) => MESSAGES[err?.code] || (err?.code && err.code !== 'error' ? describeError(err) : 'Something went wrong. Try again.')
 
 const OUTCOME_LABELS = {
   success: 'Signed in',

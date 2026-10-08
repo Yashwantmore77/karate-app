@@ -170,7 +170,7 @@ export const matches = {
   async update(_categoryId, id, patch) {
     return (await httpPatch(`/matches/${id}`, patch)).match
   },
-  async remove(_categoryId, id) {
-    await httpDelete(`/matches/${id}`)
+  async remove(_categoryId, id, reason = null) {
+    await httpDelete(`/matches/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`)
   },
 }

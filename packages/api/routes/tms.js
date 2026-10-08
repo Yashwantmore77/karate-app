@@ -285,7 +285,9 @@ export function tmsRoutes(tms, stores) {
     res.json({ team: await tms.teams.update(withMeta(req), tid(req), req.params.id, validate(req.body, TEAM, { partial: true })) })
   })
   router.delete('/:tid/teams/:id', requirePermission(P.RECORD_DELETE), async (req, res) => {
-    await tms.teams.remove(withMeta(req), tid(req), req.params.id)
+    // A team with players needs a reason (sent as ?reason=…).
+    const reason = typeof req.query.reason === 'string' ? req.query.reason.trim().slice(0, 300) || null : null
+    await tms.teams.remove(withMeta(req), tid(req), req.params.id, reason)
     res.status(204).end()
   })
 

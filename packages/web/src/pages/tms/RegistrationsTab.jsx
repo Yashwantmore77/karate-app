@@ -6,7 +6,7 @@ import {
 import { Add, Edit, Delete, Check, Close, Undo, Payments, Category, DirectionsWalk } from '@mui/icons-material'
 import { formFields } from '@kumite/shared/registration.js'
 import { REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS } from '@kumite/shared/tms.js'
+import { PAYMENT_STATUS, teamProblems } from '@kumite/shared/tms.js'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
@@ -47,6 +47,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const [playerErrors, setPlayerErrors] = useState([])
   const [confirm, setConfirm] = useState(null)
   const [payment, setPayment] = useState(null)
+  const [teamTouched, setTeamTouched] = useState(false)
   const [override, setOverride] = useState(null)
   const [duplicates, setDuplicates] = useState(null)
   const [dupeRows, setDupeRows] = useState([])
@@ -168,6 +169,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
     </>
   )
 
+  const teamErrors = teamEdit ? teamProblems(teamEdit) : {}
+
   return (
     <Stack spacing={2}>
       <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
@@ -204,8 +207,11 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
               <Stack direction="row">
                 <IconButton size="small" aria-label="Edit team" onClick={() => setTeamEdit(t)}><Edit fontSize="small" /></IconButton>
                 <IconButton size="small" aria-label="Delete team" disabled={locked} onClick={() => setConfirm({
-                  title: `Delete ${t.name}?`, danger: true, message: 'Its players are deleted too.', confirmLabel: 'Delete',
-                  run: () => action.run(() => tms.teams.remove(tid, t.id), 'Team deleted').then(load),
+                  title: `Delete ${t.name}?`, danger: true, confirmLabel: 'Delete',
+                  // Deleting players is recorded with a reason; an empty team goes without one.
+                  message: teamCounts[t.id] ? `Its ${teamCounts[t.id]} player${teamCounts[t.id] === 1 ? ' is' : 's are'} deleted too. Give a reason; it is kept in the audit log.` : 'This team has no players.',
+                  requireReason: !!teamCounts[t.id],
+                  run: (reason) => action.run(() => tms.teams.remove(tid, t.id, reason || null), 'Team deleted').then(load),
                 })}><Delete fontSize="small" /></IconButton>
               </Stack>
             ) },
@@ -273,7 +279,14 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
                 {p.duplicateOf?.length > 0 && <Typography variant="body2" color="warning.main">Possible duplicate</Typography>}
               </Box>
             ) },
-            { key: 'payment', label: 'Payment', sortKey: 'payment.status', value: (p) => p.payment?.status, render: (p) => <StatusBadge status={p.payment?.status || 'PENDING'} label={`${humanize(p.payment?.status || 'PENDING')}${p.payment?.amount ? ` · ₹${p.payment.amount}` : ''}`} /> },
+            { key: 'payment', label: 'Payment', sortKey: 'payment.status', value: (p) => p.payment?.status, render: (p) => (
+              <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+                <StatusBadge status={p.payment?.status || 'PENDING'} label={`${humanize(p.payment?.status || 'PENDING')}${p.payment?.amount ? ` · ₹${p.payment.amount}` : ''}`} />
+                {/* Events changed after payment: what is still owed, or owed back. */}
+                {p.payment?.balanceDue > 0 && <Typography variant="caption" color="warning.main">₹{p.payment.balanceDue} still due (paid ₹{p.payment.paidAmount})</Typography>}
+                {p.payment?.refundDue > 0 && <Typography variant="caption" color="info.main">Refund due ₹{p.payment.refundDue}</Typography>}
+              </Stack>
+            ) },
             { key: 'actions', label: '', sortable: false, render: (p) => (
               <Stack direction="row" sx={{ flexWrap: 'nowrap' }}>
                 {manage && ['SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus) && (
@@ -322,7 +335,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         </Stack>
       )}
 
-      <Dialog open={!!teamEdit} onClose={() => setTeamEdit(null)} maxWidth="md" fullWidth>
+      <Dialog open={!!teamEdit} onClose={() => { setTeamEdit(null); setTeamTouched(false) }} maxWidth="md" fullWidth>
         <DialogTitle>{teamEdit?.id ? 'Edit team' : 'Add team'}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
@@ -331,7 +344,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
             )}
             {TEAM_FIELDS.map(([k, label, w]) => (
               <Grid key={k} size={{ xs: 12, sm: w }}>
-                <TextField fullWidth required={k === 'name'} label={label} value={teamEdit?.[k] || ''} onChange={(e) => setTeamEdit({ ...teamEdit, [k]: e.target.value })} />
+                <TextField fullWidth required={k === 'name'} label={label} value={teamEdit?.[k] || ''} onChange={(e) => setTeamEdit({ ...teamEdit, [k]: e.target.value })}
+                  error={!!teamErrors[k] && teamTouched} helperText={teamTouched ? teamErrors[k] : undefined} />
               </Grid>
             ))}
             <Grid size={{ xs: 12 }}>
@@ -341,10 +355,13 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setTeamEdit(null)}>Cancel</Button>
-          <Button variant="contained" onClick={async () => {
+          <Button variant="contained" disabled={action.busy} onClick={async () => {
+            // Checked here first, with the same rules the server applies.
+            setTeamTouched(true)
+            if (Object.keys(teamErrors).length) return
             const doc = { ...Object.fromEntries(TEAM_FIELDS.map(([k]) => [k, teamEdit[k] || null]).filter(([, v]) => v !== null || teamEdit.id)), active: teamEdit.active !== false }
             const ok = await action.run(() => (teamEdit.id ? tms.teams.update(tid, teamEdit.id, doc) : tms.teams.create(tid, doc)), 'Team saved')
-            if (ok) { setTeamEdit(null); load() }
+            if (ok) { setTeamEdit(null); setTeamTouched(false); load() }
           }}>Save</Button>
         </DialogActions>
       </Dialog>
@@ -364,7 +381,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPlayerEdit(null)}>Cancel</Button>
-          <Button variant="contained" onClick={() => savePlayer()}>Save</Button>
+          <Button variant="contained" disabled={action.busy} onClick={() => savePlayer()}>Save</Button>
         </DialogActions>
       </Dialog>
 
@@ -386,7 +403,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPayment(null)}>Cancel</Button>
-          <Button variant="contained" onClick={async () => {
+          <Button variant="contained" disabled={action.busy} onClick={async () => {
             const { player, ...p } = payment
             const body = { status: p.status, amount: Number(p.amount) || 0, method: p.method || null, transactionId: p.transactionId || null, date: p.date || null, receipt: p.receipt || null }
             const ok = await action.run(() => tms.payment(tid, player.id, body), 'Payment recorded')
@@ -431,7 +448,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOverride(null)}>Cancel</Button>
-          <Button variant="contained" disabled={!override?.reason?.trim()} onClick={async () => {
+          <Button variant="contained" disabled={action.busy || !override?.reason?.trim()} onClick={async () => {
             const o = override
             const ok = await action.run(() => tms.overrideCategory(tid, o.player.id, o.event, { ageGroupId: o.ageGroupId || null, weightCategoryId: o.weightCategoryId || null }, o.reason), 'Category updated')
             if (ok) { setOverride(null); load() }

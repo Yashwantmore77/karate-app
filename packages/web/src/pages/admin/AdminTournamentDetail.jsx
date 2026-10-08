@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import { Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, IconButton, Chip, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
+import { Container, Box, Alert, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, IconButton, Chip, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, Stack } from '@mui/material'
 import { ArrowBack, Edit, Delete, Add, Visibility } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
@@ -10,6 +10,7 @@ import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore, categories as categoryStore } from '../../data/domain'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { describeError } from '../../data/tms'
 
 const validationSchema = Yup.object({
   catName: Yup.string().required('Category name required'),
@@ -25,6 +26,7 @@ export default function AdminTournamentDetail({ uid }) {
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const {
@@ -94,8 +96,13 @@ export default function AdminTournamentDetail({ uid }) {
 
   const handleDelete = async (id) => {
     // The store takes the category's competitors and matches with it.
-    await categoryStore.remove(tournamentId, id)
-    await refresh()
+    try {
+      await categoryStore.remove(tournamentId, id)
+      setDeleteError(null)
+      await refresh()
+    } catch (err) {
+      setDeleteError(describeError(err))
+    }
     setDeleteConfirm(null)
   }
 
@@ -125,6 +132,7 @@ export default function AdminTournamentDetail({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
+        {deleteError && <Alert severity="error" onClose={() => setDeleteError(null)} sx={{ mb: 2 }}>{deleteError}</Alert>}
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h6">Categories ({total})</Typography>
           <TableSearch value={search} onChange={setSearch} placeholder="Search name, age or division" />

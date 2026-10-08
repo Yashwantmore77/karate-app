@@ -13,6 +13,7 @@ import { findUser, findUserRecord } from '../auth/users.js'
 import { can, roleIn, PERMISSION as P } from '@kumite/shared/permissions.js'
 import { matchLifecycle, EXCEPTIONAL_RESULTS } from '@kumite/shared/lifecycle.js'
 import { forbidden } from '../lib/errors.js'
+import { categoryGuards, staffOnly } from '../auth/categoryAccess.js'
 
 // Used when a tournament predates the setting, so an older record still gets a
 // sensible panel size instead of no limit at all.
@@ -71,6 +72,7 @@ export function matchRoutes(stores, tms = null) {
   const body = bodyReader(MATCH_SCHEMA)
   const { tournaments, categories, competitors, matches } = stores
   const audit = stores.auditLog ? createAuditLog(stores.auditLog) : null
+  const guard = categoryGuards(stores)
 
   /**
    * A match may only point at competitors entered in its own category.
@@ -211,8 +213,8 @@ export function matchRoutes(stores, tms = null) {
     return { endsAt }
   }
 
-  nested.use(requireAuth)
-  flat.use(requireAuth)
+  nested.use(requireAuth, staffOnly)
+  flat.use(requireAuth, staffOnly)
 
   // A category's bouts belong to its tournament: reachable only by accounts
   // that may work that tournament (PRD section 4, point 33).
@@ -246,7 +248,8 @@ export function matchRoutes(stores, tms = null) {
   // a match carries its judges' scores, and deleting it destroys them.
   nested.post('/:categoryId/matches', requireRole('referee'), async (req, res) => {
     const fields = body.forCreate(req.body)
-    await loadOrFail(categories, req.params.categoryId)
+    // A drawn category's bouts come from its draw (and its locks), not from here.
+    guard.assertNotDrawn(await guard.scope(req.user, req.params.categoryId, { write: 'structure' }))
     await assertCompetitorsInCategory(fields, req.params.categoryId)
     await assertPeopleMakeSense(fields, req.params.categoryId)
     const schedule = await resolveSchedule(fields, req.params.categoryId, {}, null)
@@ -273,7 +276,7 @@ export function matchRoutes(stores, tms = null) {
     // is refused rather than quietly ignored.
     validate(req.body ?? {}, {})
     const { categoryId } = req.params
-    await loadOrFail(categories, categoryId)
+    guard.assertNotDrawn(await guard.scope(req.user, categoryId, { write: 'structure' }))
 
     // In the order they were entered, so the same field always draws the same
     // way rather than in whatever order the store returns.
@@ -327,9 +330,16 @@ export function matchRoutes(stores, tms = null) {
 
     const filter = {}
     if (status) filter.status = status
-    if (categoryId) filter.categoryId = categoryId
+    if (categoryId) {
+      // An unknown category is simply an empty filter; a known one must be reachable.
+      if (await categories.get(String(categoryId))) await guard.scope(req.user, String(categoryId))
+      filter.categoryId = categoryId
+    }
+    // Only bouts of tournaments this account works (PRD point 33).
+    const reach = categoryId ? null : await guard.categoryReach(req.user)
 
     const { rows, total } = await matches.paginate(filter, {
+      within: reach ? { field: 'categoryId', values: reach } : null,
       q,
       searchFields: ['status', 'winner'],
       page,
@@ -365,7 +375,9 @@ export function matchRoutes(stores, tms = null) {
   })
 
   flat.get('/:id', async (req, res) => {
-    res.json({ match: await loadOrFail(matches, req.params.id) })
+    const match = await loadOrFail(matches, req.params.id)
+    if (match.categoryId) await guard.scope(req.user, match.categoryId)
+    res.json({ match })
   })
 
   // A referee, not only an admin, records how a bout ended: they are the one
@@ -377,6 +389,8 @@ export function matchRoutes(stores, tms = null) {
     // on their own bout (or one nobody is on yet).
     const authority = await matchAuthority(req.user, existing, stores)
     if (!authority.ok) throw forbidden(authority.error)
+    // An archived tournament is read-only history.
+    if (existing.categoryId) await guard.scope(req.user, existing.categoryId, { write: 'edit' })
     await assertCompetitorsInCategory(patch, existing.categoryId)
 
     // Rule 6: a completed result is never changed silently. Saving the same
@@ -426,9 +440,34 @@ export function matchRoutes(stores, tms = null) {
     res.json({ match })
   })
 
+  /**
+   * Removing a bout. Only inside a tournament the account works and that is
+   * still open; never a bout of a locked draw (the draw owns those); and a
+   * bout that was fought only as a recorded correction, with a reason and the
+   * correction privilege (Rule 6). Every removal is in the audit log.
+   */
   flat.delete('/:id', requireRole('admin'), async (req, res) => {
-    await loadOrFail(matches, req.params.id)
+    const existing = await loadOrFail(matches, req.params.id)
+    const reason = typeof req.query.reason === 'string' ? req.query.reason.trim().slice(0, 300) : (typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '')
+    let found = { category: null, tournament: null, drawn: false }
+    if (existing.categoryId) found = await guard.scope(req.user, existing.categoryId, { write: 'structure' })
+    if (found.drawn && found.tournament?.drawLocked) throw conflict('draw_locked')
+    const fought = isFinished(existing) || !!existing.winner
+    if (fought) {
+      if (!reason) throw badRequest('correction_reason_required')
+      const account = await findUserRecord(req.user.uid)
+      const role = roleIn(account, found.tournament?.id) || req.user.role
+      if (!can(role, P.SCORE_CORRECT)) throw forbidden('score_correction_forbidden')
+      if (tms && found.drawn) await tms.assertResultEditable({ ...req.user, role }, found.tournament.id, found.category.divisionKey, reason)
+    }
     await matches.remove(req.params.id)
+    if (audit && found.tournament) {
+      await audit.record({
+        tournamentId: found.tournament.id, actor: req.user, action: AUDIT_ACTIONS.MATCH_DELETED,
+        entity: 'match', entityId: existing.id, before: existing, reason: reason || null,
+        requestMeta: { ip: clientIp(req), userAgent: userAgent(req) },
+      })
+    }
     res.status(204).end()
   })
 

@@ -16,6 +16,7 @@ import useAction from '../../components/tms/useAction'
 import { openStoredFile } from '../../components/tms/download'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { teamProblems } from '@kumite/shared/tms.js'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
@@ -58,6 +59,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   const [password, setPassword] = useState('')
   const [me, setMe] = useState(null)
   const [team, setTeam] = useState({})
+  const teamErrors = teamProblems(team, { partial: true })
   const [accepted, setAccepted] = useState(false)
   const [view, setView] = useState('players')
   const [edit, setEdit] = useState(null)
@@ -130,7 +132,8 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
           <Grid container spacing={2}>
             {TEAM_FIELDS.map(([k, label, w, required]) => (
               <Grid key={k} size={{ xs: 12, sm: w }}>
-                <TextField fullWidth required={required} label={label} value={team[k] || ''} onChange={(e) => setTeam({ ...team, [k]: e.target.value })} />
+                <TextField fullWidth required={required} label={label} value={team[k] || ''} onChange={(e) => setTeam({ ...team, [k]: e.target.value })}
+                  error={!!(team[k] && teamErrors[k])} helperText={team[k] ? teamErrors[k] : undefined} />
               </Grid>
             ))}
           </Grid>
@@ -152,7 +155,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
               )}
             </Box>
           )}
-          <Button size="large" variant="contained" sx={{ mt: 2 }} disabled={!canWrite || !team.name?.trim() || action.busy || (!!info.tournament.terms && !accepted)} onClick={async () => {
+          <Button size="large" variant="contained" sx={{ mt: 2 }} disabled={!canWrite || !team.name?.trim() || action.busy || Object.keys(teamErrors).length > 0 || (!!info.tournament.terms && !accepted)} onClick={async () => {
             const doc = { ...Object.fromEntries(Object.entries(team).filter(([, v]) => v)), ...(info.tournament.terms ? { termsAccepted: accepted } : {}) }
             const out = await action.run(() => tms.coach.createTeam(session, doc), 'Team registered')
             if (out) keep(out.session)

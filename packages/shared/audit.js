@@ -70,6 +70,10 @@ export const AUDIT_ACTIONS = {
   SESSION_REVOKED: 'auth.session_revoked',
   BACKUP: 'system.backup',
   PARTNER_IMPORT: 'players.partner_import',
+  MATCH_DELETED: 'match.deleted',
+  CATEGORY_CHANGED: 'category.changed',
+  TOURNAMENT_DELETED: 'tournament.deleted',
+  PLAYER_REVERIFY: 'player.sent_for_reverification',
 }
 
 /** Only the fields that actually differ, so a record says what changed. */

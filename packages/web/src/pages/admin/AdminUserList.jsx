@@ -18,6 +18,7 @@ import * as users from '../../data/users'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { describeError } from '../../data/tms'
 
 // Only on create: an existing account keeps its password unless a new one is
 // typed, so the field is optional when editing.
@@ -42,7 +43,7 @@ const MESSAGES = {
   forbidden: 'Only an administrator can manage accounts.',
   unauthorized: 'Your session has expired. Sign in again.',
 }
-const messageFor = (err) => MESSAGES[err?.code] || 'Something went wrong. Try again.'
+const messageFor = (err) => MESSAGES[err?.code] || (err?.code && err.code !== 'error' ? describeError(err) : 'Something went wrong. Try again.')
 
 export default function AdminUserList({ uid }) {
   const navigate = useNavigate()

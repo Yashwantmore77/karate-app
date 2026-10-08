@@ -20,7 +20,7 @@ const call = async (method, path, body, token) => {
 // PRD v1 §6: what a tournament needs before registration opens. The window
 // is wide because these tests run against the real clock.
 const READY = {
-  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2027-01-16',
+  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2099-12-31',
   registrationStart: '2020-01-01', registrationClose: '2099-12-31', contactMobile: '+91 98765 43210', contactEmail: 'office@open.example', country: 'India',
 }
 

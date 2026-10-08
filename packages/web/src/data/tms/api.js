@@ -23,7 +23,7 @@ const crud = (segment, key) => ({
   list: async (tid) => (await get(`${T(tid)}/${segment}`))[`${key}s`],
   create: async (tid, doc) => (await send('POST', `${T(tid)}/${segment}`, doc))[key],
   update: async (tid, id, patch) => (await send('PATCH', `${T(tid)}/${segment}/${id}`, patch))[key],
-  remove: (tid, id) => send('DELETE', `${T(tid)}/${segment}/${id}`),
+  remove: (tid, id, reason = null) => send('DELETE', `${T(tid)}/${segment}/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`),
 })
 
 export const tms = {

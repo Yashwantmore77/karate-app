@@ -143,6 +143,23 @@ export const parseDivisionKey = (key) => {
 const pad = (n, width = 3) => String(n).padStart(width, '0')
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''))
 const LOCKED_PLAYER_FIELDS = ['dob', 'gender', 'weight', 'events', 'teamId']
+// What an approval was given for: changing any of these sends a player back to verification.
+const REVERIFY_FIELDS = ['name', 'dob', 'gender', 'weight', 'events']
+const APPROVED_STATES = ['APPROVED', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'WEIGH_IN_PENDING', 'WEIGH_IN_VERIFIED', 'CATEGORY_CONFIRMED']
+
+/**
+ * The payment record after the fee changes (events added or dropped). A
+ * player who had paid less than the new fee owes the difference and shows as
+ * pending again; one who paid more is owed a refund.
+ */
+export function feeChange(payment = {}, fee) {
+  const current = payment || {}
+  if (current.status !== 'PAID') return { ...current, amount: fee }
+  const paid = current.paidAmount ?? current.amount ?? 0
+  const { balanceDue, refundDue, ...rest } = current
+  if (fee > paid) return { ...rest, amount: fee, paidAmount: paid, status: 'PENDING', balanceDue: fee - paid }
+  return { ...rest, amount: fee, paidAmount: paid, ...(paid > fee ? { refundDue: paid - fee } : {}) }
+}
 
 export function settingsOf(tournament) {
   const s = { ...DEFAULT_SETTINGS, ...(tournament?.settings || {}) }
@@ -233,6 +250,14 @@ export function tournamentProblems(t) {
     if (t[k] && !isLocalDateTime(t[k])) out.push({ field: k, message: 'Use a date, or a date and time' })
   }
   if (t.startDate && t.endDate && t.endDate < t.startDate) out.push({ field: 'endDate', message: 'End date cannot be before the start date' })
+  const day = (v) => String(v).slice(0, 10)
+  // On-site entries during the event are allowed; after its last day they are not.
+  if (t.registrationClose && (t.endDate || t.startDate) && isLocalDateTime(t.registrationClose) && day(t.registrationClose) > (t.endDate || t.startDate)) {
+    out.push({ field: 'registrationClose', message: 'Registration must close by the last day of the tournament' })
+  }
+  if (t.weighInDate && (t.endDate || t.startDate) && t.weighInDate > (t.endDate || t.startDate)) {
+    out.push({ field: 'weighInDate', message: 'Weigh-in must be on or before the last day of the tournament' })
+  }
   if (t.registrationStart && t.registrationClose && isLocalDateTime(t.registrationStart) && isLocalDateTime(t.registrationClose)
     && zonedInstant(t.registrationClose, tz, { endOfDay: true }) <= zonedInstant(t.registrationStart, tz)) {
     out.push({ field: 'registrationClose', message: 'Registration must close after it opens' })
@@ -243,6 +268,21 @@ export function tournamentProblems(t) {
 }
 
 /** PRD v1 §6: what must be filled in before registration can open. */
+/**
+ * What is wrong with a team's details, field by field ({} when nothing is),
+ * so the forms can say it before the server has to. `partial` checks only the
+ * fields given (an edit).
+ */
+export function teamProblems(team = {}, { partial = false } = {}) {
+  const out = {}
+  if (!partial || 'name' in team) {
+    if (len(team.name) < 2) out.name = 'Team name is required (at least 2 characters)'
+  }
+  if (team.email && !EMAIL_RE.test(String(team.email).trim())) out.email = 'Enter a valid email address'
+  if (team.mobile && !PHONE_RE.test(String(team.mobile).trim())) out.mobile = 'Enter a valid mobile number'
+  return out
+}
+
 export function registrationReadiness(t) {
   const missing = []
   const need = (ok, field, message) => { if (!ok) missing.push({ field, message }) }
@@ -727,6 +767,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   // --- teams ------------------------------------------------------------------
 
+  /** Team contact details are what notices are sent to, so they must be usable. */
+  const assertTeamContact = (doc) => {
+    const problems = teamProblems(doc, { partial: true })
+    if (problems.email) throw invalid('invalid_email', { field: 'email' })
+    if (problems.mobile) throw invalid('invalid_mobile', { field: 'mobile' })
+  }
+
   const teams = {
     list: async (tournamentId) => (await stores.teams.list({ tournamentId })).sort(byName),
     get: (tournamentId, id) => inTournament('teams', tournamentId, id),
@@ -741,6 +788,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       } else if (tournament.entriesLocked) throw rule('entries_locked')
       doc = termsAccepted === true ? { ...fields, termsAcceptedAt: iso() } : fields
       if (!doc.name) throw invalid('name_required')
+      assertTeamContact(doc)
       const existing = await stores.teams.list({ tournamentId })
       // PRD v1 §7: team names normalised for duplicate detection.
       if (existing.some((t) => normalizeName(t.name) === normalizeName(doc.name))) throw rule('team_exists')
@@ -756,21 +804,29 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       assertCoachMayWrite(actor, tournament, id)
       const before = await inTournament('teams', tournamentId, id)
       if (isCoach(actor) && 'active' in patch) throw denied()
+      assertTeamContact(patch)
       if (patch.name && normalizeName(patch.name) !== normalizeName(before.name)
         && (await stores.teams.list({ tournamentId })).some((t) => t.id !== id && normalizeName(t.name) === normalizeName(patch.name))) throw rule('team_exists')
       const after = await stores.teams.update(id, patch)
       await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: id, before, after })
       return after
     },
-    async remove(actor, tournamentId, id) {
+    /**
+     * Deleting a team deletes its players. A coach may only remove an empty
+     * team; an organiser removing one with players gives a reason, and the
+     * names are kept in the audit log.
+     */
+    async remove(actor, tournamentId, id, reason = null) {
       const tournament = await writableTournament(tournamentId)
       if (tournament.entriesLocked) throw rule('entries_locked')
       assertCoachMayWrite(actor, tournament, id)
       const before = await inTournament('teams', tournamentId, id)
       const players = await stores.players.list({ tournamentId, teamId: id })
+      if (players.length && isCoach(actor)) throw rule('team_has_players', { players: players.length })
+      if (players.length && !reason) throw invalid('reason_required', { players: players.length })
       for (const p of players) await stores.players.remove(p.id)
       await stores.teams.remove(id)
-      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: id, before, reason: `deleted with ${players.length} players` })
+      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: id, before: { ...before, players: players.map((p) => p.name) }, reason: players.length ? `deleted with ${players.length} players: ${reason}` : 'deleted' })
     },
   }
 
@@ -966,9 +1022,18 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
     Object.assign(patch, categorizeFields({ ...before, ...patch }, cfg))
     if (patch.events && patch.events.join() !== (before.events || []).join()) {
-      patch.payment = { ...(before.payment || {}), amount: feeFor(patch, cfg.settings) }
+      patch.payment = feeChange(before.payment, feeFor(patch, cfg.settings))
     }
+    // A coach changing who the player is, or what they enter, after approval
+    // sends them back to the officer (PRD v1 §8): approval was for the old details.
+    const identityChanged = REVERIFY_FIELDS.filter((k) => k in patch && JSON.stringify(patch[k]) !== JSON.stringify(before[k]))
+    const reverify = isCoach(actor) && APPROVED_STATES.includes(before.registrationStatus) && identityChanged.length > 0
+    if (reverify) patch.registrationStatus = R.PENDING_VERIFICATION
     const after = await stores.players.update(id, patch)
+    if (reverify) {
+      await record(actor, { tournamentId, action: A.PLAYER_REVERIFY, entity: 'player', entityId: id, before: { registrationStatus: before.registrationStatus }, after: { registrationStatus: R.PENDING_VERIFICATION }, reason: `Coach changed ${identityChanged.join(', ')} after approval` })
+      await notify(tournamentId, 'admin', 'reverify', `${after.name}: changed by the coach after approval (${identityChanged.join(', ')}); check again`)
+    }
     const auditBefore = {}
     const auditAfter = {}
     for (const [k, change] of Object.entries(diff(before, after))) {
@@ -1067,6 +1132,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const before = await inTournament('players', tournamentId, id)
     if (payment.status && !PAYMENT_STATUS.includes(payment.status)) throw invalid('invalid_payment_status')
     const next = { ...(before.payment || {}), ...payment, recordedBy: actor?.uid || null, recordedAt: iso() }
+    // What was actually paid, so a later fee change can tell what is still owed.
+    if (next.status === 'PAID') {
+      next.paidAmount = payment.amount ?? next.amount ?? 0
+      delete next.balanceDue
+    }
     const patch = { payment: next }
     if (next.status === 'PAID') {
       let status = before.registrationStatus
@@ -1725,6 +1795,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const match = await stores.matches.get(matchId)
     if (!match) return null
     if (boutOutcome(match) || match.status === 'cancelled') return 'match_completed'
+    // A completed or archived tournament takes no more scoring.
+    const category = match.categoryId ? await stores.categories.get(match.categoryId) : null
+    const tournament = category?.tournamentId ? await stores.tournaments.get(category.tournamentId) : null
+    if ([T.COMPLETED, T.ARCHIVED].includes(lifecycleOf(tournament))) return 'tournament_closed'
     return null
   }
 
@@ -1733,7 +1807,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const category = match?.categoryId ? await stores.categories.get(match.categoryId) : null
     const tournamentId = category?.tournamentId || null
     if (!tournamentId) return
-    await record(actor, { tournamentId, action: A.SCORE_BLOCKED, entity: 'match', entityId: matchId, after: { cmd, blocked: why }, reason: `${cmd} refused: bout ${match.matchNumber || ''} is already decided` })
+    await record(actor, { tournamentId, action: A.SCORE_BLOCKED, entity: 'match', entityId: matchId, after: { cmd, blocked: why }, reason: `${cmd} refused: ${why === 'tournament_closed' ? 'the tournament is closed' : `bout ${match.matchNumber || ''} is already decided`}` })
   }
 
   /**
@@ -3000,10 +3074,16 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   }
 
   /** Cascade for a deleted tournament: nothing it owned may be left behind. */
-  async function purgeTournament(tournamentId) {
-    for (const name of ['ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals', 'certificates', 'registrationLinks', 'notifications', 'files']) {
-      await stores[name].removeWhere({ tournamentId })
+  /**
+   * Removes everything a tournament owns. `matchIds` are its bouts, whose
+   * saved live state is kept by bout rather than by tournament.
+   */
+  async function purgeTournament(tournamentId, { matchIds = [] } = {}) {
+    for (const name of ['ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals', 'certificates', 'registrationLinks', 'notifications', 'files',
+      'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'divisionResults', 'passes', 'apiKeys']) {
+      if (stores[name]) await stores[name].removeWhere({ tournamentId })
     }
+    if (stores.liveStates) for (const id of matchIds) await stores.liveStates.remove(id)
   }
 
   return {

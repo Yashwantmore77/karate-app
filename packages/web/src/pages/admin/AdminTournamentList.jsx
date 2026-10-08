@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import dayjs from 'dayjs'
-import { Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
+import { Container, Box, Alert, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
@@ -15,6 +15,7 @@ import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { describeError } from '../../data/tms'
 
 // The server applies these when a body leaves them out; the form shows the
 // same numbers so a new tournament is not a surprise.
@@ -47,6 +48,7 @@ export default function AdminTournamentList({ uid }) {
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
 
   const {
     rows: tournaments, total, page, limit, search, setSearch, setPage, refresh, reset, loading,
@@ -120,8 +122,13 @@ export default function AdminTournamentList({ uid }) {
 
   const handleDelete = async (id) => {
     // The store cascades to categories, competitors and matches.
-    await tournamentStore.remove(id)
-    await refresh()
+    try {
+      await tournamentStore.remove(id)
+      setDeleteError(null)
+      await refresh()
+    } catch (err) {
+      setDeleteError(describeError(err))
+    }
     setDeleteConfirm(null)
   }
 
@@ -142,6 +149,7 @@ export default function AdminTournamentList({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
+        {deleteError && <Alert severity="error" onClose={() => setDeleteError(null)} sx={{ mb: 2 }}>{deleteError}</Alert>}
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           {/* The count is the total behind the search, not the rows on screen. */}
           <HelpTitle id="admin.tournaments" variant="h6">Tournaments ({total})</HelpTitle>
