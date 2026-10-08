@@ -813,9 +813,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       if (clash) throw rule('overlapping_age_group', { with: clash.name, preset: g.name })
     }
     let weights = 0
+    // Weight classes only matter for Kumite; a kata-only event gets the age groups alone.
+    const withWeights = tournamentEvents(tournament).includes('kumite')
     for (const g of preset.groups) {
       const group = await stores.ageGroups.insert({ active: true, name: g.name, gender: g.gender, minAge: g.minAge, maxAge: g.maxAge, settings: {}, tournamentId })
-      for (const w of weightClasses(g.weights)) {
+      for (const w of withWeights ? weightClasses(g.weights) : []) {
         await stores.weightCategories.insert({ active: true, ageGroupId: group.id, ...w, settings: {}, tournamentId })
         weights += 1
       }

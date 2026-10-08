@@ -240,6 +240,13 @@ describe('loading a standard category set', () => {
     expect(again.body).toMatchObject({ error: 'overlapping_age_group', details: { with: 'U-14 Boys' } })
     expect((await call('POST', `/tournaments/${t.id}/category-presets`, { preset: 'nope' }, adminToken)).body.error).toBe('unknown_preset')
   })
+
+  it('loads only the age groups for a kata-only tournament', async () => {
+    const adminToken = await login('admin@kata.local')
+    const t = (await call('POST', '/tournaments', { name: 'School Kata', location: 'Dewas', date: '2026-12-01', template: 'kumite', type: 'kata' }, adminToken)).body.tournament
+    const loaded = await call('POST', `/tournaments/${t.id}/category-presets`, { preset: 'sgfi' }, adminToken)
+    expect(loaded.body).toEqual({ ageGroups: 6, weightCategories: 0 })
+  })
 })
 
 describe('team members: managers, coaches, judges and referees', () => {

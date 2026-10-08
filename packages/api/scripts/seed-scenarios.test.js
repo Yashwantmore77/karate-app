@@ -27,7 +27,7 @@ describe('test tournament scenarios', () => {
     expect(officials.filter((o) => o.role === 'judge')).toHaveLength(4)
 
     expect(summary.map((s) => s.status)).toEqual([
-      'DRAFT', 'REGISTRATION_OPEN', 'REGISTRATION_OPEN', 'VERIFICATION', 'WEIGH_IN', 'DRAW_GENERATED', 'READY', 'LIVE', 'COMPLETED', 'ARCHIVED',
+      'DRAFT', 'REGISTRATION_OPEN', 'REGISTRATION_OPEN', 'VERIFICATION', 'WEIGH_IN', 'DRAW_GENERATED', 'READY', 'LIVE', 'COMPLETED', 'ARCHIVED', 'REGISTRATION_OPEN', 'LIVE',
     ])
     const tms = createTms(stores)
     const by = Object.fromEntries(summary.map((s) => [s.title, s.id]))
@@ -76,6 +76,22 @@ describe('test tournament scenarios', () => {
       expect(r.every((d) => d.resultStatus === 'LOCKED')).toBe(true)
       expect(Object.keys(count(await stores.certificates.list({ tournamentId: by[title] }), (c) => c.type))).toEqual(expect.arrayContaining(['gold', 'participation', 'custom']))
     }
+
+    // Kata only, categories from the SGFI preset.
+    const school = await stores.tournaments.get(by['School Kata Championship'])
+    expect(school.type).toBe('kata')
+    expect((await stores.ageGroups.list({ tournamentId: school.id })).map((g) => g.name)).toEqual(expect.arrayContaining(['U-14 Boys', 'U-19 Girls']))
+    expect((await players('School Kata Championship')).every((p) => p.events.length === 1 && p.events[0] === 'kata')).toBe(true)
+
+    // Kumite only, brackets arranged by hand: started ones locked, one still movable.
+    const league = by['Junior Kumite League']
+    expect((await stores.tournaments.get(league)).type).toBe('kumite')
+    const boards = await tms.listBrackets(league)
+    expect(boards.length).toBeGreaterThanOrEqual(4)
+    expect(boards.every((x) => x.arranged)).toBe(true)
+    const started = await Promise.all(boards.map(async (x) => (await tms.bracketView(league, x.divisionKey)).started))
+    expect(started).toContain(true)
+    expect(started).toContain(false)
 
     // Not built twice; a wipe on its own clears it all.
     expect(await seedScenarios(stores, { log: quiet })).toBeNull()
