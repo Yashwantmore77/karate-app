@@ -112,3 +112,16 @@ input { width: 100%; padding: 13px 14px; border-radius: 8px; border: 1px solid v
   html, body, #root { background: #fff !important; color: #000 !important; height: auto; }
   .print-page { page-break-after: always; break-after: page; }
 }
+
+/* A button waiting for the server (components/Loader.jsx): its label gives way to a spinner. */
+[data-kt-busy] { position: relative; pointer-events: none; cursor: progress; color: transparent !important; }
+[data-kt-busy] svg, [data-kt-busy] img, [data-kt-busy] .MuiCircularProgress-root { visibility: hidden; }
+[data-kt-busy]::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+  border: 2px solid var(--kt-busy-color, currentColor); border-right-color: transparent; border-radius: 50%;
+  animation: kt-spin 0.7s linear infinite;
+}
+/* A screen that also disables the button while it waits greys it out: a light spinner reads best on that. */
+[data-kt-busy].Mui-disabled::after, [data-kt-busy]:disabled::after { border-color: rgba(255, 255, 255, 0.85); border-right-color: transparent; }
+@keyframes kt-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { [data-kt-busy]::after { animation-duration: 2s; } }

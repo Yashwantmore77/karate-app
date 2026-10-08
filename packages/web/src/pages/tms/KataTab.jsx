@@ -102,7 +102,8 @@ export default function KataTab({ tournament, version, action, role }) {
               </Stack>
             </Stack>
 
-            {round && round.divisionKey === d.key && (
+            {selected && round?.id !== selected && d.rounds.some((r) => r.id === selected) && <PageLoader label="Loading the round…" minHeight={100} />}
+            {round && round.id === selected && round.divisionKey === d.key && (
               <Box sx={{ mt: 2 }}>
                 <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
                   <Typography variant="h4">{round.name}</Typography>

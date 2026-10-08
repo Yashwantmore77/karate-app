@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Box, Button, Stack, Typography } from '@mui/material'
-import { tms } from '../../data/tms'
+import { Box, Button, Stack, Typography, Alert } from '@mui/material'
+import { tms, describeError } from '../../data/tms'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { PageLoader } from '../../components/Loader'
 
@@ -13,13 +13,16 @@ export default function CertificatesPrint() {
   const { tournamentId } = useParams()
   const navigate = useNavigate()
   const [tournament, setTournament] = useState(null)
-  const [rows, setRows] = useState([])
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState(null)
   useEffect(() => {
-    tournamentStore.get(tournamentId).then(setTournament)
-    tms.certificates(tournamentId).then(setRows)
+    tournamentStore.get(tournamentId).then(setTournament).catch(setError)
+    tms.certificates(tournamentId).then(setRows).catch(setError)
   }, [tournamentId])
 
-  if (!tournament) return <PageLoader label="Preparing certificates…" />
+  if (error) return <Alert severity="error" sx={{ m: 3 }}>{describeError(error)}</Alert>
+  // Both are needed before printing: a sheet without its certificates would print empty.
+  if (!tournament || !rows) return <PageLoader label="Preparing certificates…" />
   const date = tournament.endDate || tournament.startDate || tournament.date
 
   return (

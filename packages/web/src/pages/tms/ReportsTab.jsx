@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Grid, Paper, Typography, Button, Stack, TextField, MenuItem } from '@mui/material'
+import { Grid, Paper, Typography, Button, Stack, TextField, MenuItem, Alert } from '@mui/material'
 import { Download, Print, TableView } from '@mui/icons-material'
 import { REPORT_KEYS, REPORT_TITLE, buildReport } from '@kumite/shared/reports.js'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
-import { tms } from '../../data/tms'
+import { tms, describeError } from '../../data/tms'
 import { downloadCsv } from '../../components/tms/download'
 import { downloadXlsx } from '../../components/tms/excel'
 import { PageLoader } from '../../components/Loader'
@@ -18,12 +18,14 @@ export default function ReportsTab({ tournament, version, action, role }) {
   const [data, setData] = useState(null)
   const [filters, setFilters] = useState(BLANK)
 
-  useEffect(() => { tms.reportData(tid).then(setData) }, [tid, version])
+  const [error, setError] = useState(null)
+  useEffect(() => { setError(null); tms.reportData(tid).then(setData).catch(setError) }, [tid, version])
   const places = useMemo(() => {
     if (!data) return {}
     const distinct = (k) => [...new Set(data.players.map((p) => p[k]).filter(Boolean))].sort()
     return { club: distinct('club'), district: distinct('district'), state: distinct('state') }
   }, [data])
+  if (error && !data) return <Alert severity="error">{describeError(error)}</Alert>
   if (!data) return <PageLoader label="Preparing reports…" />
 
   const slug = tournament.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Container, Typography, Grid, Card, CardActionArea, CardContent, Box, Button } from '@mui/material'
 import { tms } from '../../data/tms'
 import StatusBadge from '../../components/tms/StatusBadge'
+import { PageLoader } from '../../components/Loader'
 
 /** Section 54: the public home — every tournament past its draft. */
 export default function PublicTournamentList() {
@@ -15,6 +16,7 @@ export default function PublicTournamentList() {
     <Container maxWidth="md" sx={{ py: 5 }}>
       <Typography variant="h1" sx={{ mb: 1 }}>Tournaments</Typography>
       <Typography color="text.secondary" sx={{ mb: 3 }}>Draws, live matches, results and medal tallies.</Typography>
+      {!rows && <PageLoader label="Loading tournaments…" />}
       {rows && !rows.length && <Typography color="text.secondary">No public tournaments yet.</Typography>}
       <Grid container spacing={2}>
         {(rows || []).map((t) => (

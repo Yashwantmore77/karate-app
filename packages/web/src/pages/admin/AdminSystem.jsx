@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Container, Typography, Button, Paper, Stack, Alert } from '@mui/material'
 import { CloudDownload } from '@mui/icons-material'
-import { request } from '../../data/http'
+import { request, track } from '../../data/http'
 import { apiUrl, getToken } from '../../data/session'
 import DataTable from '../../components/tms/DataTable'
 import useAction from '../../components/tms/useAction'
@@ -24,7 +24,7 @@ export default function AdminSystem({ profile }) {
   useEffect(() => { load() }, [JSON.stringify(query)])
 
   const backup = () => action.run(async () => {
-    const res = await fetch(apiUrl('/system/backup'), { headers: { authorization: `Bearer ${getToken()}` } })
+    const res = await track(fetch(apiUrl('/system/backup'), { headers: { authorization: `Bearer ${getToken()}` } }))
     if (!res.ok) throw Object.assign(new Error('backup'), { code: res.status === 403 ? 'forbidden' : 'backup_failed' })
     const url = URL.createObjectURL(await res.blob())
     const a = document.createElement('a')

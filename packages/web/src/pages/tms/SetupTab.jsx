@@ -17,6 +17,7 @@ import { readFileBase64 } from '../../components/tms/download'
 import { checkFile } from '@kumite/shared/files.js'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { paymentsEnabled } from '@kumite/shared/features.js'
+import { PageLoader } from '../../components/Loader'
 
 const DETAIL_FIELDS = [
   ['name', 'Tournament name', 12], ['description', 'Description', 12],
@@ -59,6 +60,8 @@ export default function SetupTab({ tournament, reload, action }) {
   const [settings, setSettings] = useState(() => settingsOf(tournament))
   const [fields, setFields] = useState(() => formFields(tournament))
   const [link, setLink] = useState(null)
+  // Until the link has loaded, "Generate link" must not show: it would replace the coaches' link.
+  const [linkLoaded, setLinkLoaded] = useState(false)
   const [linkPassword, setLinkPassword] = useState('')
   const [linkExpiry, setLinkExpiry] = useState('')
   const [rulesets, setRulesets] = useState([])
@@ -69,7 +72,7 @@ export default function SetupTab({ tournament, reload, action }) {
   const [issuedKey, setIssuedKey] = useState(null)
 
   useEffect(() => {
-    tms.link(tid).then((l) => { setLink(l); setLinkExpiry(l?.expiresAt?.slice(0, 10) || '') }).catch(() => {})
+    tms.link(tid).then((l) => { setLink(l); setLinkExpiry(l?.expiresAt?.slice(0, 10) || '') }).catch(() => {}).finally(() => setLinkLoaded(true))
     tms.rulesets().then(setRulesets).catch(() => {})
     tms.partnerKey(tid).then(setPartnerKey).catch(() => {})
   }, [tid])
@@ -308,7 +311,8 @@ export default function SetupTab({ tournament, reload, action }) {
             Coaches can open this link, but cannot register until you move the tournament to <b>Registration open</b> on the Dashboard tab.
           </Alert>
         )}
-        {!link && <Button variant="contained" onClick={() => saveLink({})}>Generate link</Button>}
+        {!linkLoaded && <PageLoader label="Loading the registration link…" minHeight={80} />}
+        {linkLoaded && !link && <Button variant="contained" onClick={() => saveLink({})}>Generate link</Button>}
         {link && (
           <Stack spacing={2}>
             <TextField fullWidth label="Link for coaches" value={linkUrl} slotProps={{

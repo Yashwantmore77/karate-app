@@ -1,11 +1,13 @@
-import { request } from '../http'
+import { request, track } from '../http'
 import { apiUrl, getToken } from '../session'
 
 // Files come back as bytes, not JSON; read them with the caller's token.
 async function fetchFile(path, token) {
-  const res = await fetch(apiUrl(path), { headers: token ? { authorization: `Bearer ${token}` } : {} })
-  if (!res.ok) throw Object.assign(new Error('file'), { status: res.status, code: res.status === 403 ? 'forbidden' : 'not_found' })
-  return { blob: await res.blob(), type: res.headers.get('content-type') }
+  return track(async () => {
+    const res = await fetch(apiUrl(path), { headers: token ? { authorization: `Bearer ${token}` } : {} })
+    if (!res.ok) throw Object.assign(new Error('file'), { status: res.status, code: res.status === 403 ? 'forbidden' : 'not_found' })
+    return { blob: await res.blob(), type: res.headers.get('content-type') }
+  })
 }
 
 // The same surface as ./local, over the REST API of PRD section 56.

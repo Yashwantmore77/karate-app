@@ -8,7 +8,7 @@ import { HelpTitle } from '../help/InfoTip'
 /** Section 63.6's TournamentSelector: officers pick the event they are working. */
 export default function TournamentSelector({ title = 'Choose a tournament', onPick }) {
   const [rows, setRows] = useState(null)
-  useEffect(() => { tournamentStore.list().then(setRows) }, [])
+  useEffect(() => { tournamentStore.list().then(setRows).catch(() => setRows([])) }, [])
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       <HelpTitle id="tournament.select" variant="h1" sx={{ mb: 3 }}>{title}</HelpTitle>
