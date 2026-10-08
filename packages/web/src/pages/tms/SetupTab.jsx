@@ -16,6 +16,7 @@ import { tms } from '../../data/tms'
 import { readFileBase64 } from '../../components/tms/download'
 import { checkFile } from '@kumite/shared/files.js'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 
 const DETAIL_FIELDS = [
   ['name', 'Tournament name', 12], ['description', 'Description', 12],
@@ -270,7 +271,8 @@ export default function SetupTab({ tournament, reload, action }) {
             <FormControlLabel control={<Switch checked={!!settings.officialsSeeAssignedOnly} onChange={(e) => setSettings({ ...settings, officialsSeeAssignedOnly: e.target.checked })} />}
               label="Referees and judges see only the matches they are assigned to" />
           </Grid>
-          {Object.keys(settings.fees).map((k) => (
+          {/* Entry fees: off while the system is free (features.js). */}
+          {paymentsEnabled() && Object.keys(settings.fees).map((k) => (
             <Grid key={k} size={{ xs: 6, md: 3 }}>
               <TextField fullWidth type="number" label={`Fee: ${k === 'both' ? 'Kata + Kumite' : k}`} value={settings.fees[k]}
                 onChange={(e) => setSettings({ ...settings, fees: { ...settings.fees, [k]: e.target.value } })}

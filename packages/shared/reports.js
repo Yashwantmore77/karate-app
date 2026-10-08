@@ -1,7 +1,11 @@
 // PRD section 45: the eleven reports, as rows (header first). Shared so the
 // browser's CSV/Excel export and the server's PDF are the same report.
 
+import { paymentsEnabled } from './features.js'
+
+// The payment report exists only while payments are on (features.js).
 export const REPORT_KEYS = ['registration', 'player', 'team', 'category', 'weigh-in', 'pool', 'match', 'result', 'final-result', 'medal', 'medal-tally', 'payment', 'attendance', 'club', 'audit']
+  .filter((key) => key !== 'payment' || paymentsEnabled())
 
 export const REPORT_TITLE = {
   registration: 'Registration', player: 'Player', team: 'Team', category: 'Category', 'weigh-in': 'Weigh-in', pool: 'Pool',

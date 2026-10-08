@@ -18,6 +18,7 @@ import { openStoredFile } from '../../components/tms/download'
 import { useLoading } from '../../components/Loader'
 import InfoTip from '../../components/help/InfoTip'
 import TeamMembers from '../../components/tms/TeamMembers'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Head coach (first team member)', 4],
@@ -142,7 +143,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
     <>
       {[
         ['registrationStatus', 'Status', Object.values(REGISTRATION_STATUS)],
-        ['paymentStatus', 'Payment', PAYMENT_STATUS],
+        // Payments are off while the system is free (features.js).
+        ...(paymentsEnabled() ? [['paymentStatus', 'Payment', PAYMENT_STATUS]] : []),
         ['gender', 'Gender', ['M', 'F']],
         ['event', 'Event', ['kata', 'kumite']],
       ].map(([key, label, values]) => (
@@ -291,14 +293,14 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
                 {p.duplicateOf?.length > 0 && <Typography variant="body2" color="warning.main">Possible duplicate</Typography>}
               </Box>
             ) },
-            { key: 'payment', label: 'Payment', sortKey: 'payment.status', value: (p) => p.payment?.status, render: (p) => (
+            ...(!paymentsEnabled() ? [] : [{ key: 'payment', label: 'Payment', sortKey: 'payment.status', value: (p) => p.payment?.status, render: (p) => (
               <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
                 <StatusBadge status={p.payment?.status || 'PENDING'} label={`${humanize(p.payment?.status || 'PENDING')}${p.payment?.amount ? ` · ₹${p.payment.amount}` : ''}`} />
                 {/* Events changed after payment: what is still owed, or owed back. */}
                 {p.payment?.balanceDue > 0 && <Typography variant="caption" color="warning.main">₹{p.payment.balanceDue} still due (paid ₹{p.payment.paidAmount})</Typography>}
                 {p.payment?.refundDue > 0 && <Typography variant="caption" color="info.main">Refund due ₹{p.payment.refundDue}</Typography>}
               </Stack>
-            ) },
+            ) }]),
             { key: 'actions', label: '', sortable: false, render: (p) => (
               <Stack direction="row" sx={{ flexWrap: 'nowrap' }}>
                 {manage && ['SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus) && (
@@ -323,7 +325,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
                     run: (reason) => action.run(() => tms.withdrawPlayer(tid, p.id, reason), `${p.name} withdrawn`).then(load),
                   })}><DirectionsWalk fontSize="small" /></IconButton></Tooltip>
                 )}
-                {manage && (
+                {manage && paymentsEnabled() && (
                   <Tooltip title="Payment"><IconButton size="small" onClick={() => setPayment({ player: p, status: p.payment?.status || 'PENDING', amount: p.payment?.amount ?? 0, method: p.payment?.method || '', transactionId: p.payment?.transactionId || '', date: p.payment?.date || '', receipt: p.payment?.receipt || '' })}><Payments fontSize="small" /></IconButton></Tooltip>
                 )}
                 {manage && !locked && (
@@ -397,7 +399,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!payment} onClose={() => setPayment(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!payment && paymentsEnabled()} onClose={() => setPayment(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Payment — {payment?.player.name}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>

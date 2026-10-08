@@ -26,6 +26,7 @@ import { createStores, COLLECTIONS } from '../lib/store.js'
 import { createBackup } from '../lib/backup.js'
 import { isMongoConfigured, closeMongo } from '../db/mongo.js'
 import { createTms } from '@kumite/shared/tms.js'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 import { seededRandom } from '@kumite/shared/pools.js'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { listAssignableOfficials, listCoachAccounts, deleteUser, createUser, findUserRecordByEmail } from '../auth/users.js'
@@ -145,7 +146,7 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
       registrationStart: day(spec.regOpen ?? start - 40), registrationClose: day(spec.regClose ?? start - 5),
       weighInDate: day(start - 1), startDate: day(start), endDate: day(start + (spec.days || 2) - 1),
       rules: 'WKF rules apply. Protective gear (mitts, shin and foot guards, mouth guard) is compulsory for Kumite.',
-      terms: 'Coaches confirm every player is medically fit and insured. Entry fees are not refundable.',
+      terms: 'Coaches confirm every player is medically fit and insured.',
       settings: { poolSize: 8, mats: 3, matchDurationSec: 120, pointGap: 8, emailNotifications: false, fees: { kata: 500, kumite: 700, both: 1000, team: 0 }, ...settings },
       ...extra,
     } : { ...base, ...extra })
@@ -211,7 +212,8 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
   const approve = async (t, list, { paid = 1 } = {}) => {
     for (const p of list) {
       await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
-      if (random() < paid) await tms.recordPayment(admin, t.id, p.id, { status: 'PAID', method: pick(['UPI', 'Cash', 'Bank transfer']), transactionId: `TXN${Math.floor(random() * 1e8)}` })
+      // Payments are off while the system is free (features.js).
+      if (paymentsEnabled() && random() < paid) await tms.recordPayment(admin, t.id, p.id, { status: 'PAID', method: pick(['UPI', 'Cash', 'Bank transfer']), transactionId: `TXN${Math.floor(random() * 1e8)}` })
     }
   }
 
@@ -396,7 +398,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
 
   // 3. REGISTRATION OPEN, coaches entering players: every registration case ------------
   {
-    const t = await b.tournament({ name: 'Test 03 · District Open (registration open)', slug: 'district-open', start: 25, regOpen: -10, regClose: 15, groups: JUNIORS, description: 'Coaches are registering. Every registration and payment case is here.' })
+    const t = await b.tournament({ name: 'Test 03 · District Open (registration open)', slug: 'district-open', start: 25, regOpen: -10, regClose: 15, groups: JUNIORS, description: 'Coaches are registering. Every registration case is here.' })
     await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
     const link = await tms.saveLink(admin, t.id, { password: LINK_PASSWORD, expiresAt: `${day(15)}T23:59:59.000Z` })
     const teamRows = await b.teams(t)
@@ -410,8 +412,12 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     await b.approve(t, unpaid, { paid: 0 })
     for (const p of rejected) await tms.setRegistrationStatus(admin, t.id, p.id, 'reject', 'Age proof does not match the date of birth')
     for (const p of correction) await tms.setRegistrationStatus(admin, t.id, p.id, 'request_correction', 'Please upload a clearer photo')
-    for (const p of failed) { await tms.setRegistrationStatus(admin, t.id, p.id, 'approve'); await tms.recordPayment(admin, t.id, p.id, { status: 'FAILED', method: 'UPI', transactionId: 'TXNFAILED01' }) }
-    for (const p of refunded) { await tms.setRegistrationStatus(admin, t.id, p.id, 'approve'); await tms.recordPayment(admin, t.id, p.id, { status: 'REFUNDED', method: 'Bank transfer', transactionId: 'TXNREFUND01', note: 'Player injured before the event' }) }
+    if (paymentsEnabled()) {
+      for (const p of failed) { await tms.setRegistrationStatus(admin, t.id, p.id, 'approve'); await tms.recordPayment(admin, t.id, p.id, { status: 'FAILED', method: 'UPI', transactionId: 'TXNFAILED01' }) }
+      for (const p of refunded) { await tms.setRegistrationStatus(admin, t.id, p.id, 'approve'); await tms.recordPayment(admin, t.id, p.id, { status: 'REFUNDED', method: 'Bank transfer', transactionId: 'TXNREFUND01', note: 'Player injured before the event' }) }
+    } else {
+      for (const p of [...failed, ...refunded]) await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
+    }
     // Entered by a coach through the link: "Submitted", waiting for the officer.
     const submitted = await b.players(t, teamRows, 'Boys 14-15', [{ events: ['kumite'], weight: '-57 KG', count: 3 }], { status: 'SUBMITTED' })
     // A possible duplicate (same name and date of birth), confirmed on purpose.
@@ -424,8 +430,8 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     await tms.teams.update(admin, t.id, inactive.id, { active: false })
     note(t, 'District Open', 'REGISTRATION_OPEN', [
       `Coach link /register/${link.token} (password ${LINK_PASSWORD}), expires in 15 days`,
-      'Players: approved + paid, approved + unpaid, pending verification, submitted by coach, rejected (with reason), sent back for correction (draft)',
-      'Payments: paid, pending, failed, refunded',
+      'Players: approved, pending verification, submitted by coach, rejected (with reason), sent back for correction (draft)',
+      ...(paymentsEnabled() ? ['Payments: paid, pending, failed, refunded'] : []),
       'A possible duplicate player (same name and date of birth)',
       'A player too old for every age group (no category)',
       'An inactive team that cannot add players',
@@ -448,7 +454,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     await tms.setSoftLock(admin, t.id, true)
     await tms.saveLink(admin, t.id, { active: false })
     await b.steps(t, ['REGISTRATION_CLOSED', 'VERIFICATION'])
-    note(t, 'Coastal Cup', 'VERIFICATION', ['Registration window closed by date; coach link switched off', 'Coach entries soft-locked', `${all.length - 12} players still waiting for verification`, 'Some approved players have not paid'])
+    note(t, 'Coastal Cup', 'VERIFICATION', ['Registration window closed by date; coach link switched off', 'Coach entries soft-locked', `${all.length - 12} players still waiting for verification`, ...(paymentsEnabled() ? ['Some approved players have not paid'] : [])])
   }
 
   // 5. WEIGH-IN: every weigh-in result --------------------------------------------------

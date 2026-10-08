@@ -11,6 +11,7 @@
 // locks, lifecycles, coaches touching only their own team, and the audit trail.
 
 import { calculateAge } from './age.js'
+import { paymentsEnabled } from './features.js'
 import { CATEGORY_PRESETS, weightClasses } from './presets.js'
 import { categorizePlayer, categoryLabel, EVENTS } from './categories.js'
 import {
@@ -1096,7 +1097,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       playerNumber: await nextPlayerNumber(tournamentId),
       seed: input.seed ?? null,
       registrationStatus: status || (isCoach(actor) ? R.SUBMITTED : R.PENDING_VERIFICATION),
-      payment: { amount: feeFor(player, cfg.settings), status: 'PENDING' },
+      // The system is free while payments are off (features.js): no fee, no payment record.
+      payment: paymentsEnabled() ? { amount: feeFor(player, cfg.settings), status: 'PENDING' } : null,
       weighIn: player.events?.includes('kumite') ? { registeredWeight: player.weight ?? null, status: 'PENDING' } : null,
     }
     if (dupes.length) doc.duplicateOf = dupes.map((d) => d.id)
@@ -1170,7 +1172,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     }
 
     Object.assign(patch, categorizeFields({ ...before, ...patch }, cfg))
-    if (patch.events && patch.events.join() !== (before.events || []).join()) {
+    if (paymentsEnabled() && patch.events && patch.events.join() !== (before.events || []).join()) {
       patch.payment = feeChange(before.payment, feeFor(patch, cfg.settings))
     }
     // A coach changing who the player is, or what they enter, after approval
@@ -1286,6 +1288,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   }
 
   async function recordPayment(actor, tournamentId, id, payment) {
+    if (!paymentsEnabled()) throw rule('payments_disabled')
     await writableTournament(tournamentId)
     const before = await inTournament('players', tournamentId, id)
     if (payment.status && !PAYMENT_STATUS.includes(payment.status)) throw invalid('invalid_payment_status')
@@ -3111,7 +3114,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     for (const k of keep) if (t[k] !== undefined) out[k] = t[k]
     out.lifecycleStatus = lifecycleOf(t)
     const s = settingsOf(t)
-    out.fees = s.fees
+    // Fees are shown only while payments are on (features.js).
+    if (paymentsEnabled()) out.fees = s.fees
     out.publicCertificates = !!s.publicCertificates
     out.registrationOpen = lifecycleOf(t) === T.REGISTRATION_OPEN && registrationWindow(t).open
     return out
@@ -3213,7 +3217,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       kataPlayers: count((p) => p.events?.includes('kata')),
       kumitePlayers: count((p) => p.events?.includes('kumite')),
       pendingVerification: count((p) => [R.SUBMITTED, R.PENDING_VERIFICATION].includes(p.registrationStatus)),
-      pendingPayment: count((p) => DRAW_ELIGIBLE.has(p.registrationStatus) && (p.payment?.status || 'PENDING') !== 'PAID'),
+      pendingPayment: paymentsEnabled() ? count((p) => DRAW_ELIGIBLE.has(p.registrationStatus) && (p.payment?.status || 'PENDING') !== 'PAID') : 0,
       pendingWeighIn: count((p) => p.events?.includes('kumite') && DRAW_ELIGIBLE.has(p.registrationStatus) && (p.weighIn?.status || 'PENDING') !== 'PASSED'),
       pools: pools.length,
       matches: matches.length,

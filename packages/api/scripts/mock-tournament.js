@@ -134,9 +134,8 @@ export async function runMockTournament({
     await step('Verify registrations and record payments', async () => {
       const registrar = await as('registrar@kata.local')
       const { players: list } = await call('GET', `${T}/players`, undefined, registrar)
-      for (const [i, p] of list.entries()) {
+      for (const p of list) {
         await call('POST', `${T}/players/${p.id}/registration`, { action: 'approve' }, registrar)
-        if (i % 2 === 0) await call('PUT', `${T}/players/${p.id}/payment`, { status: 'PAID', amount: 500, method: 'UPI' }, registrar)
       }
       return `${list.length} approved`
     })

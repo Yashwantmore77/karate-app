@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url'
 import { createStores } from '../lib/store.js'
 import { isMongoConfigured, closeMongo } from '../db/mongo.js'
 import { createTms } from '@kumite/shared/tms.js'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 import { seededRandom } from '@kumite/shared/pools.js'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { findUserRecordByEmail, createUser } from '../auth/users.js'
@@ -151,7 +152,8 @@ export async function seedSample(stores, { reset = false, log = console.log } = 
   for (const p of players) {
     if (pending.has(p.id)) continue
     await tms.setRegistrationStatus(admin, tid, p.id, 'approve')
-    if (random() < 0.85) await tms.recordPayment(admin, tid, p.id, { status: 'PAID', method: pick(['UPI', 'Cash', 'Bank']), transactionId: `TXN${Math.floor(random() * 1e8)}` })
+    // Payments are off while the system is free (features.js).
+    if (paymentsEnabled() && random() < 0.85) await tms.recordPayment(admin, tid, p.id, { status: 'PAID', method: pick(['UPI', 'Cash', 'Bank']), transactionId: `TXN${Math.floor(random() * 1e8)}` })
   }
 
   await tms.setLifecycle(admin, tid, 'REGISTRATION_CLOSED')

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createApp } from './index.js'
 import { createUser, createCoachAccount, listCoachAccounts } from './auth/users.js'
+import { FEATURES } from '@kumite/shared/features.js'
 
 // The gaps found in the October review: every older route reaches only the
 // caller's tournaments and respects the draw, the result locks and a closed
@@ -154,8 +155,8 @@ describe('business rules (review 7-12)', () => {
     const team = await tms.teams.create(admin, t.id, { name: 'Dojo One', email: 'coach@dojo.in', mobile: '9811111111' })
     const player = await tms.createPlayer(admin, t.id, { teamId: team.id, name: 'Arjun Patil', dob: '2000-03-03', gender: 'M', events: ['kumite'], weight: 70, country: 'India' })
     await tms.setRegistrationStatus(admin, t.id, player.id, 'approve')
-    await tms.recordPayment(admin, t.id, player.id, { status: 'PAID', method: 'UPI' })
-    return { t, team, player }
+    if (FEATURES.payments) await tms.recordPayment(admin, t.id, player.id, { status: 'PAID', method: 'UPI' })
+    return { t, team, player: await stores.players.get(player.id) }
   }
 
   it('sends a player back to verification when the coach changes them after approval (7)', async () => {
@@ -168,14 +169,29 @@ describe('business rules (review 7-12)', () => {
     expect((await tms.updatePlayer(admin, t.id, player.id, { weight: 75 })).registrationStatus).toBe('APPROVED')
   })
 
-  it('shows what is still owed when events are added after payment (8)', async () => {
+  it('keeps payments off while the system is free: no fees, no payment records', async () => {
     const { t, player } = await openTournament()
-    const after = await tms.updatePlayer(admin, t.id, player.id, { events: ['kata', 'kumite'] })
-    expect(after.payment).toMatchObject({ amount: 1000, paidAmount: 700, balanceDue: 300, status: 'PENDING' })
-    const paid = await tms.recordPayment(admin, t.id, player.id, { status: 'PAID', amount: 1000 })
-    expect(paid.payment.balanceDue).toBeUndefined()
-    const fewer = await tms.updatePlayer(admin, t.id, player.id, { events: ['kata'] })
-    expect(fewer.payment).toMatchObject({ amount: 500, status: 'PAID', refundDue: 500 })
+    expect(player.payment).toBeNull()
+    await expect(tms.recordPayment(admin, t.id, player.id, { status: 'PAID' })).rejects.toMatchObject({ code: 'payments_disabled' })
+    expect((await tms.dashboard(t.id)).pendingPayment).toBe(0)
+    expect((await tms.publicTournament(await stores.tournaments.get(t.id))).fees).toBeUndefined()
+    const { REPORT_KEYS } = await import('@kumite/shared/reports.js')
+    expect(REPORT_KEYS).not.toContain('payment')
+  })
+
+  it('shows what is still owed when events are added after payment (8, with payments switched on)', async () => {
+    FEATURES.payments = true
+    try {
+      const { t, player } = await openTournament()
+      const after = await tms.updatePlayer(admin, t.id, player.id, { events: ['kata', 'kumite'] })
+      expect(after.payment).toMatchObject({ amount: 1000, paidAmount: 700, balanceDue: 300, status: 'PENDING' })
+      const paid = await tms.recordPayment(admin, t.id, player.id, { status: 'PAID', amount: 1000 })
+      expect(paid.payment.balanceDue).toBeUndefined()
+      const fewer = await tms.updatePlayer(admin, t.id, player.id, { events: ['kata'] })
+      expect(fewer.payment).toMatchObject({ amount: 500, status: 'PAID', refundDue: 500 })
+    } finally {
+      FEATURES.payments = false
+    }
   })
 
   it('refuses unusable team contact details (9)', async () => {

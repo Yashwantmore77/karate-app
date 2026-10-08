@@ -42,7 +42,7 @@ export const WORKFLOW = [
   },
   {
     id: 'approve', title: 'Check and approve registrations', tab: 'registrations', where: 'Registrations', who: 'Registration officer / Admin',
-    what: 'Coaches add their players through the link. Check each player (age, documents, payment) and approve or reject them.',
+    what: 'Coaches add their players through the link. Check each player (age, documents) and approve or reject them.',
     done: (_t, s) => s.players > 0 && s.pendingVerification === 0,
   },
   {
@@ -148,7 +148,7 @@ export const TAB_GUIDE = {
     after: { tab: 'registrations', text: 'Open registration and approve players' },
   },
   registrations: {
-    text: 'Teams and players. Coaches add players through the link; here you check them, approve or reject them and record payments.',
+    text: 'Teams and players. Coaches add players through the link; here you check them and approve or reject them.',
     before: { tab: 'categories', text: 'Categories set up and registration opened' },
     after: { tab: 'weighin', text: 'Weigh the Kumite players' },
   },
@@ -198,7 +198,7 @@ export const TAB_GUIDE = {
     after: { tab: 'overview', text: 'Mark the tournament Completed' },
   },
   reports: {
-    text: 'Download lists and reports (players, teams, results, payments and more) as Excel, CSV or PDF. Can be used at any time.',
+    text: 'Download lists and reports (players, teams, results and more) as Excel, CSV or PDF. Can be used at any time.',
   },
   audit: {
     text: 'Every important change: who did it, when, and why. Use it to check what happened. Nothing here can be edited.',
@@ -243,7 +243,7 @@ export const ROLE_GUIDE = {
   ],
   coach: [
     'Add your team\'s players while registration is open, and your team members (manager, coaches, judges, referees).',
-    'Check their status (approved, payment, weigh-in) and download certificates after the event.',
+    'Check their status (approved, weigh-in) and download certificates after the event.',
   ],
   viewer: [
     'Read-only: open a tournament to see its progress, or Analytics to compare tournaments.',
@@ -265,7 +265,7 @@ export const HELP = {
   },
   'overview.stats': {
     title: 'Numbers at a glance',
-    text: 'Live counts for this tournament. Orange numbers are jobs still waiting (verification, payment, weigh-in).',
+    text: 'Live counts for this tournament. Orange numbers are jobs still waiting (verification, weigh-in).',
   },
   'overview.next': { title: 'Next matches', text: 'The next bouts still to be fought, in order.' },
   'overview.notifications': { title: 'Notifications', text: 'Messages for organisers: new registrations, results, reminders and system notices.' },
@@ -319,7 +319,7 @@ export const HELP = {
   },
   'registrations.players': {
     title: 'Players',
-    text: 'Every registered player. Open a player to check details, documents and payment, then approve or reject.',
+    text: 'Every registered player. Open a player to check details and documents, then approve or reject.',
     tips: ['"Approve all pending" approves every waiting player at once.', 'Only approved players go into the draw.'],
     next: 'Weigh-in, then lock entries.',
   },

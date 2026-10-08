@@ -33,10 +33,10 @@ describe('test tournament scenarios', () => {
     const by = Object.fromEntries(summary.map((s) => [s.title, s.id]))
     const players = (title) => stores.players.list({ tournamentId: by[title] })
 
-    // Registration open: every registration and payment case.
+    // Registration open: every registration case. (Payments are off: no payment records.)
     const reg = await players('District Open')
-    expect(Object.keys(count(reg, (p) => p.registrationStatus))).toEqual(expect.arrayContaining(['PAYMENT_VERIFIED', 'APPROVED', 'REJECTED', 'DRAFT', 'PENDING_VERIFICATION', 'SUBMITTED']))
-    expect(Object.keys(count(reg, (p) => p.payment.status))).toEqual(expect.arrayContaining(['PAID', 'PENDING', 'FAILED', 'REFUNDED']))
+    expect(Object.keys(count(reg, (p) => p.registrationStatus))).toEqual(expect.arrayContaining(['APPROVED', 'REJECTED', 'DRAFT', 'PENDING_VERIFICATION', 'SUBMITTED']))
+    expect(reg.every((p) => p.payment == null)).toBe(true)
     expect(reg.some((p) => p.duplicateOf)).toBe(true)
     expect(await stores.teams.list({ tournamentId: by['District Open'], active: false })).toHaveLength(1)
     // Team members with several roles each.
