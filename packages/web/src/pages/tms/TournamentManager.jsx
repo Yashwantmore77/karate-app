@@ -7,6 +7,7 @@ import StatusBadge from '../../components/tms/StatusBadge'
 import useAction from '../../components/tms/useAction'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
+import { tournamentEvents } from '@kumite/shared/tms.js'
 import OverviewTab from './OverviewTab'
 import SetupTab from './SetupTab'
 import CategoriesTab from './CategoriesTab'
@@ -49,11 +50,8 @@ export const TABS = [
   { key: 'audit', label: 'Audit log', perm: P.AUDIT_VIEW, Component: AuditTab },
 ]
 
-/** The events a tournament holds, from its type (older records: from the scoring template). */
-export const eventsOf = (t) => {
-  const type = t?.type || (t?.template === 'kata' ? 'kata' : t?.template === 'kumite' ? 'kumite' : 'kata_kumite')
-  return type === 'kata_kumite' ? ['kata', 'kumite'] : [type]
-}
+/** The events a tournament holds (the same rule the server applies to entries). */
+export const eventsOf = (t) => tournamentEvents(t)
 
 export default function TournamentManager({ uid, profile, basePath = '/admin' }) {
   const navigate = useNavigate()

@@ -196,7 +196,7 @@ describe('section 64 core flow', () => {
   })
 
   const setUp = async () => {
-    await tms.updateTournament(admin, tournament.id, { masterAgeDate: '2027-01-01', type: 'kumite', settings: { poolSize: 8, requireWeighInForDraw: false } })
+    await tms.updateTournament(admin, tournament.id, { masterAgeDate: '2027-01-01', type: 'kata_kumite', settings: { poolSize: 8, requireWeighInForDraw: false } })
     ageGroup = await tms.ageGroups.create(admin, tournament.id, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 })
     w35 = await tms.weightCategories.create(admin, tournament.id, { ageGroupId: ageGroup.id, name: '-35 KG', maxWeight: 35 })
     await tms.weightCategories.create(admin, tournament.id, { ageGroupId: ageGroup.id, name: '-40 KG', minWeight: 35, maxWeight: 40 })

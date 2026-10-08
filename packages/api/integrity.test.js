@@ -325,10 +325,49 @@ describe('arranging a bracket by hand', () => {
     // Only the real bout exists; the three byes go straight through.
     expect((await tms.listMatches(t.id)).filter((m) => m.stage === 'knockout' && m.round === 1)).toHaveLength(1)
 
-    // Once a bout is fought, the arrangement is fixed.
+    // Once a bout is called to the mat, the arrangement is fixed.
     const bout = (await tms.listMatches(t.id)).find((m) => m.stage === 'knockout' && m.redId && m.blueId)
+    await tms.callMatch(admin, t.id, bout.id)
+    expect((await put(good)).body.error).toBe('bracket_started')
     await tms.correctResult(admin, t.id, bout.id, { winner: 'red', avgRed: 3, avgBlue: 0 })
     expect((await put(good)).body.error).toBe('bracket_started')
     expect((await stores.auditLog.list({ tournamentId: t.id })).some((a) => a.action === 'bracket.arranged')).toBe(true)
+  })
+})
+
+describe('review of the October changes', () => {
+  const admin = { uid: 'admin-uid-001', role: 'admin' }
+  async function open(type) {
+    const t = await stores.tournaments.insert({ name: `Type ${type}`, location: 'X', date: '2027-06-01', template: 'kumite' })
+    await tms.updateTournament(admin, t.id, {
+      type, masterAgeDate: '2027-06-01', organizer: 'Org', venue: 'Hall', startDate: '2027-06-01', endDate: '2099-12-31',
+      registrationStart: '2020-01-01', registrationClose: '2099-12-30', contactMobile: '9800000000', contactEmail: 'o@x.in',
+    })
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
+    const team = await tms.teams.create(admin, t.id, { name: 'Dojo' })
+    return { t, team }
+  }
+  const player = (teamId, events) => ({ teamId, name: `P ${events.join(' ')} ${Math.random()}`, dob: '2000-01-01', gender: 'M', events, weight: 60, country: 'India' })
+
+  it('accepts only the events a tournament holds', async () => {
+    const { t, team } = await open('kumite')
+    await expect(tms.createPlayer(admin, t.id, player(team.id, ['kata']))).rejects.toMatchObject({ code: 'invalid_player' })
+    const p = await tms.createPlayer(admin, t.id, player(team.id, ['kumite']))
+    await expect(tms.updatePlayer(admin, t.id, p.id, { events: ['kata', 'kumite'] })).rejects.toMatchObject({ code: 'invalid_player' })
+    const csv = 'Name,DOB,Gender,Events,Weight,Team,Country\nAmit Rao,2000-01-01,M,Kata,60,Dojo,India\nBina Rao,2000-02-02,F,Kumite,55,Dojo,India'
+    const preview = await tms.previewBulk(admin, t.id, csv)
+    expect(preview.valid).toHaveLength(1)
+    expect(preview.errors.some((e) => e.field === 'events' && e.row === 2)).toBe(true)
+    await expect(tms.importBulk(admin, t.id, csv)).rejects.toMatchObject({ code: 'bulk_has_errors' })
+  })
+
+  it('will not change the type so it drops an event with entries; no type means both', async () => {
+    const { t, team } = await open('kata_kumite')
+    await tms.createPlayer(admin, t.id, player(team.id, ['kata']))
+    await expect(tms.updateTournament(admin, t.id, { type: 'kumite' })).rejects.toMatchObject({ code: 'type_has_entries', details: { events: ['kata'], players: 1 } })
+    await expect(tms.updateTournament(admin, t.id, { type: 'kata' })).resolves.toBeTruthy()
+    const { tournamentEvents } = await import('@kumite/shared/tms.js')
+    expect(tournamentEvents({ template: 'kata' })).toEqual(['kata', 'kumite'])
+    expect(tournamentEvents({ type: 'kumite', template: 'kata' })).toEqual(['kumite'])
   })
 })

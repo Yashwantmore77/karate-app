@@ -41,7 +41,7 @@ afterEach(() => new Promise((resolve) => http.close(resolve)))
 const setUpTournament = async () => {
   const { body: { tournament } } = await call('POST', '/tournaments', {
     name: 'State Open', location: 'Pune', date: '2027-01-15', template: 'kumite',
-    masterAgeDate: '2027-01-01', type: 'kumite', slug: 'state-open', ...READY,
+    masterAgeDate: '2027-01-01', type: 'kata_kumite', slug: 'state-open', ...READY,
   }, tokens.admin)
   const t = tournament.id
   const { body: { ageGroup } } = await call('POST', `/tournaments/${t}/age-groups`, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 }, tokens.admin)

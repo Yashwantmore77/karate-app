@@ -278,6 +278,17 @@ export function tournamentProblems(t) {
 
 /** PRD v1 §6: what must be filled in before registration can open. */
 /**
+ * The events a tournament holds, from its type. A tournament with no type
+ * set (older records only carry the scoring template) is treated as holding
+ * both, so nothing it already has is hidden.
+ */
+export function tournamentEvents(t) {
+  if (t?.type === 'kata') return ['kata']
+  if (t?.type === 'kumite') return ['kumite']
+  return ['kata', 'kumite']
+}
+
+/**
  * What is wrong with a team's details, field by field ({} when nothing is),
  * so the forms can say it before the server has to. `partial` checks only the
  * fields given (an edit).
@@ -486,6 +497,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     }
     const next = { ...patch }
     if (patch.settings) next.settings = { ...(before.settings || {}), ...patch.settings }
+    // Changing the type may not drop an event players have already entered.
+    if ('type' in patch && patch.type !== before.type) {
+      const keep = tournamentEvents({ ...before, ...next })
+      const players = await stores.players.list({ tournamentId })
+      const stranded = ['kata', 'kumite'].filter((e) => !keep.includes(e) && players.some((p) => (p.events || []).includes(e)))
+      if (stranded.length) throw rule('type_has_entries', { events: stranded, players: players.filter((p) => (p.events || []).some((e) => stranded.includes(e))).length })
+    }
     const problems = tournamentProblems({ ...before, ...next })
     if (problems.length) throw invalid('invalid_tournament', { errors: problems })
     const after = await stores.tournaments.update(tournamentId, next)
@@ -1061,6 +1079,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const filled = withTeamDefaults(withDefaults(isCoach(actor) ? withoutReadOnly(input, fields) : input, fields), team, tournament.country)
     const { player, errors } = validatePlayer(filled, fields, { weightPrecision: cfg.settings.weightPrecision })
     if (errors.length) throw invalid('invalid_player', { errors })
+    assertEventsOffered(player, tournament)
     const existing = await stores.players.list({ tournamentId })
     // PRD v1 §21/§28: a possible duplicate is a warning to review and
     // confirm, never a silent merge.
@@ -1105,6 +1124,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (!fits) throw invalid('not_age_eligible', { errors: [{ field: 'dob', message: `No age group in this tournament takes a ${age}-year-old ${player.gender === 'F' ? 'girl' : 'boy'}` }] })
   }
 
+  /** A player enters only events the tournament holds (Kata, Kumite or both). */
+  const assertEventsOffered = (player, tournament) => {
+    const offered = tournamentEvents(tournament)
+    const extra = (player.events || []).filter((e) => !offered.includes(e))
+    if (extra.length) {
+      throw invalid('invalid_player', { errors: [{ field: 'events', message: `This tournament is ${offered.map((e) => (e === 'kata' ? 'Kata' : 'Kumite')).join(' and ')} only; ${extra.map((e) => (e === 'kata' ? 'Kata' : 'Kumite')).join(' and ')} is not held` }] })
+    }
+  }
+
   /** PRD v1 §21 "Info: age boundary notice": at the top of their age group. */
   const ageNotices = (player, cfg) => {
     const out = []
@@ -1127,6 +1155,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const merged = { ...before, ...sent, extra: { ...(before.extra || {}), ...(sent.extra || {}) } }
     const { player, errors } = validatePlayer(merged, fields, { weightPrecision: cfg.settings.weightPrecision })
     if (errors.length) throw invalid('invalid_player', { errors })
+    if ('events' in input) assertEventsOffered(player, cfg.tournament)
     const patch = { ...player }
     if (input.teamId && !isCoach(actor)) {
       await inTournament('teams', tournamentId, input.teamId).catch(() => { throw invalid('invalid_teamId') })
@@ -1180,7 +1209,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const tournament = await tournamentOf(tournamentId)
     const teamRows = await stores.teams.list({ tournamentId })
     const existing = await stores.players.list({ tournamentId })
-    return validateBulkRows(parseCsv(csv), {
+    const preview = validateBulkRows(parseCsv(csv), {
       fields: formFields(tournament),
       teams: isCoach(actor) ? teamRows.filter((t) => t.id === actor.teamId) : teamRows,
       existing,
@@ -1188,6 +1217,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       defaultCountry: tournament.country || null,
       weightPrecision: settingsOf(tournament).weightPrecision,
     })
+    // A row entering an event this tournament does not hold is an error here,
+    // before anything is imported.
+    const offered = tournamentEvents(tournament)
+    const notHeld = preview.valid.filter((p) => (p.events || []).some((e) => !offered.includes(e)))
+    if (notHeld.length) {
+      const errors = notHeld.map((p) => ({ row: (preview.rows || []).find((r) => r.player === p || r.name === p.name)?.row ?? null, field: 'events', message: `${p.name}: ${(p.events || []).filter((e) => !offered.includes(e)).map((e) => (e === 'kata' ? 'Kata' : 'Kumite')).join(', ')} is not held in this tournament` }))
+      return { ...preview, valid: preview.valid.filter((p) => !notHeld.includes(p)), errors: [...preview.errors, ...errors] }
+    }
+    return preview
   }
 
   /**
@@ -2439,7 +2477,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
     if (!bracket) throw missing('bracket_not_found')
     const bouts = (await stores.matches.list({ categoryId: bracket.categoryId })).filter((m) => m.stage === 'knockout')
-    if (bouts.some((m) => boutOutcome(m) || ['live', 'open', 'paused'].includes(m.status))) throw rule('bracket_started')
+    // Once a bout is called to the mat (or later), the draw stays as it is.
+    if (bouts.some((m) => boutOutcome(m) || ['called', 'ready', 'live', 'open', 'paused'].includes(m.status))) throw rule('bracket_started')
     const ids = bracket.entries.map((e) => e.id)
     const size = nextPow2(ids.length)
     if (!Array.isArray(layout) || layout.length !== size) throw invalid('invalid_layout', { size })
@@ -2490,7 +2529,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       layout: bracket.layout || buildBracket(bracket.entries).filter((m) => m.round === 1).sort((a, b) => a.slot - b.slot).flatMap((m) => [m.aka || null, m.ao || null]),
       entries: bracket.entries.map((e) => ({ id: e.id, playerId: e.playerId, pool: e.pool || null, place: e.place || null, name: competitors.get(e.id)?.name || '', team: competitors.get(e.id)?.teamId || null })),
       thirdPlace: !!bracket.thirdPlace,
-      started: slots.some((m) => boutOutcome(m) || ['live', 'open', 'paused'].includes(m.status)),
+      started: slots.some((m) => boutOutcome(m) || ['called', 'ready', 'live', 'open', 'paused'].includes(m.status)),
       categoryId: bracket.categoryId,
     }
   }

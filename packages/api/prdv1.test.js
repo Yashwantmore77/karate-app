@@ -34,7 +34,7 @@ const READY = {
 }
 
 const tournament = async (slug = 'partner-open') => {
-  const { body } = await call('POST', '/tournaments', { name: 'Partner Open', location: 'Pune', date: '2027-01-15', template: 'kumite', masterAgeDate: '2027-01-01', type: 'kumite', slug, ...READY }, tokens.admin)
+  const { body } = await call('POST', '/tournaments', { name: 'Partner Open', location: 'Pune', date: '2027-01-15', template: 'kumite', masterAgeDate: '2027-01-01', type: 'kata_kumite', slug, ...READY }, tokens.admin)
   const t = body.tournament.id
   const { body: { ageGroup } } = await call('POST', `/tournaments/${t}/age-groups`, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 }, tokens.admin)
   await call('POST', `/tournaments/${t}/weight-categories`, { ageGroupId: ageGroup.id, name: '-35 KG', maxWeight: 35 }, tokens.admin)

@@ -25,7 +25,7 @@ export const TOURNAMENT_TYPES = [
   ['kumite', 'Kumite only'],
   ['kata', 'Kata only'],
 ]
-export const typeLabel = (t) => (TOURNAMENT_TYPES.find(([v]) => v === (t.type || t.template)) || [null, t.template === 'kata' ? 'Kata only' : 'Kumite only'])[1]
+export const typeLabel = (t) => (TOURNAMENT_TYPES.find(([v]) => v === (t.type || 'kata_kumite')) || TOURNAMENT_TYPES[0])[1]
 
 const validationSchema = Yup.object({
   name: Yup.string().required('Tournament name required').min(3, 'Name too short'),
@@ -52,7 +52,8 @@ export default function AdminTournamentList({ uid }) {
       name: editingTournament?.name || '',
       location: editingTournament?.location || '',
       date: editingTournament?.date ? dayjs(editingTournament.date) : null,
-      type: editingTournament?.type || editingTournament?.template || 'kata_kumite',
+      // An older tournament with no type holds both events.
+      type: editingTournament?.type || 'kata_kumite',
     },
     enableReinitialize: true,
     validationSchema,

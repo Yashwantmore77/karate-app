@@ -20,6 +20,7 @@ export function describeError(err) {
     ? `${details.preset} overlaps your age group "${details.with}". Delete or change "${details.with}" first, then load the set.`
     : `These ages overlap the age group "${details.with}" for the same gender. Change the ages, or switch on "Allow overlap" if that is intended.`
   if (code === 'overlapping_weight_category' && details?.with) return `These weights overlap "${details.with}" in the same age group. Change the weights, or switch on "Allow overlap" if that is intended.`
+  if (code === 'type_has_entries' && details?.events?.length) return `${details.players} player${details.players === 1 ? ' has' : 's have'} entered ${details.events.map((e) => (e === 'kata' ? 'Kata' : 'Kumite')).join(' and ')}, which this type would drop. Keep Kata + Kumite, or change those entries first.`
   if (typeof details?.matches === 'number' && COUNTED[code]) return COUNTED[code](details.matches)
   if (typeof details?.players === 'number' && COUNTED[code]) return COUNTED[code](details.players)
   // PRD v1 §6: what is still missing before registration can open, or what is wrong.
@@ -47,6 +48,7 @@ const ERROR_TEXT = {
   empty_bout: 'Every first-round bout needs at least one player. Move a player into the empty bout.',
   invalid_layout: 'Every player must be placed exactly once.',
   bracket_not_found: 'This category has no bracket yet.',
+  type_has_entries: 'Players have already entered an event this type would drop. Move or remove those entries first, or keep Kata + Kumite.',
   managed_by_draw: 'This category is run by the tournament draw. Change it from the tournament screen (Draw / Pools), not here.',
   tournament_archived: 'This tournament is archived and read-only.',
   tournament_completed: 'This tournament is completed. Nothing new can be added to it.',

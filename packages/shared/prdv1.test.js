@@ -15,7 +15,7 @@ const referee = { uid: 'ref-1', role: 'referee' }
 const officer = { uid: 'reg-1', role: 'registration_officer' }
 const READY = {
   name: 'PRD Open', organizer: 'State KA', venue: 'Pune', startDate: '2027-01-15', endDate: '2027-01-16', masterAgeDate: '2027-01-01',
-  registrationStart: '2026-11-01', registrationClose: '2026-12-31', contactMobile: '+91 98765 43210', contactEmail: 'a@b.co', country: 'India', type: 'kumite',
+  registrationStart: '2026-11-01', registrationClose: '2026-12-31', contactMobile: '+91 98765 43210', contactEmail: 'a@b.co', country: 'India', type: 'kata_kumite',
 }
 
 async function world({ settings = {}, at = '2026-12-01T10:00:00Z', tournament = {} } = {}) {

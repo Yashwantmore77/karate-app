@@ -94,6 +94,18 @@ The routes that address categories, entrants and bouts by id (`/categories/:id`,
 
 Tests: `api/integrity.test.js`, `shared/integrity.test.js`.
 
+### 9. Review of the tournament-type, bracket, team-member and SGFI changes
+
+| Finding | Severity | Fix |
+| --- | --- | --- |
+| A player could enter an event the tournament does not hold (Kata in a Kumite-only event), which the type-based tabs would then hide | Medium | Entries, edits and bulk uploads accept only the events the type holds; bulk rows are flagged in the preview with their row number |
+| Changing the type could drop an event players had already entered | Medium | Refused with the number of players (`type_has_entries`) |
+| Older tournaments carry only a scoring template; the tabs read it as the type and could hide Weigh-in or the Kata panel | Medium | No type set means both events, in one shared rule (`tournamentEvents`) used by the server and the screens |
+| A bracket could be rearranged after a bout was called to the mat | Low | "Started" now includes called and ready bouts |
+| The bracket screen did not show console results until reopened | Low | Refreshes every 15 seconds, never mid-arrangement, mid-drag or while a result is being entered |
+
+Checked and sound: team-member routes (permissions, a coach only reaches their own team, archived tournaments read-only, email/mobile checks, removed with their team); bracket arrangement (manager permission, tournament reach, every player placed once, no empty bout, byes only where allowed, audited); the SGFI set (category permission, refused as a whole on overlap, audited); the printed sheet escapes every name.
+
 ## Checked and found sound
 
 | Area | What is in place |

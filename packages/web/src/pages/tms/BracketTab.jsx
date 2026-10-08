@@ -51,6 +51,16 @@ export default function BracketTab({ tournament, version, action, role }) {
   useEffect(() => { loadList() }, [tid, version])
   useEffect(() => { load() }, [tid, key, version])
   useEffect(() => { if (bracket) setMode(bracket.started || !canArrange ? 'results' : 'arrange') }, [bracket?.divisionKey, bracket?.started])
+  // Bouts scored on the referee console show up by themselves, but never
+  // while someone is mid-arrangement, dragging, or entering a result.
+  useEffect(() => {
+    if (!key) return undefined
+    const timer = setInterval(() => {
+      if (layout || dragging || result || document.hidden) return
+      tms.brackets.get(tid, key).then(setBracket).catch(() => {})
+    }, 15_000)
+    return () => clearInterval(timer)
+  }, [tid, key, layout, dragging, result])
 
   const names = useMemo(() => new Map((bracket?.entries || []).map((e) => [e.id, e.name])), [bracket])
   const label = list?.find((b) => b.divisionKey === key)?.label || ''
