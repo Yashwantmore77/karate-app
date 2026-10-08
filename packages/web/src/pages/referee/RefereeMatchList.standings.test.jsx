@@ -88,8 +88,13 @@ describe('standings', () => {
 
     store.matches.list.mockResolvedValue(EVERY_MATCH.slice(1))
     await user.click(screen.getByTitle('Delete Match'))
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    const dialog = within(screen.getByRole('dialog'))
+    // m1 has a result, so removing it is a correction that needs a reason (Rule 6).
+    expect(dialog.getByRole('button', { name: 'Delete' })).toBeDisabled()
+    await user.type(dialog.getByLabelText(/Reason/), 'Entered twice')
+    await user.click(dialog.getByRole('button', { name: 'Delete' }))
 
+    expect(store.matches.remove).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'Entered twice')
     expect(store.matches.list).toHaveBeenCalledTimes(2)
     // m1 is gone, so Aarav has played one.
     await vi.waitFor(async () => {

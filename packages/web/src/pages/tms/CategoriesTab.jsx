@@ -3,11 +3,12 @@ import {
   Paper, Typography, Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid,
   Switch, FormControlLabel, IconButton, Alert, Box,
 } from '@mui/material'
-import { Add, Edit, Delete, Tune } from '@mui/icons-material'
+import { Add, Edit, Delete, Tune, PlaylistAdd } from '@mui/icons-material'
 import { settingsOf, POOL_SYSTEMS, KATA_METHODS } from '@kumite/shared/tms.js'
 import { POOL_MODES } from '@kumite/shared/pools.js'
 import { KATA_METHOD_LABEL } from '@kumite/shared/kata.js'
-import { tms } from '../../data/tms'
+import { tms, describeError } from '../../data/tms'
+import { CATEGORY_PRESETS, weightClasses } from '@kumite/shared/presets.js'
 import { POOL_MODE_LABEL, POOL_SYSTEM_LABEL } from './SetupTab'
 import DataTable from '../../components/tms/DataTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
@@ -42,6 +43,8 @@ export default function CategoriesTab({ tournament, version, action }) {
   const [editing, setEditing] = useState(null) // { kind, row }
   const [removing, setRemoving] = useState(null)
   const [rules, setRules] = useState(null) // { kind, row, settings }
+  const [editError, setEditError] = useState(null) // { text, overlap }
+  const [preset, setPreset] = useState(null) // key of the set being previewed
   const locked = !!tournament.entriesLocked
   const base = settingsOf(tournament)
 
@@ -60,14 +63,45 @@ export default function CategoriesTab({ tournament, version, action }) {
   const load = () => wrap(Promise.all([tms.ageGroups.list(tid), tms.weightCategories.list(tid)]).then(([g, w]) => { setGroups(g); setWeights(w) }))
   useEffect(() => { load() }, [tid, version])
 
+  /** What is wrong with the form, said before the server has to. */
+  const problemOf = ({ kind, row }) => {
+    if (!String(row.name || '').trim()) return 'Give it a name.'
+    if (kind === 'group') {
+      if (row.minAge === '' || row.maxAge === '' || row.minAge == null || row.maxAge == null) return 'Enter the minimum and maximum age.'
+      if (Number(row.maxAge) < Number(row.minAge)) return 'The maximum age must be the same as or above the minimum age.'
+    } else {
+      if (num(row.minWeight) == null && num(row.maxWeight) == null) return 'Enter at least one weight limit.'
+      if (num(row.minWeight) != null && num(row.maxWeight) != null && num(row.maxWeight) <= num(row.minWeight)) return '"Up to" must be above "Above".'
+    }
+    return null
+  }
+
+  const closeEditor = () => { setEditing(null); setEditError(null) }
+
   const save = async () => {
     const { kind, row } = editing
+    const problem = problemOf(editing)
+    if (problem) { setEditError({ text: problem }); return }
     const api = kind === 'group' ? tms.ageGroups : tms.weightCategories
     const doc = kind === 'group'
-      ? { name: row.name, gender: row.gender, minAge: Number(row.minAge), maxAge: Number(row.maxAge), active: row.active !== false }
-      : { ageGroupId: row.ageGroupId, name: row.name, label: row.label || null, minWeight: num(row.minWeight), maxWeight: num(row.maxWeight), active: row.active !== false }
-    const ok = await action.run(() => (row.id ? api.update(tid, row.id, doc) : api.create(tid, doc)), 'Saved')
-    if (ok) { setEditing(null); load() }
+      ? { name: row.name.trim(), gender: row.gender, minAge: Number(row.minAge), maxAge: Number(row.maxAge), active: row.active !== false }
+      : { ageGroupId: row.ageGroupId, name: row.name.trim(), label: row.label || null, minWeight: num(row.minWeight), maxWeight: num(row.maxWeight), active: row.active !== false }
+    if (row.allowOverlap !== undefined) doc.allowOverlap = !!row.allowOverlap
+    try {
+      await (row.id ? api.update(tid, row.id, doc) : api.create(tid, doc))
+      action.notify({ severity: 'success', text: 'Saved' })
+      closeEditor()
+      load()
+    } catch (err) {
+      // An overlap is shown here, in the dialog, with the switch that allows it.
+      setEditError({ text: describeError(err), overlap: /^overlapping_/.test(err?.code || '') })
+    }
+  }
+
+  const loadPreset = async () => {
+    const key = preset
+    const done = await action.run(() => tms.applyCategoryPreset(tid, key), (r) => `Loaded ${r.ageGroups} age groups and ${r.weightCategories} weight categories`)
+    if (done) { setPreset(null); load() }
   }
 
   const groupName = (id) => groups.find((g) => g.id === id)?.name || '—'
@@ -83,7 +117,12 @@ export default function CategoriesTab({ tournament, version, action }) {
           rows={groups}
           loading={loading} refreshing={refreshing}
           empty="No age groups yet. Add e.g. Boys 12-13."
-          toolbar={<Button variant="contained" startIcon={<Add />} disabled={locked} onClick={() => setEditing({ kind: 'group', row: { gender: 'M', minAge: '', maxAge: '', active: true } })}>Add age group</Button>}
+          toolbar={(
+            <>
+              <Button variant="outlined" startIcon={<PlaylistAdd />} disabled={locked} onClick={() => setPreset('sgfi')}>Load standard categories</Button>
+              <Button variant="contained" startIcon={<Add />} disabled={locked} onClick={() => setEditing({ kind: 'group', row: { gender: 'M', minAge: '', maxAge: '', active: true } })}>Add age group</Button>
+            </>
+          )}
           columns={[
             { key: 'name', label: 'Name' },
             { key: 'gender', label: 'Gender', render: (g) => GENDER[g.gender] || g.gender },
@@ -129,9 +168,10 @@ export default function CategoriesTab({ tournament, version, action }) {
         />
       </Box>
 
-      <Dialog open={!!editing} onClose={() => setEditing(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!editing} onClose={closeEditor} maxWidth="sm" fullWidth>
         <DialogTitle>{r.id ? 'Edit' : 'Add'} {editing?.kind === 'group' ? 'age group' : 'weight category'}</DialogTitle>
         <DialogContent>
+          {editError && <Alert severity={editError.overlap ? 'warning' : 'error'} sx={{ mt: 1 }}>{editError.text}</Alert>}
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
             {editing?.kind === 'group' ? (
               <>
@@ -159,11 +199,16 @@ export default function CategoriesTab({ tournament, version, action }) {
             )}
             <Grid size={{ xs: 12 }}>
               <FormControlLabel control={<Switch checked={r.active !== false} onChange={(e) => set({ active: e.target.checked })} />} label="Active" />
+              {/* Overlap is allowed only on purpose (PRD v1 §9): offered once it happens, or kept if already set. */}
+              {(editError?.overlap || r.overlapAllowed || r.allowOverlap) && (
+                <FormControlLabel control={<Switch checked={!!(r.allowOverlap ?? r.overlapAllowed)} onChange={(e) => set({ allowOverlap: e.target.checked })} />}
+                  label={editing?.kind === 'group' ? 'Allow overlap (a player may fit two age groups)' : 'Allow overlap with another weight class'} />
+              )}
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditing(null)}>Cancel</Button>
+          <Button onClick={closeEditor}>Cancel</Button>
           <Button variant="contained" onClick={save} disabled={action.busy}>Save</Button>
         </DialogActions>
       </Dialog>
@@ -201,6 +246,35 @@ export default function CategoriesTab({ tournament, version, action }) {
           <Button onClick={() => setRules({ ...rules, settings: {} })}>Clear all</Button>
           <Button onClick={() => setRules(null)}>Cancel</Button>
           <Button variant="contained" onClick={saveRules} disabled={action.busy || !!tournament.drawLocked}>Save rules</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!preset} onClose={() => setPreset(null)} maxWidth="md" fullWidth>
+        <DialogTitle>Load standard categories</DialogTitle>
+        <DialogContent>
+          <TextField select fullWidth label="Category set" value={preset || ''} onChange={(e) => setPreset(e.target.value)} sx={{ mt: 1 }}>
+            {Object.entries(CATEGORY_PRESETS).map(([key, p]) => <MenuItem key={key} value={key}>{p.label}</MenuItem>)}
+          </TextField>
+          {preset && (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ my: 2 }}>{CATEGORY_PRESETS[preset].description} Everything can be edited after loading.</Typography>
+              <Grid container spacing={1.5}>
+                {CATEGORY_PRESETS[preset].groups.map((g) => (
+                  <Grid key={g.name} size={{ xs: 12, sm: 6 }}>
+                    <Paper variant="outlined" sx={{ p: 1.25 }}>
+                      <Typography sx={{ fontWeight: 700 }}>{g.name} <Typography component="span" variant="body2" color="text.secondary">ages {g.minAge}–{g.maxAge}</Typography></Typography>
+                      <Typography variant="body2" color="text.secondary">{weightClasses(g.weights).map((w) => w.name.replace(' KG', '')).join(', ')} kg</Typography>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+              {groups.length > 0 && <Alert severity="info" sx={{ mt: 2 }}>Your existing age groups stay. If one overlaps a group in this set, you will be told which, so you can change or delete it first.</Alert>}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreset(null)}>Cancel</Button>
+          <Button variant="contained" onClick={loadPreset} disabled={action.busy || !preset}>Load {CATEGORY_PRESETS[preset]?.groups.length || ''} age groups</Button>
         </DialogActions>
       </Dialog>
 

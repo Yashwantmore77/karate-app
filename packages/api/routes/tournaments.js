@@ -1,11 +1,13 @@
 import { Router } from 'express'
 import { requireAuth, requireRole, tournamentAccess, mayAccessTournament } from '../auth/middleware.js'
-import { findUserRecord } from '../auth/users.js'
+import { findUserRecord, listCoachAccounts, deleteUser } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { DEFAULT_SLOT_MINUTES, SLOT_MIN_MINUTES, SLOT_MAX_MINUTES } from '../lib/schedule.js'
 import { tournamentProblems } from '@kumite/shared/tms.js'
-import { badRequest } from '../lib/errors.js'
+import { badRequest, conflict } from '../lib/errors.js'
+import { AUDIT_ACTIONS } from '../lib/audit.js'
+import { withMeta } from './tms.js'
 
 const DAY = { type: 'string', pattern: /^\d{4}-\d{2}-\d{2}$/, max: 10, nullable: true }
 // PRD v1 §6: registration opens and closes at a date and time, read in the
@@ -128,19 +130,27 @@ export function tournamentRoutes(stores, tms) {
   })
 
   router.delete('/:id', requireRole('admin'), async (req, res) => {
-    await loadOrFail(tournaments, req.params.id)
+    const tournament = await loadOrFail(tournaments, req.params.id)
+    // A tournament in progress is never deleted mid-event: complete it first.
+    if (tournament.lifecycleStatus === 'LIVE') throw conflict('tournament_live')
 
     // Cascade by hand: the store has no foreign keys, so dropping a tournament
     // without its descendants would leave categories, competitors and matches
     // that no screen can reach and no query will ever clean up.
     const owned = await categories.list({ tournamentId: req.params.id })
+    const matchIds = []
     for (const category of owned) {
+      for (const m of await matches.list({ categoryId: category.id })) matchIds.push(m.id)
       await competitors.removeWhere({ categoryId: category.id })
       await matches.removeWhere({ categoryId: category.id })
     }
     await categories.removeWhere({ tournamentId: req.params.id })
-    await tms.purgeTournament(req.params.id)
+    await tms.purgeTournament(req.params.id, { matchIds })
     await tournaments.remove(req.params.id)
+    // Team manager logins belong to this one tournament.
+    for (const coach of await listCoachAccounts()) if (coach.tournamentId === req.params.id) await deleteUser(coach.uid)
+    // Kept in the system audit log, since the tournament's own log goes with it.
+    await tms.record(withMeta(req), { tournamentId: null, action: AUDIT_ACTIONS.TOURNAMENT_DELETED, entity: 'tournament', entityId: req.params.id, before: { name: tournament.name, lifecycleStatus: tournament.lifecycleStatus || 'DRAFT', date: tournament.date } })
 
     res.status(204).end()
   })

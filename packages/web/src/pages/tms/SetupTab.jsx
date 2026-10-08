@@ -292,6 +292,11 @@ export default function SetupTab({ tournament, reload, action }) {
 
       <Paper sx={{ p: 2 }}>
         <HelpTitle id="setup.link" variant="h3" gutterBottom>Registration link</HelpTitle>
+        {(tournament.lifecycleStatus || 'DRAFT') === 'DRAFT' && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Coaches can open this link, but cannot register until you move the tournament to <b>Registration open</b> on the Dashboard tab.
+          </Alert>
+        )}
         {!link && <Button variant="contained" onClick={() => saveLink({})}>Generate link</Button>}
         {link && (
           <Stack spacing={2}>

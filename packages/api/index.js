@@ -98,7 +98,7 @@ export function createApp() {
   // System-level events (no tournament) go to the same audit log.
   const systemAudit = (actor, { meta, ...entry }) => tms.record(actor ? { ...actor, meta } : { uid: null, role: null, meta }, { tournamentId: null, ...entry })
   app.use(`${API_BASE}/auth`, authRoutes({ audit: systemAudit }))
-  app.use(`${API_BASE}/users`, userRoutes({ audit: systemAudit }))
+  app.use(`${API_BASE}/users`, userRoutes({ audit: systemAudit, stores }))
   app.use(`${API_BASE}/organizations`, organizationRoutes(stores, { audit: systemAudit }))
   app.use(`${API_BASE}/rulesets`, rulesetRoutes(tms))
   app.use(`${API_BASE}/system`, systemRoutes(stores, tms))

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { listUsers, createUser, updateUser, deleteUser, findUserRecord, findUser } from '../auth/users.js'
 import { requireAuth, requireRole, tournamentFor } from '../auth/middleware.js'
-import { badRequest, forbidden, notFound } from '../lib/errors.js'
+import { badRequest, forbidden, notFound, conflict } from '../lib/errors.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 
 /**
@@ -13,9 +13,21 @@ import { readPageQuery, pageMeta } from '../lib/pagination.js'
  * organisation's accounts, and every account they create joins it. Only a
  * super admin moves accounts between organisations or makes super admins.
  */
-export function userRoutes({ audit = async () => {} } = {}) {
+export function userRoutes({ audit = async () => {}, stores = null } = {}) {
   const router = Router()
   router.use(requireAuth, requireRole('admin'))
+
+  /** Unfinished bouts this official is put on (as referee or judge). */
+  const openAssignments = async (uid) => {
+    if (!stores?.matches) return 0
+    return (await stores.matches.list()).filter((m) => !['completed', 'cancelled'].includes(m.status) && !m.winner
+      && (m.refereeId === uid || (m.judgeIds || []).includes(uid))).length
+  }
+  /** An official still on bouts keeps their account and role until they are replaced there. */
+  const assertNotAssigned = async (uid) => {
+    const n = await openAssignments(uid)
+    if (n) throw conflict('official_assigned', { matches: n })
+  }
 
   const scopeOf = async (req) => {
     if (req.user.role === 'super_admin') return null
@@ -70,6 +82,12 @@ export function userRoutes({ audit = async () => {} } = {}) {
     const body = scopedBody(req.body, org)
     if (org && req.body?.organizationId === undefined) delete body.organizationId
     const before = await findUser(req.params.uid)
+    if (body.role && before && body.role !== before.role) {
+      // Your own role is changed by another administrator, never by yourself:
+      // otherwise the last admin can demote themselves out of the system.
+      if (req.params.uid === req.user.uid) throw badRequest('cannot_change_own_role')
+      if (['referee', 'judge'].includes(before.role)) await assertNotAssigned(req.params.uid)
+    }
     const user = await updateUser(req.params.uid, body)
     const pick = (u) => ({ email: u?.email, role: u?.role, seat: u?.seat ?? null, tournamentIds: u?.tournamentIds || [], tournamentRoles: u?.tournamentRoles || null, organizationId: u?.organizationId || null })
     await audit(req.user, { action: 'user.changed', entity: 'user', entityId: user.uid, before: pick(before), after: pick(user), reason: body.password ? 'password changed' : null })
@@ -82,6 +100,7 @@ export function userRoutes({ audit = async () => {} } = {}) {
     if (req.params.uid === req.user.uid) throw badRequest('cannot_delete_self')
     await assertInScope(req.params.uid, await scopeOf(req))
     const before = await findUser(req.params.uid)
+    if (before && ['referee', 'judge'].includes(before.role)) await assertNotAssigned(req.params.uid)
     await deleteUser(req.params.uid)
     await audit(req.user, { action: 'user.changed', entity: 'user', entityId: req.params.uid, before: { email: before?.email, role: before?.role }, reason: 'deleted' })
     res.status(204).end()

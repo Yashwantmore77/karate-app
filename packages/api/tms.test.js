@@ -20,7 +20,7 @@ const call = async (method, path, body, token) => {
 // PRD v1 §6: what a tournament needs before registration opens. The window
 // is wide because these tests run against the real clock.
 const READY = {
-  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2027-01-16',
+  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2099-12-31',
   registrationStart: '2020-01-01', registrationClose: '2099-12-31', contactMobile: '+91 98765 43210', contactEmail: 'office@open.example', country: 'India',
 }
 
@@ -41,7 +41,7 @@ afterEach(() => new Promise((resolve) => http.close(resolve)))
 const setUpTournament = async () => {
   const { body: { tournament } } = await call('POST', '/tournaments', {
     name: 'State Open', location: 'Pune', date: '2027-01-15', template: 'kumite',
-    masterAgeDate: '2027-01-01', type: 'kumite', slug: 'state-open', ...READY,
+    masterAgeDate: '2027-01-01', type: 'kata_kumite', slug: 'state-open', ...READY,
   }, tokens.admin)
   const t = tournament.id
   const { body: { ageGroup } } = await call('POST', `/tournaments/${t}/age-groups`, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 }, tokens.admin)

@@ -23,7 +23,7 @@ const crud = (segment, key) => ({
   list: async (tid) => (await get(`${T(tid)}/${segment}`))[`${key}s`],
   create: async (tid, doc) => (await send('POST', `${T(tid)}/${segment}`, doc))[key],
   update: async (tid, id, patch) => (await send('PATCH', `${T(tid)}/${segment}/${id}`, patch))[key],
-  remove: (tid, id) => send('DELETE', `${T(tid)}/${segment}/${id}`),
+  remove: (tid, id, reason = null) => send('DELETE', `${T(tid)}/${segment}/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`),
 })
 
 export const tms = {
@@ -62,6 +62,13 @@ export const tms = {
   ageGroups: crud('age-groups', 'ageGroup'),
   weightCategories: crud('weight-categories', 'weightCategory'),
   teams: crud('teams', 'team'),
+  teamMembers: {
+    list: async (tid) => (await get(`${T(tid)}/team-members`)).members,
+    create: async (tid, doc) => (await send('POST', `${T(tid)}/team-members`, doc)).member,
+    update: async (tid, id, patch) => (await send('PATCH', `${T(tid)}/team-members/${id}`, patch)).member,
+    remove: (tid, id) => send('DELETE', `${T(tid)}/team-members/${id}`),
+  },
+  applyCategoryPreset: (tid, preset) => send('POST', `${T(tid)}/category-presets`, { preset }),
   players: {
     list: async (tid, filter) => (await get(`${T(tid)}/players${qs(filter)}`)).players,
     // Screens count pages from 0 (as the MUI pager does); the API from 1.
@@ -106,6 +113,11 @@ export const tms = {
   correctResult: async (tid, mid, body, reason) => (await send('POST', `${T(tid)}/matches/${mid}/correct`, { ...body, reason: reason || null })).match,
   results: async (tid) => (await get(`${T(tid)}/results`)).results,
   generateBracket: async (tid, divisionKey) => (await send('POST', `${T(tid)}/brackets/generate`, { divisionKey })).bracket,
+  brackets: {
+    list: async (tid) => (await get(`${T(tid)}/brackets`)).brackets,
+    get: async (tid, divisionKey) => (await get(`${T(tid)}/bracket${qs({ divisionKey })}`)).bracket,
+    arrange: async (tid, divisionKey, layout) => (await send('PUT', `${T(tid)}/bracket/layout`, { divisionKey, layout })).bracket,
+  },
   publishResults: (tid, publish) => send('POST', `${T(tid)}/results/publish`, { publish }),
   medals: async (tid) => (await get(`${T(tid)}/medals`)).medals,
   tally: async (tid, by) => (await get(`${T(tid)}/medal-tally${qs({ by })}`)).tally,
@@ -166,6 +178,9 @@ export const tms = {
       return { team: res.team, session: { ...session, token: res.token } }
     },
     updateTeam: async (session, patch) => (await send('PATCH', '/coach/team', patch, { token: session.token })).team,
+    createMember: async (session, doc) => (await send('POST', '/coach/members', doc, { token: session.token })).member,
+    updateMember: async (session, id, patch) => (await send('PATCH', `/coach/members/${id}`, patch, { token: session.token })).member,
+    removeMember: (session, id) => send('DELETE', `/coach/members/${id}`, undefined, { token: session.token }),
     createPlayer: async (session, doc) => (await send('POST', '/coach/players', doc, { token: session.token })).player,
     updatePlayer: async (session, id, patch) => (await send('PATCH', `/coach/players/${id}`, patch, { token: session.token })).player,
     removePlayer: (session, id) => send('DELETE', `/coach/players/${id}`, undefined, { token: session.token }),

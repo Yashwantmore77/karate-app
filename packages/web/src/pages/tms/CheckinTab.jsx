@@ -10,7 +10,7 @@ import DataTable from '../../components/tms/DataTable'
 import { useLoading } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 
-const KIND_LABEL = { player: 'Athletes', coach: 'Coaches', official: 'Officials' }
+const KIND_LABEL = { player: 'Athletes', coach: 'Team managers & coaches', official: 'Judges & referees' }
 const ROLE_COLOR = { player: 'primary', coach: 'success', official: 'secondary' }
 
 /**

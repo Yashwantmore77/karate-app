@@ -8,7 +8,7 @@ import { matchLifecycle } from '@kumite/shared/lifecycle.js'
 import { humanize } from '../../components/tms/StatusBadge'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { settingsOf } from '@kumite/shared/tms.js'
-import { tms } from '../../data/tms'
+import { tms, describeError } from '../../data/tms'
 import { listOfficials } from '../../data/officials'
 import { matches as matchStore } from '../../data/domain'
 import DataTable from '../../components/tms/DataTable'
@@ -73,6 +73,8 @@ export default function MatchesTab({ tournament, version, action }) {
   const [view, setView] = useState('queue')
   const [mat, setMat] = useState('')
   const [schedule, setSchedule] = useState(null)
+  const [scheduleError, setScheduleError] = useState(null)
+  const [saving, setSaving] = useState(false)
   const [correct, setCorrect] = useState(null)
   const [officials, setOfficials] = useState([])
   const [log, setLog] = useState(null) // { m, events }
@@ -175,10 +177,12 @@ export default function MatchesTab({ tournament, version, action }) {
         <DialogActions><Button onClick={() => setLog(null)}>Close</Button></DialogActions>
       </Dialog>
 
-      <Dialog open={!!schedule} onClose={() => setSchedule(null)} maxWidth="xs" fullWidth>
+      <Dialog open={!!schedule} onClose={() => { setSchedule(null); setScheduleError(null) }} maxWidth="xs" fullWidth>
         <DialogTitle>Schedule {schedule?.number}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
+            {/* A refused schedule keeps what was typed and says who or what clashes. */}
+            {scheduleError && <Alert severity="error">{scheduleError}</Alert>}
             <TextField select label="Mat" value={schedule?.mat || 1} onChange={(e) => setSchedule({ ...schedule, mat: Number(e.target.value) })}>
               {Array.from({ length: settings.mats }, (_, i) => <MenuItem key={i + 1} value={i + 1}>Mat {i + 1}</MenuItem>)}
             </TextField>
@@ -194,15 +198,24 @@ export default function MatchesTab({ tournament, version, action }) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSchedule(null)}>Cancel</Button>
-          <Button variant="contained" onClick={async () => {
+          <Button onClick={() => { setSchedule(null); setScheduleError(null) }}>Cancel</Button>
+          <Button variant="contained" disabled={saving} onClick={async () => {
             const s = schedule
-            setSchedule(null)
-            // Through the match API, which gives the bout its slot and refuses to
-            // book anyone into two bouts at once.
-            await action.run(() => matchStore.update(s.categoryId, s.id, { mat: s.mat, scheduledAt: s.scheduledAt ? new Date(s.scheduledAt).toISOString() : null, refereeId: s.refereeId || null, judgeIds: s.judgeIds || [] }), 'Match scheduled')
-            load()
-          }}>Save</Button>
+            setSaving(true)
+            setScheduleError(null)
+            try {
+              // Through the match API, which gives the bout its slot and refuses to
+              // book anyone into two bouts at once.
+              await matchStore.update(s.categoryId, s.id, { mat: s.mat, scheduledAt: s.scheduledAt ? new Date(s.scheduledAt).toISOString() : null, refereeId: s.refereeId || null, judgeIds: s.judgeIds || [] })
+              setSchedule(null)
+              action.notify({ severity: 'success', text: 'Match scheduled' })
+              load()
+            } catch (err) {
+              setScheduleError(describeError(err))
+            } finally {
+              setSaving(false)
+            }
+          }}>{saving ? 'Saving…' : 'Save'}</Button>
         </DialogActions>
       </Dialog>
 
@@ -233,7 +246,7 @@ export default function MatchesTab({ tournament, version, action }) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCorrect(null)}>Cancel</Button>
-          <Button variant="contained" disabled={!!(correct && ((boutOutcome(correct.m) && !correct.reason.trim()) || (!['COMPLETED', 'CANCELLED'].includes(correct.resultType) && !correct.finishReason?.trim())))} onClick={async () => {
+          <Button variant="contained" disabled={action.busy || !!(correct && ((boutOutcome(correct.m) && !correct.reason.trim()) || (!['COMPLETED', 'CANCELLED'].includes(correct.resultType) && !correct.finishReason?.trim())))} onClick={async () => {
             const c = correct
             setCorrect(null)
             await action.run(() => tms.correctResult(tid, c.m.id, {

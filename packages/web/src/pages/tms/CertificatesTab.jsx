@@ -11,7 +11,7 @@ import { MEDAL_ICON } from './ResultsTab'
 import { useLoading } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 
-const TYPES = { medal: 'Medal winners', participation: 'Participation (every player who took part)', coach: 'Coaches', official: 'Referees and judges who worked' }
+const TYPES = { medal: 'Medal winners', participation: 'Participation (every player who took part)', coach: 'Team managers and coaches (from each team)', official: 'Judges and referees (staff accounts and team members)' }
 const TYPE_LABEL = { medal: 'Medal', participation: 'Participation', coach: 'Coach', official: 'Official', custom: 'Special award' }
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-')
 

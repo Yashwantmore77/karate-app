@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
 import dayjs from 'dayjs'
-import { Container, Box, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
+import { Container, Box, Alert, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
@@ -15,31 +15,23 @@ import { tournaments as tournamentStore } from '../../data/domain'
 import { formatDate } from '../../utils/dateUtils'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { describeError } from '../../data/tms'
 
-// The server applies these when a body leaves them out; the form shows the
-// same numbers so a new tournament is not a surprise.
-const DEFAULT_JUDGE_COUNT = 4
-const DEFAULT_SLOT_MINUTES = 15
+// What the tournament holds: decides which screens it needs (a Kumite-only
+// event has no kata panel, a Kata-only one no weigh-in). Panel size and slot
+// length keep the server's defaults and are tuned later in Settings.
+export const TOURNAMENT_TYPES = [
+  ['kata_kumite', 'Kata + Kumite'],
+  ['kumite', 'Kumite only'],
+  ['kata', 'Kata only'],
+]
+export const typeLabel = (t) => (TOURNAMENT_TYPES.find(([v]) => v === (t.type || 'kata_kumite')) || TOURNAMENT_TYPES[0])[1]
 
 const validationSchema = Yup.object({
   name: Yup.string().required('Tournament name required').min(3, 'Name too short'),
   location: Yup.string().required('Location required'),
   date: Yup.date().nullable().required('Date required'),
-  template: Yup.string().required('Template required'),
-  // Bounded the same way the API bounds them, so the form refuses what the
-  // server would refuse rather than failing after a round trip.
-  judgeCount: Yup.number()
-    .typeError('Judges must be a number')
-    .integer('Whole judges only')
-    .min(1, 'At least one judge')
-    .max(8, 'At most eight judges')
-    .required('Panel size required'),
-  slotMinutes: Yup.number()
-    .typeError('Slot length must be a number')
-    .integer('Whole minutes only')
-    .min(1, 'At least one minute')
-    .max(240, 'At most four hours')
-    .required('Slot length required'),
+  type: Yup.string().oneOf(TOURNAMENT_TYPES.map(([v]) => v)).required('Tournament type required'),
 })
 
 export default function AdminTournamentList({ uid }) {
@@ -47,6 +39,7 @@ export default function AdminTournamentList({ uid }) {
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
 
   const {
     rows: tournaments, total, page, limit, search, setSearch, setPage, refresh, reset, loading,
@@ -59,9 +52,8 @@ export default function AdminTournamentList({ uid }) {
       name: editingTournament?.name || '',
       location: editingTournament?.location || '',
       date: editingTournament?.date ? dayjs(editingTournament.date) : null,
-      template: editingTournament?.template || 'kata',
-      judgeCount: editingTournament?.judgeCount ?? DEFAULT_JUDGE_COUNT,
-      slotMinutes: editingTournament?.slotMinutes ?? DEFAULT_SLOT_MINUTES,
+      // An older tournament with no type holds both events.
+      type: editingTournament?.type || 'kata_kumite',
     },
     enableReinitialize: true,
     validationSchema,
@@ -74,11 +66,9 @@ export default function AdminTournamentList({ uid }) {
         name: values.name,
         location: values.location,
         date: formatDate(values.date),
-        template: values.template,
-        // Sent as numbers: the API types these strictly, and a text input
-        // hands back a string.
-        judgeCount: Number(values.judgeCount),
-        slotMinutes: Number(values.slotMinutes),
+        type: values.type,
+        // The scoring app's own field: kata scores by panel, everything else as bouts.
+        template: values.type === 'kata' ? 'kata' : 'kumite',
       }
       if (editingId) {
         await tournamentStore.update(editingId, fields)
@@ -120,8 +110,13 @@ export default function AdminTournamentList({ uid }) {
 
   const handleDelete = async (id) => {
     // The store cascades to categories, competitors and matches.
-    await tournamentStore.remove(id)
-    await refresh()
+    try {
+      await tournamentStore.remove(id)
+      setDeleteError(null)
+      await refresh()
+    } catch (err) {
+      setDeleteError(describeError(err))
+    }
     setDeleteConfirm(null)
   }
 
@@ -142,6 +137,7 @@ export default function AdminTournamentList({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
+        {deleteError && <Alert severity="error" onClose={() => setDeleteError(null)} sx={{ mb: 2 }}>{deleteError}</Alert>}
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           {/* The count is the total behind the search, not the rows on screen. */}
           <HelpTitle id="admin.tournaments" variant="h6">Tournaments ({total})</HelpTitle>
@@ -173,7 +169,7 @@ export default function AdminTournamentList({ uid }) {
                   <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Location</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Template</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 600 }}>Actions</TableCell>
                 </TableRow>
@@ -184,7 +180,7 @@ export default function AdminTournamentList({ uid }) {
                     <TableCell sx={{ fontWeight: 500 }}>{t.name}</TableCell>
                     <TableCell>{t.location}</TableCell>
                     <TableCell>{new Date(t.date).toLocaleDateString()}</TableCell>
-                    <TableCell>{t.template === 'kata' ? 'Kata (Form)' : 'Kumite (Combat)'}</TableCell>
+                    <TableCell>{typeLabel(t)}</TableCell>
                     <TableCell>
                       <Select
                         value={t.status}
@@ -213,7 +209,7 @@ export default function AdminTournamentList({ uid }) {
                       <IconButton
                         size="small"
                         color="primary"
-                        onClick={() => navigate(`/admin/tournament/${t.id}`)}
+                        onClick={() => navigate(`/admin/tournament/${t.id}/manage`)}
                         title="View"
                         sx={{ mr: 1 }}
                       >
@@ -295,54 +291,13 @@ export default function AdminTournamentList({ uid }) {
               />
             </LocalizationProvider>
 
-            <FormControl fullWidth margin="normal" error={!!formik.errors.template}>
-              <InputLabel>Scoring Template</InputLabel>
-              <Select
-                name="template"
-                value={formik.values.template}
-                onChange={formik.handleChange}
-                onBlur={formik.handleBlur}
-                label="Scoring Template"
-              >
-                <MenuItem value="kata">Kata (Form)</MenuItem>
-                <MenuItem value="kumite">Kumite (Combat)</MenuItem>
+            <FormControl fullWidth margin="normal" error={!!formik.errors.type}>
+              <InputLabel>Tournament type</InputLabel>
+              <Select name="type" value={formik.values.type} onChange={formik.handleChange} onBlur={formik.handleBlur} label="Tournament type">
+                {TOURNAMENT_TYPES.map(([v, label]) => <MenuItem key={v} value={v}>{label}</MenuItem>)}
               </Select>
-              {formik.errors.template && <FormHelperText>{formik.errors.template}</FormHelperText>}
+              <FormHelperText>{formik.errors.type || 'Categories, rules and everything else are set on the tournament screen after this.'}</FormHelperText>
             </FormControl>
-
-            {/* These two decide what "at the same time" means here: the slot
-                length is the window a bout holds everyone on it for, which is
-                what the double-booking check measures. */}
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid size={6}>
-                <TextField
-                  fullWidth
-                  type="number"
-                  name="judgeCount"
-                  label="Judges on a panel"
-                  value={formik.values.judgeCount}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  error={!!formik.errors.judgeCount}
-                  helperText={formik.errors.judgeCount || 'Usually 4'}
-                  inputProps={{ min: 1, max: 8 }}
-                />
-              </Grid>
-              <Grid size={6}>
-                <TextField
-                  fullWidth
-                  type="number"
-                  name="slotMinutes"
-                  label="Slot length (minutes)"
-                  value={formik.values.slotMinutes}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  error={!!formik.errors.slotMinutes}
-                  helperText={formik.errors.slotMinutes || 'How long a bout holds its people'}
-                  inputProps={{ min: 1, max: 240 }}
-                />
-              </Grid>
-            </Grid>
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>

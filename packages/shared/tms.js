@@ -11,6 +11,7 @@
 // locks, lifecycles, coaches touching only their own team, and the audit trail.
 
 import { calculateAge } from './age.js'
+import { CATEGORY_PRESETS, weightClasses } from './presets.js'
 import { categorizePlayer, categoryLabel, EVENTS } from './categories.js'
 import {
   TOURNAMENT_STATUS, REGISTRATION_STATUS, tournamentLifecycle, registrationLifecycle,
@@ -24,7 +25,7 @@ import { DomainError, rule, invalid, missing, denied } from './errors.js'
 import { DEFAULT_POOL_SIZE, DRAW_METHODS, POOL_MODES, drawPools, roundRobin, seededRandom, poolName, shuffle as shuffleWith, isUneven } from './pools.js'
 import {
   DEFAULT_RESULT_RULES, poolStandings, poolComplete, qualifierSeeds, buildBracket,
-  bracketMedals, poolMedals, medalTally, boutOutcome,
+  bracketMedals, poolMedals, medalTally, boutOutcome, nextPow2,
 } from './results.js'
 import {
   formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, playerIdentity, withoutReadOnly,
@@ -144,6 +145,31 @@ const pad = (n, width = 3) => String(n).padStart(width, '0')
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''))
 const LOCKED_PLAYER_FIELDS = ['dob', 'gender', 'weight', 'events', 'teamId']
 
+/**
+ * The people a team brings besides its players. One person may hold several
+ * roles: a team manager who also coaches, a coach who also judges.
+ */
+export const TEAM_MEMBER_ROLES = ['team_manager', 'coach', 'judge', 'referee']
+export const TEAM_MEMBER_ROLE_LABEL = { team_manager: 'Team Manager', coach: 'Coach', judge: 'Judge', referee: 'Referee' }
+export const memberRolesText = (roles = []) => TEAM_MEMBER_ROLES.filter((r) => roles.includes(r)).map((r) => TEAM_MEMBER_ROLE_LABEL[r]).join(' & ')
+// What an approval was given for: changing any of these sends a player back to verification.
+const REVERIFY_FIELDS = ['name', 'dob', 'gender', 'weight', 'events']
+const APPROVED_STATES = ['APPROVED', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'WEIGH_IN_PENDING', 'WEIGH_IN_VERIFIED', 'CATEGORY_CONFIRMED']
+
+/**
+ * The payment record after the fee changes (events added or dropped). A
+ * player who had paid less than the new fee owes the difference and shows as
+ * pending again; one who paid more is owed a refund.
+ */
+export function feeChange(payment = {}, fee) {
+  const current = payment || {}
+  if (current.status !== 'PAID') return { ...current, amount: fee }
+  const paid = current.paidAmount ?? current.amount ?? 0
+  const { balanceDue, refundDue, ...rest } = current
+  if (fee > paid) return { ...rest, amount: fee, paidAmount: paid, status: 'PENDING', balanceDue: fee - paid }
+  return { ...rest, amount: fee, paidAmount: paid, ...(paid > fee ? { refundDue: paid - fee } : {}) }
+}
+
 export function settingsOf(tournament) {
   const s = { ...DEFAULT_SETTINGS, ...(tournament?.settings || {}) }
   s.fees = { ...DEFAULT_SETTINGS.fees, ...(tournament?.settings?.fees || {}) }
@@ -233,6 +259,14 @@ export function tournamentProblems(t) {
     if (t[k] && !isLocalDateTime(t[k])) out.push({ field: k, message: 'Use a date, or a date and time' })
   }
   if (t.startDate && t.endDate && t.endDate < t.startDate) out.push({ field: 'endDate', message: 'End date cannot be before the start date' })
+  const day = (v) => String(v).slice(0, 10)
+  // On-site entries during the event are allowed; after its last day they are not.
+  if (t.registrationClose && (t.endDate || t.startDate) && isLocalDateTime(t.registrationClose) && day(t.registrationClose) > (t.endDate || t.startDate)) {
+    out.push({ field: 'registrationClose', message: 'Registration must close by the last day of the tournament' })
+  }
+  if (t.weighInDate && (t.endDate || t.startDate) && t.weighInDate > (t.endDate || t.startDate)) {
+    out.push({ field: 'weighInDate', message: 'Weigh-in must be on or before the last day of the tournament' })
+  }
   if (t.registrationStart && t.registrationClose && isLocalDateTime(t.registrationStart) && isLocalDateTime(t.registrationClose)
     && zonedInstant(t.registrationClose, tz, { endOfDay: true }) <= zonedInstant(t.registrationStart, tz)) {
     out.push({ field: 'registrationClose', message: 'Registration must close after it opens' })
@@ -243,6 +277,32 @@ export function tournamentProblems(t) {
 }
 
 /** PRD v1 §6: what must be filled in before registration can open. */
+/**
+ * The events a tournament holds, from its type. A tournament with no type
+ * set (older records only carry the scoring template) is treated as holding
+ * both, so nothing it already has is hidden.
+ */
+export function tournamentEvents(t) {
+  if (t?.type === 'kata') return ['kata']
+  if (t?.type === 'kumite') return ['kumite']
+  return ['kata', 'kumite']
+}
+
+/**
+ * What is wrong with a team's details, field by field ({} when nothing is),
+ * so the forms can say it before the server has to. `partial` checks only the
+ * fields given (an edit).
+ */
+export function teamProblems(team = {}, { partial = false } = {}) {
+  const out = {}
+  if (!partial || 'name' in team) {
+    if (len(team.name) < 2) out.name = 'Team name is required (at least 2 characters)'
+  }
+  if (team.email && !EMAIL_RE.test(String(team.email).trim())) out.email = 'Enter a valid email address'
+  if (team.mobile && !PHONE_RE.test(String(team.mobile).trim())) out.mobile = 'Enter a valid mobile number'
+  return out
+}
+
 export function registrationReadiness(t) {
   const missing = []
   const need = (ok, field, message) => { if (!ok) missing.push({ field, message }) }
@@ -339,8 +399,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    */
   const coachWindow = (tournament) => {
     const w = registrationWindow(tournament)
+    const status = lifecycleOf(tournament)
     const reason = tournament.entriesLocked ? 'entries_locked'
-      : lifecycleOf(tournament) !== T.REGISTRATION_OPEN ? 'registration_closed' : w.reason
+      // Still being set up: the organiser has not opened registration yet.
+      : status === T.DRAFT ? 'tournament_not_open'
+        : status !== T.REGISTRATION_OPEN ? 'registration_closed' : w.reason
     return { registrationOpen: !reason, closedReason: reason, opensAt: w.opensAt, closesAt: w.closesAt }
   }
 
@@ -350,6 +413,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (actor.tournamentId !== tournament.id) throw denied()
     if (teamId !== undefined && actor.teamId !== teamId) throw denied('not_your_team')
     if (tournament.entriesLocked) throw rule('entries_locked')
+    if (lifecycleOf(tournament) === T.DRAFT) throw rule('tournament_not_open')
     if (lifecycleOf(tournament) !== T.REGISTRATION_OPEN) throw rule('registration_closed')
     const window = registrationWindow(tournament)
     if (!window.open) throw rule(window.reason)
@@ -433,6 +497,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     }
     const next = { ...patch }
     if (patch.settings) next.settings = { ...(before.settings || {}), ...patch.settings }
+    // Changing the type may not drop an event players have already entered.
+    if ('type' in patch && patch.type !== before.type) {
+      const keep = tournamentEvents({ ...before, ...next })
+      const players = await stores.players.list({ tournamentId })
+      const stranded = ['kata', 'kumite'].filter((e) => !keep.includes(e) && players.some((p) => (p.events || []).includes(e)))
+      if (stranded.length) throw rule('type_has_entries', { events: stranded, players: players.filter((p) => (p.events || []).some((e) => stranded.includes(e))).length })
+    }
     const problems = tournamentProblems({ ...before, ...next })
     if (problems.length) throw invalid('invalid_tournament', { errors: problems })
     const after = await stores.tournaments.update(tournamentId, next)
@@ -725,7 +796,42 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     }
   })
 
+  /**
+   * Loads a standard category set (presets.js): every age group and weight
+   * class at once, then one re-categorisation. Refused as a whole when one of
+   * its age groups overlaps an existing one, so nothing is half-loaded.
+   */
+  async function applyCategoryPreset(actor, tournamentId, key) {
+    const preset = CATEGORY_PRESETS[key]
+    if (!preset) throw invalid('unknown_preset')
+    const tournament = await writableTournament(tournamentId)
+    assertConfigOpen(tournament)
+    const existing = (await stores.ageGroups.list({ tournamentId })).filter((g) => g.active !== false)
+    for (const g of preset.groups) {
+      const clash = existing.find((e) => genderClash(e.gender, g.gender) && g.minAge <= e.maxAge && e.minAge <= g.maxAge)
+      if (clash) throw rule('overlapping_age_group', { with: clash.name, preset: g.name })
+    }
+    let weights = 0
+    for (const g of preset.groups) {
+      const group = await stores.ageGroups.insert({ active: true, name: g.name, gender: g.gender, minAge: g.minAge, maxAge: g.maxAge, settings: {}, tournamentId })
+      for (const w of weightClasses(g.weights)) {
+        await stores.weightCategories.insert({ active: true, ageGroupId: group.id, ...w, settings: {}, tournamentId })
+        weights += 1
+      }
+    }
+    await record(actor, { tournamentId, action: A.CONFIG_CHANGED, entity: 'category_preset', entityId: key, after: { preset: preset.label, ageGroups: preset.groups.length, weightCategories: weights } })
+    await recategorizeAll(actor, tournamentId, { silent: true })
+    return { ageGroups: preset.groups.length, weightCategories: weights }
+  }
+
   // --- teams ------------------------------------------------------------------
+
+  /** Team contact details are what notices are sent to, so they must be usable. */
+  const assertTeamContact = (doc) => {
+    const problems = teamProblems(doc, { partial: true })
+    if (problems.email) throw invalid('invalid_email', { field: 'email' })
+    if (problems.mobile) throw invalid('invalid_mobile', { field: 'mobile' })
+  }
 
   const teams = {
     list: async (tournamentId) => (await stores.teams.list({ tournamentId })).sort(byName),
@@ -741,6 +847,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       } else if (tournament.entriesLocked) throw rule('entries_locked')
       doc = termsAccepted === true ? { ...fields, termsAcceptedAt: iso() } : fields
       if (!doc.name) throw invalid('name_required')
+      assertTeamContact(doc)
       const existing = await stores.teams.list({ tournamentId })
       // PRD v1 §7: team names normalised for duplicate detection.
       if (existing.some((t) => normalizeName(t.name) === normalizeName(doc.name))) throw rule('team_exists')
@@ -748,6 +855,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       const max = existing.reduce((m, t) => Math.max(m, Number(String(t.teamNumber || '').replace(/\D/g, '')) || 0), 0)
       const row = await stores.teams.insert({ active: true, ...doc, teamNumber: `T-${pad(max + 1)}`, tournamentId })
       await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: row.id, after: row })
+      // The coach named when registering is the team's first member.
+      if (String(doc.coachName || '').trim().length >= 2) {
+        await stores.teamMembers.insert({ tournamentId, teamId: row.id, name: String(doc.coachName).trim(), roles: ['coach'], mobile: doc.mobile || null, email: doc.email || null })
+      }
       if (isCoach(actor)) await notify(tournamentId, 'admin', 'new_registration', `New team registered: ${row.name}`)
       return row
     },
@@ -756,22 +867,105 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       assertCoachMayWrite(actor, tournament, id)
       const before = await inTournament('teams', tournamentId, id)
       if (isCoach(actor) && 'active' in patch) throw denied()
+      assertTeamContact(patch)
       if (patch.name && normalizeName(patch.name) !== normalizeName(before.name)
         && (await stores.teams.list({ tournamentId })).some((t) => t.id !== id && normalizeName(t.name) === normalizeName(patch.name))) throw rule('team_exists')
       const after = await stores.teams.update(id, patch)
       await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: id, before, after })
       return after
     },
-    async remove(actor, tournamentId, id) {
+    /**
+     * Deleting a team deletes its players. A coach may only remove an empty
+     * team; an organiser removing one with players gives a reason, and the
+     * names are kept in the audit log.
+     */
+    async remove(actor, tournamentId, id, reason = null) {
       const tournament = await writableTournament(tournamentId)
       if (tournament.entriesLocked) throw rule('entries_locked')
       assertCoachMayWrite(actor, tournament, id)
       const before = await inTournament('teams', tournamentId, id)
       const players = await stores.players.list({ tournamentId, teamId: id })
+      if (players.length && isCoach(actor)) throw rule('team_has_players', { players: players.length })
+      if (players.length && !reason) throw invalid('reason_required', { players: players.length })
       for (const p of players) await stores.players.remove(p.id)
+      await stores.teamMembers.removeWhere({ tournamentId, teamId: id })
       await stores.teams.remove(id)
-      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: id, before, reason: `deleted with ${players.length} players` })
+      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: id, before: { ...before, players: players.map((p) => p.name) }, reason: players.length ? `deleted with ${players.length} players: ${reason}` : 'deleted' })
     },
+  }
+
+  // --- team members (managers, coaches, judges, referees) -----------------------
+
+  /** Checks one member and returns it cleaned up; `partial` for an edit. */
+  const cleanMember = (doc, { partial = false } = {}) => {
+    const out = {}
+    if (!partial || 'name' in doc) {
+      const name = String(doc.name || '').trim().replace(/\s+/g, ' ')
+      if (name.length < 2 || name.length > 120) throw invalid('name_required', { field: 'name' })
+      out.name = name
+    }
+    if (!partial || 'roles' in doc) {
+      const roles = [...new Set(Array.isArray(doc.roles) ? doc.roles : [])]
+      if (!roles.length || roles.some((r) => !TEAM_MEMBER_ROLES.includes(r))) throw invalid('invalid_roles', { field: 'roles' })
+      out.roles = TEAM_MEMBER_ROLES.filter((r) => roles.includes(r))
+    }
+    for (const key of ['mobile', 'email', 'gender', 'qualification', 'notes']) if (key in doc) out[key] = doc[key] == null ? null : String(doc[key]).trim().slice(0, key === 'notes' ? 300 : 120) || null
+    if (out.email && !EMAIL_RE.test(out.email)) throw invalid('invalid_email', { field: 'email' })
+    if (out.mobile && !PHONE_RE.test(out.mobile)) throw invalid('invalid_mobile', { field: 'mobile' })
+    if (out.gender && !['M', 'F'].includes(out.gender)) throw invalid('invalid_gender', { field: 'gender' })
+    return out
+  }
+
+  const teamMembers = {
+    async list(tournamentId, { teamId = null } = {}) {
+      const rows = await stores.teamMembers.list(teamId ? { tournamentId, teamId } : { tournamentId })
+      return rows.sort((a, b) => String(a.teamId).localeCompare(String(b.teamId)) || byName(a, b))
+    },
+    async create(actor, tournamentId, input) {
+      const tournament = await writableTournament(tournamentId)
+      const teamId = isCoach(actor) ? actor.teamId : input.teamId
+      assertCoachMayWrite(actor, tournament, teamId)
+      await inTournament('teams', tournamentId, teamId).catch(() => { throw invalid('invalid_teamId') })
+      const doc = cleanMember(input)
+      const existing = await stores.teamMembers.list({ tournamentId, teamId })
+      if (existing.some((m) => normalizeName(m.name) === normalizeName(doc.name))) throw rule('member_exists', { name: doc.name })
+      const row = await stores.teamMembers.insert({ ...doc, tournamentId, teamId })
+      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team_member', entityId: row.id, after: { team: teamId, name: row.name, roles: row.roles } })
+      return row
+    },
+    async update(actor, tournamentId, id, input) {
+      const tournament = await writableTournament(tournamentId)
+      const before = await inTournament('teamMembers', tournamentId, id)
+      assertCoachMayWrite(actor, tournament, before.teamId)
+      const patch = cleanMember(input, { partial: true })
+      if (patch.name && normalizeName(patch.name) !== normalizeName(before.name)
+        && (await stores.teamMembers.list({ tournamentId, teamId: before.teamId })).some((m) => m.id !== id && normalizeName(m.name) === normalizeName(patch.name))) throw rule('member_exists', { name: patch.name })
+      const after = await stores.teamMembers.update(id, patch)
+      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team_member', entityId: id, before: { name: before.name, roles: before.roles }, after: { name: after.name, roles: after.roles } })
+      return after
+    },
+    async remove(actor, tournamentId, id) {
+      const tournament = await writableTournament(tournamentId)
+      const before = await inTournament('teamMembers', tournamentId, id)
+      assertCoachMayWrite(actor, tournament, before.teamId)
+      await stores.teamMembers.remove(id)
+      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team_member', entityId: id, before: { name: before.name, roles: before.roles }, reason: 'removed' })
+    },
+  }
+
+  /**
+   * Everyone a team brings besides players: its members, or, for a team
+   * registered before members existed, the coach named on the team.
+   */
+  async function teamStaff(tournamentId) {
+    const teamsById = new Map((await stores.teams.list({ tournamentId })).map((t) => [t.id, t]))
+    const members = await stores.teamMembers.list({ tournamentId })
+    const withMembers = new Set(members.map((m) => m.teamId))
+    const staff = members.filter((m) => teamsById.has(m.teamId)).map((m) => ({ ...m, team: teamsById.get(m.teamId), key: `member:${m.id}` }))
+    for (const t of teamsById.values()) {
+      if (!withMembers.has(t.id) && t.coachName) staff.push({ id: null, name: t.coachName, roles: ['coach'], team: t, key: `coach:${t.id}` })
+    }
+    return staff
   }
 
   // --- players ----------------------------------------------------------------
@@ -885,6 +1079,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const filled = withTeamDefaults(withDefaults(isCoach(actor) ? withoutReadOnly(input, fields) : input, fields), team, tournament.country)
     const { player, errors } = validatePlayer(filled, fields, { weightPrecision: cfg.settings.weightPrecision })
     if (errors.length) throw invalid('invalid_player', { errors })
+    assertEventsOffered(player, tournament)
     const existing = await stores.players.list({ tournamentId })
     // PRD v1 §21/§28: a possible duplicate is a warning to review and
     // confirm, never a silent merge.
@@ -929,6 +1124,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (!fits) throw invalid('not_age_eligible', { errors: [{ field: 'dob', message: `No age group in this tournament takes a ${age}-year-old ${player.gender === 'F' ? 'girl' : 'boy'}` }] })
   }
 
+  /** A player enters only events the tournament holds (Kata, Kumite or both). */
+  const assertEventsOffered = (player, tournament) => {
+    const offered = tournamentEvents(tournament)
+    const extra = (player.events || []).filter((e) => !offered.includes(e))
+    if (extra.length) {
+      throw invalid('invalid_player', { errors: [{ field: 'events', message: `This tournament is ${offered.map((e) => (e === 'kata' ? 'Kata' : 'Kumite')).join(' and ')} only; ${extra.map((e) => (e === 'kata' ? 'Kata' : 'Kumite')).join(' and ')} is not held` }] })
+    }
+  }
+
   /** PRD v1 §21 "Info: age boundary notice": at the top of their age group. */
   const ageNotices = (player, cfg) => {
     const out = []
@@ -951,6 +1155,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const merged = { ...before, ...sent, extra: { ...(before.extra || {}), ...(sent.extra || {}) } }
     const { player, errors } = validatePlayer(merged, fields, { weightPrecision: cfg.settings.weightPrecision })
     if (errors.length) throw invalid('invalid_player', { errors })
+    if ('events' in input) assertEventsOffered(player, cfg.tournament)
     const patch = { ...player }
     if (input.teamId && !isCoach(actor)) {
       await inTournament('teams', tournamentId, input.teamId).catch(() => { throw invalid('invalid_teamId') })
@@ -966,9 +1171,18 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
     Object.assign(patch, categorizeFields({ ...before, ...patch }, cfg))
     if (patch.events && patch.events.join() !== (before.events || []).join()) {
-      patch.payment = { ...(before.payment || {}), amount: feeFor(patch, cfg.settings) }
+      patch.payment = feeChange(before.payment, feeFor(patch, cfg.settings))
     }
+    // A coach changing who the player is, or what they enter, after approval
+    // sends them back to the officer (PRD v1 §8): approval was for the old details.
+    const identityChanged = REVERIFY_FIELDS.filter((k) => k in patch && JSON.stringify(patch[k]) !== JSON.stringify(before[k]))
+    const reverify = isCoach(actor) && APPROVED_STATES.includes(before.registrationStatus) && identityChanged.length > 0
+    if (reverify) patch.registrationStatus = R.PENDING_VERIFICATION
     const after = await stores.players.update(id, patch)
+    if (reverify) {
+      await record(actor, { tournamentId, action: A.PLAYER_REVERIFY, entity: 'player', entityId: id, before: { registrationStatus: before.registrationStatus }, after: { registrationStatus: R.PENDING_VERIFICATION }, reason: `Coach changed ${identityChanged.join(', ')} after approval` })
+      await notify(tournamentId, 'admin', 'reverify', `${after.name}: changed by the coach after approval (${identityChanged.join(', ')}); check again`)
+    }
     const auditBefore = {}
     const auditAfter = {}
     for (const [k, change] of Object.entries(diff(before, after))) {
@@ -995,7 +1209,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const tournament = await tournamentOf(tournamentId)
     const teamRows = await stores.teams.list({ tournamentId })
     const existing = await stores.players.list({ tournamentId })
-    return validateBulkRows(parseCsv(csv), {
+    const preview = validateBulkRows(parseCsv(csv), {
       fields: formFields(tournament),
       teams: isCoach(actor) ? teamRows.filter((t) => t.id === actor.teamId) : teamRows,
       existing,
@@ -1003,6 +1217,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       defaultCountry: tournament.country || null,
       weightPrecision: settingsOf(tournament).weightPrecision,
     })
+    // A row entering an event this tournament does not hold is an error here,
+    // before anything is imported.
+    const offered = tournamentEvents(tournament)
+    const notHeld = preview.valid.filter((p) => (p.events || []).some((e) => !offered.includes(e)))
+    if (notHeld.length) {
+      const errors = notHeld.map((p) => ({ row: (preview.rows || []).find((r) => r.player === p || r.name === p.name)?.row ?? null, field: 'events', message: `${p.name}: ${(p.events || []).filter((e) => !offered.includes(e)).map((e) => (e === 'kata' ? 'Kata' : 'Kumite')).join(', ')} is not held in this tournament` }))
+      return { ...preview, valid: preview.valid.filter((p) => !notHeld.includes(p)), errors: [...preview.errors, ...errors] }
+    }
+    return preview
   }
 
   /**
@@ -1067,6 +1290,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const before = await inTournament('players', tournamentId, id)
     if (payment.status && !PAYMENT_STATUS.includes(payment.status)) throw invalid('invalid_payment_status')
     const next = { ...(before.payment || {}), ...payment, recordedBy: actor?.uid || null, recordedAt: iso() }
+    // What was actually paid, so a later fee change can tell what is still owed.
+    if (next.status === 'PAID') {
+      next.paidAmount = payment.amount ?? next.amount ?? 0
+      delete next.balanceDue
+    }
     const patch = { payment: next }
     if (next.status === 'PAID') {
       let status = before.registrationStatus
@@ -1725,6 +1953,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const match = await stores.matches.get(matchId)
     if (!match) return null
     if (boutOutcome(match) || match.status === 'cancelled') return 'match_completed'
+    // A completed or archived tournament takes no more scoring.
+    const category = match.categoryId ? await stores.categories.get(match.categoryId) : null
+    const tournament = category?.tournamentId ? await stores.tournaments.get(category.tournamentId) : null
+    if ([T.COMPLETED, T.ARCHIVED].includes(lifecycleOf(tournament))) return 'tournament_closed'
     return null
   }
 
@@ -1733,7 +1965,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const category = match?.categoryId ? await stores.categories.get(match.categoryId) : null
     const tournamentId = category?.tournamentId || null
     if (!tournamentId) return
-    await record(actor, { tournamentId, action: A.SCORE_BLOCKED, entity: 'match', entityId: matchId, after: { cmd, blocked: why }, reason: `${cmd} refused: bout ${match.matchNumber || ''} is already decided` })
+    await record(actor, { tournamentId, action: A.SCORE_BLOCKED, entity: 'match', entityId: matchId, after: { cmd, blocked: why }, reason: `${cmd} refused: ${why === 'tournament_closed' ? 'the tournament is closed' : `bout ${match.matchNumber || ''} is already decided`}` })
   }
 
   /**
@@ -2156,7 +2388,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   async function syncBracket(tournamentId, key) {
     const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
     if (!bracket) return null
-    const skeleton = buildBracket(bracket.entries)
+    const skeleton = buildBracket(bracket.entries, bracket.layout || null)
     const stored = new Map((await stores.matches.list({ categoryId: bracket.categoryId }))
       .filter((m) => m.stage === 'knockout').map((m) => [m.bracketKey, m]))
     const merged = new Map()
@@ -2233,6 +2465,44 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return [...merged.values()]
   }
 
+  /**
+   * The organiser arranges the first round by hand (drag and drop on the
+   * bracket): `layout` lists the places AKA, AO, AKA, AO … with null for a
+   * bye. Allowed until the first bout of the bracket starts; the bouts are
+   * then rebuilt from the new arrangement (times and panels set on the old
+   * ones go with them).
+   */
+  async function arrangeBracket(actor, tournamentId, key, layout) {
+    const tournament = await writableTournament(tournamentId)
+    const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
+    if (!bracket) throw missing('bracket_not_found')
+    const bouts = (await stores.matches.list({ categoryId: bracket.categoryId })).filter((m) => m.stage === 'knockout')
+    // Once a bout is called to the mat (or later), the draw stays as it is.
+    if (bouts.some((m) => boutOutcome(m) || ['called', 'ready', 'live', 'open', 'paused'].includes(m.status))) throw rule('bracket_started')
+    const ids = bracket.entries.map((e) => e.id)
+    const size = nextPow2(ids.length)
+    if (!Array.isArray(layout) || layout.length !== size) throw invalid('invalid_layout', { size })
+    const placed = layout.filter(Boolean)
+    if (placed.length !== ids.length || new Set(placed).size !== placed.length || placed.some((id) => !ids.includes(id))) throw invalid('invalid_layout', { size })
+    // Every first-round bout needs at least one player, or the next round waits for nobody.
+    for (let i = 0; i < size; i += 2) if (!layout[i] && !layout[i + 1]) throw invalid('empty_bout', { bout: i / 2 + 1 })
+    if (layout.some((id) => !id)) assertByesAllowed(ids.length, settingsOf(tournament))
+    for (const m of bouts) await stores.matches.remove(m.id)
+    await stores.brackets.update(bracket.id, { layout: layout.map((id) => id || null) })
+    const names = new Map((await stores.competitors.list({ categoryId: bracket.categoryId })).map((c) => [c.id, c.name]))
+    await record(actor, { tournamentId, action: A.BRACKET_ARRANGED, entity: 'division', entityId: key, after: { firstRound: Array.from({ length: size / 2 }, (_, i) => `${names.get(layout[i * 2]) || 'bye'} v ${names.get(layout[i * 2 + 1]) || 'bye'}`) } })
+    return bracketView(tournamentId, key)
+  }
+
+  /** Every bracket in the tournament, for choosing one on the bracket screen. */
+  async function listBrackets(tournamentId) {
+    const labels = new Map((await divisions(tournamentId)).map((d) => [d.key, d.label]))
+    return (await stores.brackets.list({ tournamentId })).map((b) => ({
+      divisionKey: b.divisionKey, label: labels.get(b.divisionKey) || b.divisionKey, entries: b.entries.length,
+      knockoutOnly: !!b.knockoutOnly, thirdPlace: !!b.thirdPlace, arranged: !!b.layout,
+    })).sort((a, b) => a.label.localeCompare(b.label))
+  }
+
   async function bracketView(tournamentId, key) {
     const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
     if (!bracket) return null
@@ -2249,9 +2519,18 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
           aka: s.aka ? { id: s.aka, name: competitors.get(s.aka)?.name, playerId: competitors.get(s.aka)?.playerId } : null,
           ao: s.ao ? { id: s.ao, name: competitors.get(s.ao)?.name, playerId: competitors.get(s.ao)?.playerId } : null,
           akaScore: s.avgRed ?? null, aoScore: s.avgBlue ?? null,
+          won: (() => { const o = boutOutcome(s); return o && o.winner !== 'draw' ? o.winner : null })(),
+          live: ['live', 'open', 'paused'].includes(s.status),
         })),
       })),
       slots,
+      // For the drag-and-drop board: the first round place by place, and who is in it.
+      size: (bracket.layout || []).length || nextPow2(bracket.entries.length),
+      layout: bracket.layout || buildBracket(bracket.entries).filter((m) => m.round === 1).sort((a, b) => a.slot - b.slot).flatMap((m) => [m.aka || null, m.ao || null]),
+      entries: bracket.entries.map((e) => ({ id: e.id, playerId: e.playerId, pool: e.pool || null, place: e.place || null, name: competitors.get(e.id)?.name || '', team: competitors.get(e.id)?.teamId || null })),
+      thirdPlace: !!bracket.thirdPlace,
+      started: slots.some((m) => boutOutcome(m) || ['called', 'ready', 'live', 'open', 'paused'].includes(m.status)),
+      categoryId: bracket.categoryId,
     }
   }
 
@@ -2582,10 +2861,14 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         created += await issue({ type: 'participation', playerId: p.id, name: p.name, club: p.club || null, category: cats.join(', ') || null, event: (p.events || []).join(' & ') })
       }
     }
-    if (wanted.includes('coach')) {
-      for (const t of await stores.teams.list({ tournamentId })) {
-        if (!t.coachName) continue
-        created += await issue({ type: 'coach', personKey: `coach:${t.id}`, name: t.coachName, club: t.club || t.name, category: `Coach, ${t.name}` })
+    // Team members: coaches and managers get the coach certificate, judges and
+    // referees the officials' one; someone with both gets both.
+    if (wanted.includes('coach') || wanted.includes('official')) {
+      for (const m of await teamStaff(tournamentId)) {
+        const staffRoles = m.roles.filter((r) => ['team_manager', 'coach'].includes(r))
+        const officialRoles = m.roles.filter((r) => ['judge', 'referee'].includes(r))
+        if (wanted.includes('coach') && staffRoles.length) created += await issue({ type: 'coach', personKey: m.key, name: m.name, club: m.team.club || m.team.name, category: `${memberRolesText(staffRoles)}, ${m.team.name}` })
+        if (wanted.includes('official') && officialRoles.length) created += await issue({ type: 'official', personKey: `${m.key}:official`, name: m.name, club: m.team.club || m.team.name, category: memberRolesText(officialRoles) })
       }
     }
     if (wanted.includes('official')) {
@@ -2635,7 +2918,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const add = (doc) => {
       if (existing.has(doc.refKey)) return
       existing.add(doc.refKey)
-      fresh.push({ tournamentId, code: randomToken(10).toUpperCase(), role: PASS_ROLE[doc.kind], issuedAt: iso(), ...doc })
+      const { roleText, ...rest } = doc
+      fresh.push({ tournamentId, code: randomToken(10).toUpperCase(), role: roleText || PASS_ROLE[doc.kind], issuedAt: iso(), ...rest })
     }
     if (wanted.includes('player')) {
       for (const p of await stores.players.list({ tournamentId })) {
@@ -2645,10 +2929,14 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         add({ kind: 'player', refId: p.id, refKey: `player:${p.id}`, name: p.name, number: p.playerNumber || null, club: p.club || team?.club || team?.name || null, team: team?.name || null, category, photoFileId: p.photo || null })
       }
     }
-    if (wanted.includes('coach')) {
-      for (const t of teams.values()) {
-        if (!t.coachName) continue
-        add({ kind: 'coach', refId: t.id, refKey: `coach:${t.id}`, name: t.coachName, number: t.teamNumber || null, club: t.club || t.name, team: t.name, category: `Coach, ${t.name}` })
+    // Team members: managers and coaches as team staff, judges and referees
+    // as technical officials (with their team noted). Several roles, one pass.
+    if (wanted.includes('coach') || wanted.includes('official')) {
+      for (const m of await teamStaff(tournamentId)) {
+        const officialOnly = m.roles.every((r) => ['judge', 'referee'].includes(r))
+        const kind = officialOnly ? 'official' : 'coach'
+        if (!wanted.includes(kind)) continue
+        add({ kind, refId: m.id || m.team.id, refKey: m.key, name: m.name, number: m.team.teamNumber || null, club: m.team.club || m.team.name, team: m.team.name, category: `${memberRolesText(m.roles)}, ${m.team.name}`, roleText: memberRolesText(m.roles) })
       }
     }
     if (wanted.includes('official')) {
@@ -2799,6 +3087,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const tournament = await tournamentOf(actor.tournamentId)
     const team = actor.teamId ? await stores.teams.get(actor.teamId) : null
     const players = team ? await stores.players.list({ tournamentId: tournament.id, teamId: team.id }) : []
+    const members = team ? await teamMembers.list(tournament.id, { teamId: team.id }) : []
     const notes = team ? (await stores.notifications.list({ tournamentId: tournament.id, audience: 'team' }))
       .filter((n) => !n.teamId || n.teamId === team.id) : []
     return {
@@ -2807,6 +3096,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       form: formFields(tournament).filter((f) => f.visible !== false),
       team,
       players: players.sort(byName),
+      members,
       notifications: notes.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 50),
     }
   }
@@ -2918,6 +3208,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       scheduledMatches: matches.filter((m) => m.mat || m.scheduledAt).length,
       matchesWithReferee: matches.filter((m) => m.refereeId).length,
       teams: teamRows.length,
+      teamMembers: (await stores.teamMembers.list({ tournamentId })).length,
       players: players.length,
       kataPlayers: count((p) => p.events?.includes('kata')),
       kumitePlayers: count((p) => p.events?.includes('kumite')),
@@ -3000,19 +3291,25 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   }
 
   /** Cascade for a deleted tournament: nothing it owned may be left behind. */
-  async function purgeTournament(tournamentId) {
-    for (const name of ['ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals', 'certificates', 'registrationLinks', 'notifications', 'files']) {
-      await stores[name].removeWhere({ tournamentId })
+  /**
+   * Removes everything a tournament owns. `matchIds` are its bouts, whose
+   * saved live state is kept by bout rather than by tournament.
+   */
+  async function purgeTournament(tournamentId, { matchIds = [] } = {}) {
+    for (const name of ['ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals', 'certificates', 'registrationLinks', 'notifications', 'files',
+      'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'divisionResults', 'passes', 'apiKeys', 'teamMembers']) {
+      if (stores[name]) await stores[name].removeWhere({ tournamentId })
     }
+    if (stores.liveStates) for (const id of matchIds) await stores.liveStates.remove(id)
   }
 
   return {
     // tournament
     updateTournament, setLifecycle, setEntriesLock, setDrawLock, updateForm, purgeTournament,
     // configuration
-    ageGroups, weightCategories,
+    ageGroups, weightCategories, applyCategoryPreset,
     // registration
-    teams, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
+    teams, teamMembers, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
     setRegistrationStatus, recordPayment, recordWeighIn,
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, drawImpact, setQualifiers, decideSingleEntry,
@@ -3020,7 +3317,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     generateMatches, listMatches, correctResult, swapCorners, callMatch, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
-    assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket,
+    assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket, arrangeBracket, listBrackets,
     publishResults, verifyResult, assertResultEditable, setDivisionLock, coachCertificates, generatePasses, listPasses, checkIn, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
     // rulesets and locks
     listRulesets, resolveRuleset, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
@@ -3039,7 +3336,7 @@ export const TMS_COLLECTIONS = [
   'ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals',
   'certificates', 'registrationLinks', 'notifications', 'auditLog', 'files',
   'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'organizations',
-  'rulesets', 'divisionResults', 'liveStates', 'passes',
+  'rulesets', 'divisionResults', 'liveStates', 'passes', 'teamMembers',
 ]
 
 export { DomainError, poolName }

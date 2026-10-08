@@ -22,7 +22,7 @@ const reached = (t, status) => ORDER.indexOf(t.lifecycleStatus || T.DRAFT) >= OR
 export const WORKFLOW = [
   {
     id: 'create', title: 'Create the tournament', tab: null, where: 'Admin → Tournaments → New tournament', who: 'Admin',
-    what: 'Give the tournament a name and date. Everything else is filled in on the tournament screen.',
+    what: 'Give the tournament a name, place, date and type (Kata, Kumite or both). Everything else is filled in on the tournament screen.',
     done: () => true,
   },
   {
@@ -167,6 +167,11 @@ export const TAB_GUIDE = {
     before: { tab: 'draw', text: 'Matches generated' },
     after: { tab: 'call', text: 'Call the matches on competition day' },
   },
+  bracket: {
+    text: 'The draw sheet on screen. Before the first bout, drag players between places to arrange the draw (or give byes), then save. During the event, drag each winner into the next box to record the result; 1st, 2nd and 3rd fill in by themselves.',
+    before: { tab: 'draw', text: 'Matches generated (knockout categories)' },
+    after: { tab: 'results', text: 'Check and publish results' },
+  },
   kata: {
     text: 'Kata rounds per category: open a round, seat the judges, enter scores and choose who goes through.',
     before: { tab: 'draw', text: 'Kata pools drawn' },
@@ -203,13 +208,13 @@ export const TAB_GUIDE = {
 /** What each signed-in role does, for the "How it works" guide. */
 export const ROLE_GUIDE = {
   admin: [
-    'Create a tournament in Tournaments, then open it with "Manage" to reach every step.',
+    'Create a tournament in Tournaments, then open it (eye icon) to reach every step.',
     'The bar under the tabs always shows where you are and what comes next.',
     'Add staff accounts in Accounts and give each the right role.',
   ],
   super_admin: [
     'Everything an admin does, plus Organisations and Rulesets.',
-    'Create a tournament in Tournaments, then open it with "Manage" to reach every step.',
+    'Create a tournament in Tournaments, then open it (eye icon) to reach every step.',
   ],
   registration_officer: [
     'Choose the tournament, then go to Registrations.',
@@ -237,7 +242,7 @@ export const ROLE_GUIDE = {
     'Open Scoreboard on the display device and add ?mat=N to show one mat.',
   ],
   coach: [
-    'Add your team\'s players while registration is open.',
+    'Add your team\'s players while registration is open, and your team members (manager, coaches, judges, referees).',
     'Check their status (approved, payment, weigh-in) and download certificates after the event.',
   ],
   viewer: [
@@ -293,7 +298,8 @@ export const HELP = {
 
   'categories.age': {
     title: 'Age groups',
-    text: 'Age bands such as U12 or Cadet, worked out on the Master Age Calculation Date. Each player goes into the age group that fits.',
+    text: 'Age bands such as U-14 or Cadet, worked out on the Master Age Calculation Date. Each player goes into the age group that fits.',
+    tips: ['"Load standard categories" adds a complete set in one step (for example SGFI: U-14, U-17 and U-19 with their weight classes). Everything stays editable.', 'Two age groups for the same gender may not share an age unless you switch on "Allow overlap".'],
     next: 'Add weight categories (Kumite).',
   },
   'categories.weight': {
@@ -305,7 +311,7 @@ export const HELP = {
   'registrations.teams': { title: 'Teams', text: 'Clubs or schools taking part. Each player belongs to one team. Coaches create their own team when they register.' },
   'registrations.views': {
     title: 'Lists on this page',
-    text: 'Players: everyone registered, with their status. Teams: the clubs taking part. Possible duplicates: players who may have been entered twice. Bulk upload: add many players at once from an Excel file.',
+    text: 'Players: everyone registered, with their status. Teams: the clubs taking part. Team members: each team\'s team managers, coaches, judges and referees (one person can hold several roles). Possible duplicates: players who may have been entered twice. Bulk upload: add many players at once from an Excel file.',
   },
   'registrations.approveAll': {
     title: 'Approve all pending',
@@ -343,7 +349,7 @@ export const HELP = {
   'draw.pools': {
     title: 'Step 2: Lock entries and draw pools',
     text: 'Entries must be locked first. Then draw the pools for each category: players are placed at random, keeping team-mates apart where possible.',
-    tips: ['You can move a player between pools with a reason, until the draw is locked.'],
+    tips: ['You can move a player between pools with a reason, until the draw is locked.', '"Print draw sheet" prints the paper bracket for the mat table (one sheet per pool, signed by four judges and the referee). "Blank draw sheet" prints an empty one.'],
     next: 'Step 3: lock the draw and generate matches.',
   },
   'draw.matches': {
@@ -359,6 +365,13 @@ export const HELP = {
     next: 'On the day: Call matches, then score on the console.',
   },
 
+  'bracket.board': {
+    title: 'Bracket',
+    text: 'Pick a category. "Arrange draw": drag a player onto another place to swap them, or onto an empty place for a bye, then Save draw. "Record results": drag the winner into the next box (or tap the bout) and say how it ended.',
+    tips: ['On a phone or tablet, tap one place and then another to swap.', 'The draw is fixed once the first bout of the bracket starts.', 'Bouts scored on the referee console show here too.', 'Print gives the paper sheet for the mat table.'],
+    before: 'Matches generated for a knockout category, or the final stage generated in Results.',
+    next: 'Results: verify and publish the medals.',
+  },
   'kata.rounds': {
     title: 'Kata rounds',
     text: 'For each Kata category: open round 1, choose the judges for each seat, enter or collect scores, then finish the round and open the next one.',
@@ -410,8 +423,8 @@ export const HELP = {
   // --- admin -------------------------------------------------------------
   'admin.tournaments': {
     title: 'Tournaments',
-    text: 'All tournaments you can manage. Create a new one here, then open it and press "Manage" to run it step by step.',
-    next: 'Open the tournament → Manage → Settings.',
+    text: 'All tournaments you can manage. Create a new one here (name, place, date and type), then open it with the eye icon to run it step by step.',
+    next: 'Open the tournament → Settings.',
   },
   'admin.tournamentDetail': {
     title: 'Tournament page',
@@ -468,6 +481,6 @@ export const HELP = {
   },
   'coach.portal': {
     title: 'Team registration',
-    text: 'Register your team and add players while registration is open. Check each player\'s status, and download certificates after the event.',
+    text: 'Register your team and add players while registration is open. Under Team members, list your team managers, coaches and any judges or referees you bring; tick every role a person holds. Check each player\'s status, and download certificates after the event.',
   },
 }

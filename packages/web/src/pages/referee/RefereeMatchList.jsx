@@ -20,6 +20,7 @@ import StandingsTable from '../../components/StandingsTable'
 import * as users from '../../data/users'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { describeError } from '../../data/tms'
 
 // Used until a tournament says otherwise; matches the server's own default.
 const DEFAULT_JUDGE_COUNT = 4
@@ -50,7 +51,7 @@ const MESSAGES = {
   // is only the headline above it.
   schedule_conflict: 'Somebody on this bout, or the mat, is already busy at that time.',
 }
-const messageFor = (err) => MESSAGES[err?.code] || 'Could not save that. Try again.'
+const messageFor = (err) => MESSAGES[err?.code] || (err?.code && err.code !== 'error' ? describeError(err) : 'Could not save that. Try again.')
 
 const drawMessage = (err) => {
   if (err?.code === 'too_many_for_round_robin') {
@@ -80,6 +81,7 @@ export default function RefereeMatchList({ uid, profile }) {
   // the draw is made, and who is officiating is settled later.
   const [editingMatch, setEditingMatch] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleteReason, setDeleteReason] = useState('')
   const [drawConfirm, setDrawConfirm] = useState(false)
   // What the last draw did, or why it could not. Kept apart from `error`,
   // which belongs to the dialog and to deletes.
@@ -259,14 +261,18 @@ export default function RefereeMatchList({ uid, profile }) {
 
   const handleDeleteMatch = async (matchId) => {
     try {
-      await matchStore.remove(categoryId, matchId)
+      await matchStore.remove(categoryId, matchId, deleteReason.trim() || null)
       setError(null)
       await Promise.all([refresh(), loadAllMatches()])
     } catch (err) {
       setError(messageFor(err))
     }
     setDeleteConfirm(null)
+    setDeleteReason('')
   }
+
+  // A bout that was fought is removed only as a recorded correction (Rule 6).
+  const deletingFought = !!allMatches.find((m) => m.id === deleteConfirm && (m.status === 'completed' || m.winner))
 
   const handleDraw = async () => {
     setDrawConfirm(false)
@@ -680,14 +686,18 @@ export default function RefereeMatchList({ uid, profile }) {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
+      <Dialog open={!!deleteConfirm} onClose={() => { setDeleteConfirm(null); setDeleteReason('') }}>
         <DialogTitle>Delete Match?</DialogTitle>
         <DialogContent>
           <Typography>This will permanently remove this match and any judge scores submitted for it. This cannot be undone.</Typography>
+          {deletingFought && (
+            <TextField fullWidth required multiline minRows={2} sx={{ mt: 2 }} label="Reason (this bout has a result)" value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)} helperText="Recorded in the audit log (Rule 6)." />
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-          <Button onClick={() => handleDeleteMatch(deleteConfirm)} variant="contained" color="error">Delete</Button>
+          <Button onClick={() => { setDeleteConfirm(null); setDeleteReason('') }}>Cancel</Button>
+          <Button onClick={() => handleDeleteMatch(deleteConfirm)} variant="contained" color="error" disabled={deletingFought && !deleteReason.trim()}>Delete</Button>
         </DialogActions>
       </Dialog>
     </Box>

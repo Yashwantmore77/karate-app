@@ -146,7 +146,7 @@ export const poolComplete = (bouts) =>
 
 // --- knockout ------------------------------------------------------------------
 
-const nextPow2 = (n) => { let p = 1; while (p < n) p *= 2; return p }
+export const nextPow2 = (n) => { let p = 1; while (p < n) p *= 2; return p }
 
 /** Standard bracket order for `size` slots: 1 v size, and 1 and 2 in opposite halves. */
 export function seedOrder(size) {
@@ -188,11 +188,16 @@ export function qualifierSeeds(poolsStandings, qualifiersPerPool = DEFAULT_RESUL
  * is a bye: the seed goes straight through. Later rounds name their feeders
  * instead of players, so the bracket fills itself as results arrive.
  */
-export function buildBracket(entries) {
+/**
+ * The bracket's bouts. `layout`, when an organiser arranged the draw by hand,
+ * is the first round place by place (AKA, AO, AKA, AO …; null for a bye);
+ * otherwise entries are placed by seed.
+ */
+export function buildBracket(entries, layout = null) {
   if (entries.length < 2) return []
-  const size = nextPow2(entries.length)
+  const size = layout?.length || nextPow2(entries.length)
   const order = seedOrder(size)
-  const slots = order.map((seed) => entries[seed - 1]?.id ?? null)
+  const slots = layout ? layout.map((id) => id ?? null) : order.map((seed) => entries[seed - 1]?.id ?? null)
   const rounds = Math.log2(size)
   const matches = []
 

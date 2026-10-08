@@ -79,9 +79,11 @@ function memoryCollection(name) {
     async search(query = {}, options = {}) {
       return searchRows([...rows.values()], query, options)
     },
-    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25, official = null } = {}) {
+    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25, official = null, within = null } = {}) {
+      const allowed = within ? new Set(within.values) : null
       const found = [...rows.values()]
         .filter((row) => matchesFilter(row, filter))
+        .filter((row) => !allowed || allowed.has(row[within.field]))
         .filter((row) => assignedTo(row, official))
         .filter((row) => matchesSearch(row, q, searchFields))
       const start = (page - 1) * limit
@@ -176,11 +178,13 @@ function mongoCollection(name) {
       const [rows, total] = await Promise.all([cursor.toArray(), col.countDocuments(filter)])
       return { rows, total }
     },
-    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25, official = null } = {}) {
+    async paginate(filter = {}, { q = '', searchFields = [], page = 1, limit = 25, official = null, within = null } = {}) {
       const query = { ...filter }
       // Both of these are ORs, so they are combined under $and rather than
       // written to query.$or, where the second would overwrite the first.
       const conditions = []
+      // Only rows whose field is one of the given values (an account's reach).
+      if (within) conditions.push({ [within.field]: { $in: [...within.values] } })
 
       if (q && searchFields.length) {
         const pattern = new RegExp(escapeRegex(q), 'i')

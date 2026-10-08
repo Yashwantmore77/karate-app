@@ -29,12 +29,12 @@ const call = async (method, path, body, token, headers = {}) => {
 const login = async (email, password = 'test123') => (await call('POST', '/auth/login', { email, password })).body.token
 
 const READY = {
-  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2027-01-16',
+  organizer: 'State Karate Association', venue: 'Pune', startDate: '2027-01-15', endDate: '2099-12-31',
   registrationStart: '2020-01-01', registrationClose: '2099-12-31', contactMobile: '+91 98765 43210', contactEmail: 'office@open.example', country: 'India',
 }
 
 const tournament = async (slug = 'partner-open') => {
-  const { body } = await call('POST', '/tournaments', { name: 'Partner Open', location: 'Pune', date: '2027-01-15', template: 'kumite', masterAgeDate: '2027-01-01', type: 'kumite', slug, ...READY }, tokens.admin)
+  const { body } = await call('POST', '/tournaments', { name: 'Partner Open', location: 'Pune', date: '2027-01-15', template: 'kumite', masterAgeDate: '2027-01-01', type: 'kata_kumite', slug, ...READY }, tokens.admin)
   const t = body.tournament.id
   const { body: { ageGroup } } = await call('POST', `/tournaments/${t}/age-groups`, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 }, tokens.admin)
   await call('POST', `/tournaments/${t}/weight-categories`, { ageGroupId: ageGroup.id, name: '-35 KG', maxWeight: 35 }, tokens.admin)

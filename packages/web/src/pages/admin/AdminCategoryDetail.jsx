@@ -15,6 +15,7 @@ import {
 import { downloadCSV } from '../../utils/csvExport'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { describeError } from '../../data/tms'
 
 const validationSchema = Yup.object({
   name: Yup.string().required('Name required').min(2, 'Name too short'),
@@ -30,6 +31,7 @@ export default function AdminCategoryDetail({ uid }) {
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const {
@@ -98,8 +100,13 @@ export default function AdminCategoryDetail({ uid }) {
   }
 
   const handleDelete = async (id) => {
-    await competitorStore.remove(categoryId, id)
-    await refresh()
+    try {
+      await competitorStore.remove(categoryId, id)
+      setDeleteError(null)
+      await refresh()
+    } catch (err) {
+      setDeleteError(describeError(err))
+    }
     setDeleteConfirm(null)
   }
 
@@ -138,6 +145,7 @@ export default function AdminCategoryDetail({ uid }) {
       </PageBar>
 
       <Container maxWidth="lg" sx={{ py: 4, flex: 1 }}>
+        {deleteError && <Alert severity="error" onClose={() => setDeleteError(null)} sx={{ mb: 2 }}>{deleteError}</Alert>}
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h6">Competitors ({total})</Typography>
           <TableSearch value={search} onChange={setSearch} placeholder="Search name or bib" />

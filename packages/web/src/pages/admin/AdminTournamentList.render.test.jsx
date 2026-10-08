@@ -82,40 +82,30 @@ describe('AdminTournamentList - rendered UI', () => {
     expect(fake.rows('tournaments').map((t) => t.name)).toContain('Spring Cup')
   })
 
-  it('saves the slot length and panel size as numbers', async () => {
-    // The fields are text inputs, and the API types both strictly, so a "20"
-    // sent as a string is refused rather than stored.
-    fake.seed({ tournaments: [SPRING_CUP] })
+  it('asks for the tournament type, not panel size or slot length', async () => {
     const user = userEvent.setup()
     renderPage()
-
-    await user.click(await screen.findByRole('button', { name: /edit/i }))
+    await user.click(screen.getByRole('button', { name: /new tournament/i }))
     const dialog = screen.getByRole('dialog')
-    const slot = within(dialog).getByLabelText(/slot length/i)
-    await user.clear(slot)
-    await user.type(slot, '20')
-    const judges = within(dialog).getByLabelText(/judges on a panel/i)
-    await user.clear(judges)
-    await user.type(judges, '3')
-    await user.click(within(dialog).getByRole('button', { name: /update tournament/i }))
-
-    await vi.waitFor(() => expect(fake.rows('tournaments')[0].slotMinutes).toBe(20))
-    expect(fake.rows('tournaments')[0].judgeCount).toBe(3)
+    expect(within(dialog).queryByLabelText(/slot length/i)).toBeNull()
+    expect(within(dialog).queryByLabelText(/judges on a panel/i)).toBeNull()
+    // Kata + Kumite is the default.
+    expect(within(dialog).getByRole('combobox')).toHaveTextContent('Kata + Kumite')
   })
 
-  it('refuses a slot length outside 1 to 240 minutes', async () => {
+  it('saves the type, with the matching scoring template', async () => {
     fake.seed({ tournaments: [SPRING_CUP] })
     const user = userEvent.setup()
     renderPage()
 
     await user.click(await screen.findByRole('button', { name: /edit/i }))
     const dialog = screen.getByRole('dialog')
-    const slot = within(dialog).getByLabelText(/slot length/i)
-    await user.clear(slot)
-    await user.type(slot, '500')
+    await user.click(within(dialog).getByRole('combobox'))
+    await user.click(screen.getByRole('option', { name: 'Kumite only' }))
     await user.click(within(dialog).getByRole('button', { name: /update tournament/i }))
 
-    expect(await within(dialog).findByText(/at most four hours/i)).toBeInTheDocument()
-    expect(fake.rows('tournaments')[0].slotMinutes).toBe(15)
+    await vi.waitFor(() => expect(fake.rows('tournaments')[0]).toMatchObject({ type: 'kumite', template: 'kumite' }))
+    // Panel size and slot length are left as they were.
+    expect(fake.rows('tournaments')[0]).toMatchObject({ judgeCount: 4, slotMinutes: 15 })
   })
 })

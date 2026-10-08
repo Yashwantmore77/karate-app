@@ -80,7 +80,7 @@ export async function runMockTournament({
       const stamp = Date.now().toString(36)
       const { tournament } = await call('POST', '/tournaments', {
         name: `Mock Open ${stamp}`, location: 'Pune', date: '2027-03-20', template: 'kumite', type: 'kata_kumite', slug: `mock-open-${stamp}`,
-        masterAgeDate: '2027-01-01', organizer: 'Mock Karate Association', venue: 'Mock Sports Hall', startDate: '2027-03-20', endDate: '2027-03-21',
+        masterAgeDate: '2027-01-01', organizer: 'Mock Karate Association', venue: 'Mock Sports Hall', startDate: '2027-03-20', endDate: '2099-12-31',
         registrationStart: '2020-01-01', registrationClose: '2099-12-31', contactMobile: '+91 98765 43210', contactEmail: 'office@mock.example', country: 'India',
       }, ctx.admin)
       ctx.t = tournament.id

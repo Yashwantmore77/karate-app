@@ -39,6 +39,10 @@ describe('test tournament scenarios', () => {
     expect(Object.keys(count(reg, (p) => p.payment.status))).toEqual(expect.arrayContaining(['PAID', 'PENDING', 'FAILED', 'REFUNDED']))
     expect(reg.some((p) => p.duplicateOf)).toBe(true)
     expect(await stores.teams.list({ tournamentId: by['District Open'], active: false })).toHaveLength(1)
+    // Team members with several roles each.
+    const people = await stores.teamMembers.list({ tournamentId: by['District Open'] })
+    expect(people.some((m) => m.roles.includes('team_manager') && m.roles.includes('coach'))).toBe(true)
+    expect(people.some((m) => m.roles.includes('judge') && m.roles.includes('referee'))).toBe(true)
 
     // Coach links: open for the District Open only.
     const window = async (title) => tms.linkInfo((await stores.registrationLinks.list({ tournamentId: by[title] }))[0].token).catch((e) => ({ error: e.code }))

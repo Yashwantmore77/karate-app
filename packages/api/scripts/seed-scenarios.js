@@ -161,9 +161,19 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
     return { id: t.id, slug: base.slug, masterAgeDate, groups, categories }
   }
 
+  /**
+   * Teams, each with its people: the head coach (from the team form), a team
+   * manager who also coaches, and on every other team someone who is both a
+   * judge and a referee.
+   */
   async function teams(t, count = TEAMS.length) {
     const rows = []
-    for (const team of TEAMS.slice(0, count)) rows.push(await tms.teams.create(admin, t.id, team))
+    for (const [i, team] of TEAMS.slice(0, count).entries()) {
+      const row = await tms.teams.create(admin, t.id, team)
+      await tms.teamMembers.create(admin, t.id, { teamId: row.id, name: name(i % 2 ? 'F' : 'M'), roles: ['team_manager', 'coach'], mobile: `97${String(10000000 + i * 4321).slice(0, 8)}` })
+      if (i % 2 === 0) await tms.teamMembers.create(admin, t.id, { teamId: row.id, name: name('M'), roles: ['judge', 'referee'], qualification: 'State referee (Grade B)' })
+      rows.push(row)
+    }
     return rows
   }
 
@@ -419,6 +429,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
       'A possible duplicate player (same name and date of birth)',
       'A player too old for every age group (no category)',
       'An inactive team that cannot add players',
+      'Team members: head coach, a team manager who also coaches, and judges who also referee',
       'Kata only, Kumite only, and Kata + Kumite entries',
     ])
   }
@@ -508,14 +519,14 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
   // 7. READY: matches generated, scheduled, officials assigned, passes printed ----------------
   {
     const groups = [
-      { name: 'Cadets Male', gender: 'M', minAge: 14, maxAge: 15, weights: [['-57 KG', null, 57], ['+57 KG', 57, null]] },
+      { name: 'Cadets Male', gender: 'M', minAge: 14, maxAge: 15, weights: [['-57 KG', null, 57], ['+57 KG', 57, null, { poolSystem: 'knockout' }]] },
       { name: 'Cadets Female', gender: 'F', minAge: 14, maxAge: 15, weights: [['-54 KG', null, 54], ['+54 KG', 54, null]] },
     ]
     const t = await b.tournament({ name: 'Test 07 · Cadet Cup (ready to start)', slug: 'cadet-cup', start: 1, regOpen: -40, regClose: -6, groups, description: 'Everything is ready for tomorrow: matches scheduled, officials assigned, passes printed.' })
     await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
     const teamRows = await b.teams(t, 4)
     const all = [
-      ...await b.players(t, teamRows, 'Cadets Male', [{ events: ['kumite'], weight: '-57 KG', count: 6 }, { events: ['kumite'], weight: '+57 KG', count: 4 }, { events: ['kata'], count: 5 }]),
+      ...await b.players(t, teamRows, 'Cadets Male', [{ events: ['kumite'], weight: '-57 KG', count: 6 }, { events: ['kumite'], weight: '+57 KG', count: 6 }, { events: ['kata'], count: 5 }]),
       ...await b.players(t, teamRows, 'Cadets Female', [{ events: ['kumite'], weight: '-54 KG', count: 5 }, { events: ['kata', 'kumite'], weight: '+54 KG', count: 3 }]),
     ]
     await b.approve(t, all)
@@ -529,7 +540,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     await tms.generatePasses(admin, t.id, { kinds: ['player', 'coach'] })
     const passes = await tms.listPasses(t.id)
     for (const p of passes.slice(0, 8)) await tms.checkIn(admin, t.id, p.code)
-    note(t, 'Cadet Cup', 'READY', ['Draw locked, matches generated', 'Every match has a mat, a time' + (b.officials.referees.length ? ', a referee and judges' : ''), 'Corners swapped on one bout (with a reason)', `Accreditation passes printed (${passes.length}); 8 people checked in`])
+    note(t, 'Cadet Cup', 'READY', ['Draw locked, matches generated', 'A knockout category (+57 KG, 6 players) whose bracket can still be arranged by drag and drop', 'Every match has a mat, a time' + (b.officials.referees.length ? ', a referee and judges' : ''), 'Corners swapped on one bout (with a reason)', `Accreditation passes printed (${passes.length}); 8 people checked in`])
   }
 
   // 8. LIVE: every match and result situation ------------------------------------------------

@@ -73,6 +73,39 @@ Each fix below has a test in `packages/api/security.test.js`, `packages/api/prdv
 - **Headers:** responses default to `Cache-Control: no-store`; production adds `Strict-Transport-Security`.
 - **Load:** the public tournament page is computed once and shared until data changes. Before, 600 polling spectators pushed response times past 10 seconds, a denial of service needing no account (see *Load test* below).
 
+### 8. Second review (October): the scoring app's own routes, and business rules
+
+The routes that address categories, entrants and bouts by id (`/categories/:id`,
+`/competitors`, `/matches`) predate the tournament system and were missing its checks.
+
+| Finding | Severity | Fix |
+| --- | --- | --- |
+| An admin of one organisation could read, change or delete another organisation's categories, entrants and bouts by id; `GET /matches` listed every organisation's bouts | High | Every route resolves the record to its tournament and checks the caller's reach (`api/auth/categoryAccess.js`); the event-wide list pages only the caller's tournaments; coach sessions are refused |
+| Deleting a bout had no audit entry and worked on finished, published or locked results | High | Recorded in the audit log; a fought bout needs a reason and the score-correction privilege, and respects result locks; a bout of a locked draw is refused |
+| The old routes ignored the draw and closed tournaments | High | A category drawn by the tournament system is changed only through its draw; archived tournaments are read-only, completed ones take nothing new; categories and entrants with results are not deleted |
+| Live scoring was accepted for completed and archived tournaments | High | Refused and audited (`tournament_closed`) |
+| Deleting a tournament worked while live and left passes, kata scores, live logs, result records and coach logins behind | High | Refused while live; everything it owns is removed; the deletion is in the system audit log |
+| A coach could change an approved player's details and keep the approval | Medium | Sent back to verification, audited, organisers notified |
+| Adding an event after payment kept the player marked paid | Medium | The balance due (or refund due) is recorded and shown |
+| Team email and mobile were not validated; tournament dates were not cross-checked | Medium | Validated on the server and in both team forms; registration closes and weigh-in happens by the last day |
+| An official on unfinished bouts could be deleted or change role; an admin could demote themselves | Medium | Refused with the number of bouts; own role changes refused |
+| Deleting a team silently deleted its players | Medium | Coaches only remove empty teams; organisers give a reason, kept with the names |
+| A refused schedule lost what was typed and did not say what clashed; some Save buttons could be pressed twice | Low | The dialog stays open and names the clash; Save is disabled while saving |
+
+Tests: `api/integrity.test.js`, `shared/integrity.test.js`.
+
+### 9. Review of the tournament-type, bracket, team-member and SGFI changes
+
+| Finding | Severity | Fix |
+| --- | --- | --- |
+| A player could enter an event the tournament does not hold (Kata in a Kumite-only event), which the type-based tabs would then hide | Medium | Entries, edits and bulk uploads accept only the events the type holds; bulk rows are flagged in the preview with their row number |
+| Changing the type could drop an event players had already entered | Medium | Refused with the number of players (`type_has_entries`) |
+| Older tournaments carry only a scoring template; the tabs read it as the type and could hide Weigh-in or the Kata panel | Medium | No type set means both events, in one shared rule (`tournamentEvents`) used by the server and the screens |
+| A bracket could be rearranged after a bout was called to the mat | Low | "Started" now includes called and ready bouts |
+| The bracket screen did not show console results until reopened | Low | Refreshes every 15 seconds, never mid-arrangement, mid-drag or while a result is being entered |
+
+Checked and sound: team-member routes (permissions, a coach only reaches their own team, archived tournaments read-only, email/mobile checks, removed with their team); bracket arrangement (manager permission, tournament reach, every player placed once, no empty bout, byes only where allowed, audited); the SGFI set (category permission, refused as a whole on overlap, audited); the printed sheet escapes every name.
+
 ## Checked and found sound
 
 | Area | What is in place |

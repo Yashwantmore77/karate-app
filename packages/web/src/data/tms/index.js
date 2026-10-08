@@ -11,12 +11,57 @@ export function describeError(err) {
   const code = err?.code || err?.message || 'error'
   const details = err?.details
   if (details?.errors?.length) return details.errors.map((e) => (e.row ? `Row ${e.row}: ${e.message}` : e.message)).join('; ')
+  // A refused schedule names who (or which mat) is already busy, and where.
+  if (code === 'schedule_conflict' && details?.clashes?.length) {
+    const who = details.clashes.map((c) => (c.role === 'mat' ? `mat ${c.mat} is taken` : `the ${c.role || 'person'} is already on another bout${c.mat ? ` (mat ${c.mat})` : ''}`))
+    return `Time clash: ${[...new Set(who)].join('; ')}${details.clashes[0]?.scheduledAt ? ` at ${new Date(details.clashes[0].scheduledAt).toLocaleString()}` : ''}. Pick another time or mat.`
+  }
+  if (code === 'overlapping_age_group' && details?.with) return details.preset
+    ? `${details.preset} overlaps your age group "${details.with}". Delete or change "${details.with}" first, then load the set.`
+    : `These ages overlap the age group "${details.with}" for the same gender. Change the ages, or switch on "Allow overlap" if that is intended.`
+  if (code === 'overlapping_weight_category' && details?.with) return `These weights overlap "${details.with}" in the same age group. Change the weights, or switch on "Allow overlap" if that is intended.`
+  if (code === 'type_has_entries' && details?.events?.length) return `${details.players} player${details.players === 1 ? ' has' : 's have'} entered ${details.events.map((e) => (e === 'kata' ? 'Kata' : 'Kumite')).join(' and ')}, which this type would drop. Keep Kata + Kumite, or change those entries first.`
+  if (typeof details?.matches === 'number' && COUNTED[code]) return COUNTED[code](details.matches)
+  if (typeof details?.players === 'number' && COUNTED[code]) return COUNTED[code](details.players)
   // PRD v1 §6: what is still missing before registration can open, or what is wrong.
   const listed = details?.missing || details?.problems
   if (Array.isArray(listed) && listed.length) return `${ERROR_TEXT[code] || code.replace(/_/g, ' ')}: ${listed.map((m) => m.message || m.field || m).join(', ')}`
   return ERROR_TEXT[code] || code.replace(/_/g, ' ')
 }
+// Messages that carry a number the server sent with the refusal.
+const COUNTED = {
+  official_assigned: (n) => `This official is still on ${n} unfinished bout${n === 1 ? '' : 's'}. Put someone else on ${n === 1 ? 'it' : 'them'} first (Matches tab).`,
+  category_has_results: (n) => `${n} bout${n === 1 ? ' has' : 's have'} results in this category, so it cannot be deleted.`,
+  competitor_has_results: (n) => `This competitor has ${n} bout${n === 1 ? '' : 's'} with results, so they cannot be removed.`,
+  team_has_players: (n) => `This team has ${n} player${n === 1 ? '' : 's'}. Remove the players first, or ask the organiser.`,
+  reason_required: (n) => `This team has ${n} player${n === 1 ? '' : 's'}, who will be deleted too. Give a reason.`,
+}
+
 const ERROR_TEXT = {
+  overlapping_age_group: 'This age group overlaps another one for the same gender.',
+  overlapping_weight_category: 'This weight class overlaps another one in the same age group.',
+  unknown_preset: 'That category set is not available.',
+  tournament_not_open: 'The organiser has not opened registration yet.',
+  member_exists: 'Someone with that name is already listed for this team.',
+  invalid_roles: 'Pick at least one role: Team Manager, Coach, Judge or Referee.',
+  bracket_started: 'The first bout of this bracket has started, so the draw can no longer be rearranged.',
+  empty_bout: 'Every first-round bout needs at least one player. Move a player into the empty bout.',
+  invalid_layout: 'Every player must be placed exactly once.',
+  bracket_not_found: 'This category has no bracket yet.',
+  type_has_entries: 'Players have already entered an event this type would drop. Move or remove those entries first, or keep Kata + Kumite.',
+  managed_by_draw: 'This category is run by the tournament draw. Change it from the tournament screen (Draw / Pools), not here.',
+  tournament_archived: 'This tournament is archived and read-only.',
+  tournament_completed: 'This tournament is completed. Nothing new can be added to it.',
+  tournament_closed: 'This tournament is completed or archived, so no more scoring is accepted.',
+  tournament_live: 'This tournament is live. Complete it before deleting it.',
+  category_has_results: 'Bouts in this category have results, so it cannot be deleted.',
+  competitor_has_results: 'This competitor has bouts with results, so they cannot be removed.',
+  official_assigned: 'This official is still on unfinished bouts. Put someone else on them first.',
+  cannot_change_own_role: 'You cannot change your own role. Ask another administrator.',
+  team_has_players: 'This team still has players. Remove them first.',
+  invalid_email: 'Enter a valid email address.',
+  invalid_mobile: 'Enter a valid mobile number (digits, spaces or dashes, optionally starting with +).',
+  score_correction_forbidden: 'Only someone with the score-correction privilege can change or remove a finished bout.',
   entries_locked: 'Entries are locked. Unlock entries (with a reason) to change this.',
   entries_not_locked: 'Lock entries before generating pools.',
   draw_locked: 'The draw is locked. Unlock it (with a reason) to change pools.',
@@ -85,8 +130,6 @@ const ERROR_TEXT = {
   not_enough_competitors: 'At least two players are needed.',
   not_enough_qualifiers: 'Not enough qualifiers for a final stage.',
   not_single_entry: 'This category has more than one player.',
-  overlapping_age_group: 'This age group overlaps another for the same gender. Allow overlap to save it anyway.',
-  overlapping_weight_category: 'This weight category overlaps another in the age group. Allow overlap to save it anyway.',
   player_in_pool: 'The player is already drawn into a pool; unlock the draw to change their category.',
   player_withdrawn: 'This player has withdrawn.',
   pool_full: 'That pool is full.',

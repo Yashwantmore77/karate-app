@@ -12,7 +12,7 @@ import { partnerKeyHash, newPartnerKey } from './partner.js'
 import { certificatesPdf, tablePdf, passesPdf } from '../lib/pdf.js'
 import { REPORT_KEYS, REPORT_TITLE, REPORT_FILTERS, loadReportData, buildReport } from '@kumite/shared/reports.js'
 import { TOURNAMENT_STATUS, REGISTRATION_STATUS, MATCH_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES, POOL_SYSTEMS, KATA_METHODS, SETTING_CHOICES } from '@kumite/shared/tms.js'
+import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES, POOL_SYSTEMS, KATA_METHODS, SETTING_CHOICES, TEAM_MEMBER_ROLES } from '@kumite/shared/tms.js'
 import { OVERTIME_MODES, KATA_TIE_BREAKS } from '@kumite/shared/rulesets.js'
 import { POOL_MODES } from '@kumite/shared/pools.js'
 
@@ -47,6 +47,17 @@ const WEIGHT_CATEGORY = {
   active: { type: 'boolean', default: true },
   allowOverlap: { type: 'boolean' },
   settings: { type: 'object', nullable: true },
+}
+
+// One person a team brings besides players; several roles allowed.
+export const TEAM_MEMBER = {
+  name: { type: 'string', required: true, max: 120 },
+  roles: { type: 'array', items: { type: 'enum', values: TEAM_MEMBER_ROLES }, maxItems: 4, unique: true, required: true },
+  mobile: { type: 'string', max: 30, nullable: true },
+  email: { type: 'string', max: 200, nullable: true },
+  gender: { type: 'enum', values: ['M', 'F'], nullable: true },
+  qualification: { type: 'string', max: 120, nullable: true },
+  notes: { type: 'string', max: 300, nullable: true },
 }
 
 const TEAM = {
@@ -275,6 +286,27 @@ export function tmsRoutes(tms, stores) {
     })
   }
 
+  // Team members: managers, coaches, judges and referees a team brings.
+  router.get('/:tid/team-members', requirePermission(P.REGISTRATION_VIEW), async (req, res) => {
+    res.json({ members: await tms.teamMembers.list(tid(req), { teamId: typeof req.query.teamId === 'string' ? req.query.teamId : null }) })
+  })
+  router.post('/:tid/team-members', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
+    res.status(201).json({ member: await tms.teamMembers.create(withMeta(req), tid(req), validate(req.body, { ...TEAM_MEMBER, teamId: { ...ID, required: true } })) })
+  })
+  router.patch('/:tid/team-members/:id', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
+    res.json({ member: await tms.teamMembers.update(withMeta(req), tid(req), req.params.id, validate(req.body, TEAM_MEMBER, { partial: true })) })
+  })
+  router.delete('/:tid/team-members/:id', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
+    await tms.teamMembers.remove(withMeta(req), tid(req), req.params.id)
+    res.status(204).end()
+  })
+
+  // A standard category set (e.g. SGFI), loaded in one step.
+  router.post('/:tid/category-presets', requirePermission(P.CATEGORY_CONFIGURE), async (req, res) => {
+    const { preset } = validate(req.body, { preset: { type: 'string', required: true, max: 40 } })
+    res.status(201).json(await tms.applyCategoryPreset(withMeta(req), tid(req), preset))
+  })
+
   // --- teams and players (sections 13, 16, 17) ------------------------------
 
   router.get('/:tid/teams', requirePermission(P.REGISTRATION_VIEW), async (req, res) => res.json({ teams: await tms.teams.list(tid(req)) }))
@@ -285,7 +317,9 @@ export function tmsRoutes(tms, stores) {
     res.json({ team: await tms.teams.update(withMeta(req), tid(req), req.params.id, validate(req.body, TEAM, { partial: true })) })
   })
   router.delete('/:tid/teams/:id', requirePermission(P.RECORD_DELETE), async (req, res) => {
-    await tms.teams.remove(withMeta(req), tid(req), req.params.id)
+    // A team with players needs a reason (sent as ?reason=…).
+    const reason = typeof req.query.reason === 'string' ? req.query.reason.trim().slice(0, 300) || null : null
+    await tms.teams.remove(withMeta(req), tid(req), req.params.id, reason)
     res.status(204).end()
   })
 
@@ -553,6 +587,26 @@ export function tmsRoutes(tms, stores) {
     const { divisionKey, locked, reason } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, locked: { type: 'boolean', required: true }, reason: REASON })
     res.json(await tms.setDivisionLock(withMeta(req), tid(req), divisionKey, locked, reason))
   })
+  // The bracket screen: every bracket, one bracket, and arranging its first round.
+  router.get('/:tid/brackets', async (req, res) => res.json({ brackets: await tms.listBrackets(tid(req)) }))
+  router.get('/:tid/bracket', async (req, res) => {
+    const key = typeof req.query.divisionKey === 'string' ? req.query.divisionKey : ''
+    const bracket = await tms.bracketView(tid(req), key)
+    if (!bracket) return res.status(404).json({ error: 'bracket_not_found' })
+    const { slots, ...view } = bracket
+    res.json({ bracket: view })
+  })
+  router.put('/:tid/bracket/layout', requirePermission(P.POOL_MANAGE), async (req, res) => {
+    const { divisionKey } = validate({ divisionKey: req.body?.divisionKey }, { divisionKey: { type: 'string', required: true, max: 200 } })
+    // Places in order; null (or empty) is a bye.
+    const layout = req.body?.layout
+    if (!Array.isArray(layout) || layout.length > 128 || layout.some((id) => id != null && (typeof id !== 'string' || id.length > 80))) {
+      return res.status(400).json({ error: 'invalid_layout' })
+    }
+    const { slots, ...view } = await tms.arrangeBracket(withMeta(req), tid(req), divisionKey, layout.map((id) => id || null))
+    res.json({ bracket: view })
+  })
+
   router.post('/:tid/brackets/generate', requirePermission(P.MATCH_GENERATE), async (req, res) => {
     const { divisionKey } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 } })
     res.status(201).json({ bracket: await tms.generateBracket(withMeta(req), tid(req), divisionKey) })
