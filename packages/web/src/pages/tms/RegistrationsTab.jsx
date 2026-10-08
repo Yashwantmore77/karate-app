@@ -17,9 +17,10 @@ import BulkUpload from '../../components/tms/BulkUpload'
 import { openStoredFile } from '../../components/tms/download'
 import { useLoading } from '../../components/Loader'
 import InfoTip from '../../components/help/InfoTip'
+import TeamMembers from '../../components/tms/TeamMembers'
 
 const TEAM_FIELDS = [
-  ['name', 'Team name', 6], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
+  ['name', 'Team name', 6], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Head coach (first team member)', 4],
   ['contactPerson', 'Contact person', 4], ['mobile', 'Mobile', 4], ['email', 'Email', 4], ['district', 'District', 4],
   ['state', 'State', 4], ['country', 'Country', 4], ['address', 'Address', 12],
 ]
@@ -48,6 +49,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const [confirm, setConfirm] = useState(null)
   const [payment, setPayment] = useState(null)
   const [teamTouched, setTeamTouched] = useState(false)
+  const [members, setMembers] = useState([])
   const [override, setOverride] = useState(null)
   const [duplicates, setDuplicates] = useState(null)
   const [dupeRows, setDupeRows] = useState([])
@@ -57,7 +59,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const { loading, refreshing, wrap } = useLoading()
   const load = () => wrap(Promise.all([
     tms.teams.list(tid), tms.players.page(tid, clean({ ...filter, q: pageQuery.q }), pageQuery), tms.ageGroups.list(tid), tms.weightCategories.list(tid),
-  ]).then(([t, p, g, w]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w) }))
+    tms.teamMembers.list(tid).catch(() => []),
+  ]).then(([t, p, g, w, m]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w); setMembers(m) }))
   useEffect(() => { load() }, [tid, version, JSON.stringify(filter), JSON.stringify(pageQuery)])
   // A filter change starts again from the first page.
   useEffect(() => { setPageQuery((q) => ({ ...q, page: 0 })) }, [JSON.stringify(filter)])
@@ -177,6 +180,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
       <ToggleButtonGroup exclusive value={view} onChange={(_e, v) => v && setView(v)} size="small">
         <ToggleButton value="players">Players ({loading ? '…' : paged.total})</ToggleButton>
         <ToggleButton value="teams">Teams ({loading ? '…' : teams.length})</ToggleButton>
+        <ToggleButton value="members">Team members ({loading ? '…' : members.length})</ToggleButton>
         <ToggleButton value="duplicates">Possible duplicates</ToggleButton>
         {manage && <ToggleButton value="bulk">Bulk upload</ToggleButton>}
       </ToggleButtonGroup>
@@ -184,6 +188,13 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
       </Stack>
 
       {locked && <Alert severity="info">Entries are locked: no new players, and DOB, gender, weight, events and team cannot change.</Alert>}
+
+      {view === 'members' && (
+        <TeamMembers members={members} teams={teams} loading={loading} canEdit={manage}
+          exportName={`${tournament.slug || 'tournament'}-team-members`}
+          onSave={async (doc, id) => { await (id ? tms.teamMembers.update(tid, id, doc) : tms.teamMembers.create(tid, doc)); action.notify({ severity: 'success', text: 'Team member saved' }); load() }}
+          onRemove={(id) => action.run(() => tms.teamMembers.remove(tid, id), 'Team member removed').then(load)} />
+      )}
 
       {view === 'teams' && (
         <DataTable
@@ -198,6 +209,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
             { key: 'name', label: 'Team' }, { key: 'club', label: 'Club' }, { key: 'code', label: 'Code' }, { key: 'coachName', label: 'Coach' },
             { key: 'mobile', label: 'Mobile' }, { key: 'state', label: 'State' },
             { key: 'players', label: 'Players', value: (t) => teamCounts[t.id] || 0, render: (t) => teamCounts[t.id] || 0 },
+            { key: 'members', label: 'Members', value: (t) => members.filter((m) => m.teamId === t.id).length, render: (t) => members.filter((m) => m.teamId === t.id).length },
             // PRD v1 §7: an inactive team cannot add players.
             { key: 'active', label: 'Active', value: (t) => (t.active === false ? 'No' : 'Yes'), render: (t) => (manage
               ? <Switch size="small" checked={t.active !== false} slotProps={{ input: { 'aria-label': `${t.name} active` } }}

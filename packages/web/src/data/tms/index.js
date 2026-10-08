@@ -41,6 +41,8 @@ const ERROR_TEXT = {
   overlapping_weight_category: 'This weight class overlaps another one in the same age group.',
   unknown_preset: 'That category set is not available.',
   tournament_not_open: 'The organiser has not opened registration yet.',
+  member_exists: 'Someone with that name is already listed for this team.',
+  invalid_roles: 'Pick at least one role: Team Manager, Coach, Judge or Referee.',
   managed_by_draw: 'This category is run by the tournament draw. Change it from the tournament screen (Draw / Pools), not here.',
   tournament_archived: 'This tournament is archived and read-only.',
   tournament_completed: 'This tournament is completed. Nothing new can be added to it.',

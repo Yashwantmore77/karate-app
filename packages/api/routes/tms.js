@@ -12,7 +12,7 @@ import { partnerKeyHash, newPartnerKey } from './partner.js'
 import { certificatesPdf, tablePdf, passesPdf } from '../lib/pdf.js'
 import { REPORT_KEYS, REPORT_TITLE, REPORT_FILTERS, loadReportData, buildReport } from '@kumite/shared/reports.js'
 import { TOURNAMENT_STATUS, REGISTRATION_STATUS, MATCH_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES, POOL_SYSTEMS, KATA_METHODS, SETTING_CHOICES } from '@kumite/shared/tms.js'
+import { PAYMENT_STATUS, WEIGH_IN_STATUS, RESULT_TYPES, POOL_SYSTEMS, KATA_METHODS, SETTING_CHOICES, TEAM_MEMBER_ROLES } from '@kumite/shared/tms.js'
 import { OVERTIME_MODES, KATA_TIE_BREAKS } from '@kumite/shared/rulesets.js'
 import { POOL_MODES } from '@kumite/shared/pools.js'
 
@@ -47,6 +47,17 @@ const WEIGHT_CATEGORY = {
   active: { type: 'boolean', default: true },
   allowOverlap: { type: 'boolean' },
   settings: { type: 'object', nullable: true },
+}
+
+// One person a team brings besides players; several roles allowed.
+export const TEAM_MEMBER = {
+  name: { type: 'string', required: true, max: 120 },
+  roles: { type: 'array', items: { type: 'enum', values: TEAM_MEMBER_ROLES }, maxItems: 4, unique: true, required: true },
+  mobile: { type: 'string', max: 30, nullable: true },
+  email: { type: 'string', max: 200, nullable: true },
+  gender: { type: 'enum', values: ['M', 'F'], nullable: true },
+  qualification: { type: 'string', max: 120, nullable: true },
+  notes: { type: 'string', max: 300, nullable: true },
 }
 
 const TEAM = {
@@ -274,6 +285,21 @@ export function tmsRoutes(tms, stores) {
       res.status(204).end()
     })
   }
+
+  // Team members: managers, coaches, judges and referees a team brings.
+  router.get('/:tid/team-members', requirePermission(P.REGISTRATION_VIEW), async (req, res) => {
+    res.json({ members: await tms.teamMembers.list(tid(req), { teamId: typeof req.query.teamId === 'string' ? req.query.teamId : null }) })
+  })
+  router.post('/:tid/team-members', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
+    res.status(201).json({ member: await tms.teamMembers.create(withMeta(req), tid(req), validate(req.body, { ...TEAM_MEMBER, teamId: { ...ID, required: true } })) })
+  })
+  router.patch('/:tid/team-members/:id', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
+    res.json({ member: await tms.teamMembers.update(withMeta(req), tid(req), req.params.id, validate(req.body, TEAM_MEMBER, { partial: true })) })
+  })
+  router.delete('/:tid/team-members/:id', requirePermission(P.REGISTRATION_MANAGE), async (req, res) => {
+    await tms.teamMembers.remove(withMeta(req), tid(req), req.params.id)
+    res.status(204).end()
+  })
 
   // A standard category set (e.g. SGFI), loaded in one step.
   router.post('/:tid/category-presets', requirePermission(P.CATEGORY_CONFIGURE), async (req, res) => {

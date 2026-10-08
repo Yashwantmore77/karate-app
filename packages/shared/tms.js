@@ -144,6 +144,14 @@ export const parseDivisionKey = (key) => {
 const pad = (n, width = 3) => String(n).padStart(width, '0')
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''))
 const LOCKED_PLAYER_FIELDS = ['dob', 'gender', 'weight', 'events', 'teamId']
+
+/**
+ * The people a team brings besides its players. One person may hold several
+ * roles: a team manager who also coaches, a coach who also judges.
+ */
+export const TEAM_MEMBER_ROLES = ['team_manager', 'coach', 'judge', 'referee']
+export const TEAM_MEMBER_ROLE_LABEL = { team_manager: 'Team Manager', coach: 'Coach', judge: 'Judge', referee: 'Referee' }
+export const memberRolesText = (roles = []) => TEAM_MEMBER_ROLES.filter((r) => roles.includes(r)).map((r) => TEAM_MEMBER_ROLE_LABEL[r]).join(' & ')
 // What an approval was given for: changing any of these sends a player back to verification.
 const REVERIFY_FIELDS = ['name', 'dob', 'gender', 'weight', 'events']
 const APPROVED_STATES = ['APPROVED', 'PAYMENT_PENDING', 'PAYMENT_VERIFIED', 'WEIGH_IN_PENDING', 'WEIGH_IN_VERIFIED', 'CATEGORY_CONFIRMED']
@@ -829,6 +837,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       const max = existing.reduce((m, t) => Math.max(m, Number(String(t.teamNumber || '').replace(/\D/g, '')) || 0), 0)
       const row = await stores.teams.insert({ active: true, ...doc, teamNumber: `T-${pad(max + 1)}`, tournamentId })
       await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: row.id, after: row })
+      // The coach named when registering is the team's first member.
+      if (String(doc.coachName || '').trim().length >= 2) {
+        await stores.teamMembers.insert({ tournamentId, teamId: row.id, name: String(doc.coachName).trim(), roles: ['coach'], mobile: doc.mobile || null, email: doc.email || null })
+      }
       if (isCoach(actor)) await notify(tournamentId, 'admin', 'new_registration', `New team registered: ${row.name}`)
       return row
     },
@@ -858,9 +870,84 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       if (players.length && isCoach(actor)) throw rule('team_has_players', { players: players.length })
       if (players.length && !reason) throw invalid('reason_required', { players: players.length })
       for (const p of players) await stores.players.remove(p.id)
+      await stores.teamMembers.removeWhere({ tournamentId, teamId: id })
       await stores.teams.remove(id)
       await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: id, before: { ...before, players: players.map((p) => p.name) }, reason: players.length ? `deleted with ${players.length} players: ${reason}` : 'deleted' })
     },
+  }
+
+  // --- team members (managers, coaches, judges, referees) -----------------------
+
+  /** Checks one member and returns it cleaned up; `partial` for an edit. */
+  const cleanMember = (doc, { partial = false } = {}) => {
+    const out = {}
+    if (!partial || 'name' in doc) {
+      const name = String(doc.name || '').trim().replace(/\s+/g, ' ')
+      if (name.length < 2 || name.length > 120) throw invalid('name_required', { field: 'name' })
+      out.name = name
+    }
+    if (!partial || 'roles' in doc) {
+      const roles = [...new Set(Array.isArray(doc.roles) ? doc.roles : [])]
+      if (!roles.length || roles.some((r) => !TEAM_MEMBER_ROLES.includes(r))) throw invalid('invalid_roles', { field: 'roles' })
+      out.roles = TEAM_MEMBER_ROLES.filter((r) => roles.includes(r))
+    }
+    for (const key of ['mobile', 'email', 'gender', 'qualification', 'notes']) if (key in doc) out[key] = doc[key] == null ? null : String(doc[key]).trim().slice(0, key === 'notes' ? 300 : 120) || null
+    if (out.email && !EMAIL_RE.test(out.email)) throw invalid('invalid_email', { field: 'email' })
+    if (out.mobile && !PHONE_RE.test(out.mobile)) throw invalid('invalid_mobile', { field: 'mobile' })
+    if (out.gender && !['M', 'F'].includes(out.gender)) throw invalid('invalid_gender', { field: 'gender' })
+    return out
+  }
+
+  const teamMembers = {
+    async list(tournamentId, { teamId = null } = {}) {
+      const rows = await stores.teamMembers.list(teamId ? { tournamentId, teamId } : { tournamentId })
+      return rows.sort((a, b) => String(a.teamId).localeCompare(String(b.teamId)) || byName(a, b))
+    },
+    async create(actor, tournamentId, input) {
+      const tournament = await writableTournament(tournamentId)
+      const teamId = isCoach(actor) ? actor.teamId : input.teamId
+      assertCoachMayWrite(actor, tournament, teamId)
+      await inTournament('teams', tournamentId, teamId).catch(() => { throw invalid('invalid_teamId') })
+      const doc = cleanMember(input)
+      const existing = await stores.teamMembers.list({ tournamentId, teamId })
+      if (existing.some((m) => normalizeName(m.name) === normalizeName(doc.name))) throw rule('member_exists', { name: doc.name })
+      const row = await stores.teamMembers.insert({ ...doc, tournamentId, teamId })
+      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team_member', entityId: row.id, after: { team: teamId, name: row.name, roles: row.roles } })
+      return row
+    },
+    async update(actor, tournamentId, id, input) {
+      const tournament = await writableTournament(tournamentId)
+      const before = await inTournament('teamMembers', tournamentId, id)
+      assertCoachMayWrite(actor, tournament, before.teamId)
+      const patch = cleanMember(input, { partial: true })
+      if (patch.name && normalizeName(patch.name) !== normalizeName(before.name)
+        && (await stores.teamMembers.list({ tournamentId, teamId: before.teamId })).some((m) => m.id !== id && normalizeName(m.name) === normalizeName(patch.name))) throw rule('member_exists', { name: patch.name })
+      const after = await stores.teamMembers.update(id, patch)
+      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team_member', entityId: id, before: { name: before.name, roles: before.roles }, after: { name: after.name, roles: after.roles } })
+      return after
+    },
+    async remove(actor, tournamentId, id) {
+      const tournament = await writableTournament(tournamentId)
+      const before = await inTournament('teamMembers', tournamentId, id)
+      assertCoachMayWrite(actor, tournament, before.teamId)
+      await stores.teamMembers.remove(id)
+      await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team_member', entityId: id, before: { name: before.name, roles: before.roles }, reason: 'removed' })
+    },
+  }
+
+  /**
+   * Everyone a team brings besides players: its members, or, for a team
+   * registered before members existed, the coach named on the team.
+   */
+  async function teamStaff(tournamentId) {
+    const teamsById = new Map((await stores.teams.list({ tournamentId })).map((t) => [t.id, t]))
+    const members = await stores.teamMembers.list({ tournamentId })
+    const withMembers = new Set(members.map((m) => m.teamId))
+    const staff = members.filter((m) => teamsById.has(m.teamId)).map((m) => ({ ...m, team: teamsById.get(m.teamId), key: `member:${m.id}` }))
+    for (const t of teamsById.values()) {
+      if (!withMembers.has(t.id) && t.coachName) staff.push({ id: null, name: t.coachName, roles: ['coach'], team: t, key: `coach:${t.id}` })
+    }
+    return staff
   }
 
   // --- players ----------------------------------------------------------------
@@ -2689,10 +2776,14 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         created += await issue({ type: 'participation', playerId: p.id, name: p.name, club: p.club || null, category: cats.join(', ') || null, event: (p.events || []).join(' & ') })
       }
     }
-    if (wanted.includes('coach')) {
-      for (const t of await stores.teams.list({ tournamentId })) {
-        if (!t.coachName) continue
-        created += await issue({ type: 'coach', personKey: `coach:${t.id}`, name: t.coachName, club: t.club || t.name, category: `Coach, ${t.name}` })
+    // Team members: coaches and managers get the coach certificate, judges and
+    // referees the officials' one; someone with both gets both.
+    if (wanted.includes('coach') || wanted.includes('official')) {
+      for (const m of await teamStaff(tournamentId)) {
+        const staffRoles = m.roles.filter((r) => ['team_manager', 'coach'].includes(r))
+        const officialRoles = m.roles.filter((r) => ['judge', 'referee'].includes(r))
+        if (wanted.includes('coach') && staffRoles.length) created += await issue({ type: 'coach', personKey: m.key, name: m.name, club: m.team.club || m.team.name, category: `${memberRolesText(staffRoles)}, ${m.team.name}` })
+        if (wanted.includes('official') && officialRoles.length) created += await issue({ type: 'official', personKey: `${m.key}:official`, name: m.name, club: m.team.club || m.team.name, category: memberRolesText(officialRoles) })
       }
     }
     if (wanted.includes('official')) {
@@ -2742,7 +2833,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const add = (doc) => {
       if (existing.has(doc.refKey)) return
       existing.add(doc.refKey)
-      fresh.push({ tournamentId, code: randomToken(10).toUpperCase(), role: PASS_ROLE[doc.kind], issuedAt: iso(), ...doc })
+      const { roleText, ...rest } = doc
+      fresh.push({ tournamentId, code: randomToken(10).toUpperCase(), role: roleText || PASS_ROLE[doc.kind], issuedAt: iso(), ...rest })
     }
     if (wanted.includes('player')) {
       for (const p of await stores.players.list({ tournamentId })) {
@@ -2752,10 +2844,14 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         add({ kind: 'player', refId: p.id, refKey: `player:${p.id}`, name: p.name, number: p.playerNumber || null, club: p.club || team?.club || team?.name || null, team: team?.name || null, category, photoFileId: p.photo || null })
       }
     }
-    if (wanted.includes('coach')) {
-      for (const t of teams.values()) {
-        if (!t.coachName) continue
-        add({ kind: 'coach', refId: t.id, refKey: `coach:${t.id}`, name: t.coachName, number: t.teamNumber || null, club: t.club || t.name, team: t.name, category: `Coach, ${t.name}` })
+    // Team members: managers and coaches as team staff, judges and referees
+    // as technical officials (with their team noted). Several roles, one pass.
+    if (wanted.includes('coach') || wanted.includes('official')) {
+      for (const m of await teamStaff(tournamentId)) {
+        const officialOnly = m.roles.every((r) => ['judge', 'referee'].includes(r))
+        const kind = officialOnly ? 'official' : 'coach'
+        if (!wanted.includes(kind)) continue
+        add({ kind, refId: m.id || m.team.id, refKey: m.key, name: m.name, number: m.team.teamNumber || null, club: m.team.club || m.team.name, team: m.team.name, category: `${memberRolesText(m.roles)}, ${m.team.name}`, roleText: memberRolesText(m.roles) })
       }
     }
     if (wanted.includes('official')) {
@@ -2906,6 +3002,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const tournament = await tournamentOf(actor.tournamentId)
     const team = actor.teamId ? await stores.teams.get(actor.teamId) : null
     const players = team ? await stores.players.list({ tournamentId: tournament.id, teamId: team.id }) : []
+    const members = team ? await teamMembers.list(tournament.id, { teamId: team.id }) : []
     const notes = team ? (await stores.notifications.list({ tournamentId: tournament.id, audience: 'team' }))
       .filter((n) => !n.teamId || n.teamId === team.id) : []
     return {
@@ -2914,6 +3011,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       form: formFields(tournament).filter((f) => f.visible !== false),
       team,
       players: players.sort(byName),
+      members,
       notifications: notes.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 50),
     }
   }
@@ -3025,6 +3123,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       scheduledMatches: matches.filter((m) => m.mat || m.scheduledAt).length,
       matchesWithReferee: matches.filter((m) => m.refereeId).length,
       teams: teamRows.length,
+      teamMembers: (await stores.teamMembers.list({ tournamentId })).length,
       players: players.length,
       kataPlayers: count((p) => p.events?.includes('kata')),
       kumitePlayers: count((p) => p.events?.includes('kumite')),
@@ -3113,7 +3212,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    */
   async function purgeTournament(tournamentId, { matchIds = [] } = {}) {
     for (const name of ['ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals', 'certificates', 'registrationLinks', 'notifications', 'files',
-      'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'divisionResults', 'passes', 'apiKeys']) {
+      'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'divisionResults', 'passes', 'apiKeys', 'teamMembers']) {
       if (stores[name]) await stores[name].removeWhere({ tournamentId })
     }
     if (stores.liveStates) for (const id of matchIds) await stores.liveStates.remove(id)
@@ -3125,7 +3224,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // configuration
     ageGroups, weightCategories, applyCategoryPreset,
     // registration
-    teams, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
+    teams, teamMembers, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
     setRegistrationStatus, recordPayment, recordWeighIn,
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, drawImpact, setQualifiers, decideSingleEntry,
@@ -3152,7 +3251,7 @@ export const TMS_COLLECTIONS = [
   'ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals',
   'certificates', 'registrationLinks', 'notifications', 'auditLog', 'files',
   'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'organizations',
-  'rulesets', 'divisionResults', 'liveStates', 'passes',
+  'rulesets', 'divisionResults', 'liveStates', 'passes', 'teamMembers',
 ]
 
 export { DomainError, poolName }

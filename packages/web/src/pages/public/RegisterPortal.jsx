@@ -17,9 +17,10 @@ import { openStoredFile } from '../../components/tms/download'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { teamProblems } from '@kumite/shared/tms.js'
+import TeamMembers from '../../components/tms/TeamMembers'
 
 const TEAM_FIELDS = [
-  ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Coach name', 4],
+  ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Head coach (first team member)', 4],
   ['contactPerson', 'Contact person', 4], ['mobile', 'Mobile', 4], ['email', 'Email', 4], ['district', 'District', 4],
   ['state', 'State', 4], ['country', 'Country', 4], ['address', 'Address', 12],
 ]
@@ -202,9 +203,10 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
       {!canWrite && <Alert severity="info" sx={{ mb: 2 }}>{closedMessage(me)} You can still follow your players' status.</Alert>}
       <Paper sx={{ p: 2, mb: 2 }}>
         <HelpTitle id="coach.portal" variant="h3">{me.team.name}</HelpTitle>
-        <Typography color="text.secondary">{[me.team.club, me.team.coachName && `Coach ${me.team.coachName}`, me.team.state].filter(Boolean).join(' · ')}</Typography>
+        <Typography color="text.secondary">{[me.team.club, me.team.state].filter(Boolean).join(' · ')}</Typography>
         <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: 'wrap' }}>
           <Typography><b>{players.length}</b> players</Typography>
+          <Typography><b>{(me.members || []).length}</b> team members</Typography>
           <Typography><b>{players.filter((p) => !['DRAFT', 'SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus)).length}</b> approved</Typography>
           <Typography><b>{players.filter((p) => p.payment?.status === 'PAID').length}</b> paid</Typography>
           <Button size="small" component={RouterLink} to={`/tournament/${me.tournament.slug || me.tournament.id}`} target="_blank">Draw & results</Button>
@@ -215,10 +217,17 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
 
       <ToggleButtonGroup exclusive size="small" value={view} onChange={(_e, v) => v && setView(v)} sx={{ mb: 2 }}>
         <ToggleButton value="players">Players</ToggleButton>
+        <ToggleButton value="members">Team members ({(me.members || []).length})</ToggleButton>
         <ToggleButton value="bulk" disabled={!canWrite}>Bulk upload</ToggleButton>
         <ToggleButton value="notes">Notifications ({me.notifications.length})</ToggleButton>
         <ToggleButton value="certificates" onClick={() => tms.coach.certificates(session).then(setCertificates).catch(() => setCertificates([]))}>Certificates</ToggleButton>
       </ToggleButtonGroup>
+
+      {view === 'members' && (
+        <TeamMembers members={me.members || []} canEdit={canWrite} exportName={`${me.team.name}-team-members`}
+          onSave={async (doc, id) => { await (id ? tms.coach.updateMember(session, id, doc) : tms.coach.createMember(session, doc)); action.notify({ severity: 'success', text: 'Team member saved' }); load() }}
+          onRemove={(id) => action.run(() => tms.coach.removeMember(session, id), 'Team member removed').then(load)} />
+      )}
 
       {view === 'players' && (
         <DataTable rows={players} empty="No players yet. Add them one by one or with a bulk upload."

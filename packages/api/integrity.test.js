@@ -225,3 +225,58 @@ describe('loading a standard category set', () => {
     expect((await call('POST', `/tournaments/${t.id}/category-presets`, { preset: 'nope' }, adminToken)).body.error).toBe('unknown_preset')
   })
 })
+
+describe('team members: managers, coaches, judges and referees', () => {
+  it('lets a team list several people, each with one or more roles', async () => {
+    const adminToken = await login('admin@kata.local')
+    const t = (await call('POST', '/tournaments', { name: 'Members Cup', location: 'Dewas', date: '2026-12-01', template: 'kumite', type: 'kata_kumite' }, adminToken)).body.tournament
+    const team = (await call('POST', `/tournaments/${t.id}/teams`, { name: 'Dewas Dojo', coachName: 'Vinay Patel', mobile: '9999999999' }, adminToken)).body.team
+    // The coach named on the team is its first member.
+    let members = (await call('GET', `/tournaments/${t.id}/team-members`, undefined, adminToken)).body.members
+    expect(members).toMatchObject([{ name: 'Vinay Patel', roles: ['coach'], teamId: team.id }])
+
+    const add = (body) => call('POST', `/tournaments/${t.id}/team-members`, { teamId: team.id, ...body }, adminToken)
+    expect((await add({ name: 'Asha Rao', roles: ['team_manager', 'coach'] })).status).toBe(201)
+    expect((await add({ name: 'Ravi Kumar', roles: ['referee', 'judge'], email: 'ravi@x.in' })).body.member.roles).toEqual(['judge', 'referee'])
+    expect((await add({ name: 'No Role', roles: [] })).body.error).toBe('invalid_roles')
+    expect((await add({ name: 'Bad Role', roles: ['captain'] })).status).toBe(400)
+    expect((await add({ name: 'asha  rao', roles: ['coach'] })).body.error).toBe('member_exists')
+    expect((await add({ name: 'Bad Mail', roles: ['coach'], email: 'nope' })).body.error).toBe('invalid_email')
+
+    members = (await call('GET', `/tournaments/${t.id}/team-members`, undefined, adminToken)).body.members
+    const vinay = members.find((m) => m.name === 'Vinay Patel')
+    // A coach who is also a referee.
+    expect((await call('PATCH', `/tournaments/${t.id}/team-members/${vinay.id}`, { roles: ['coach', 'referee'] }, adminToken)).body.member.roles).toEqual(['coach', 'referee'])
+
+    // Passes: one each, with every role written on it.
+    await call('POST', `/tournaments/${t.id}/passes/generate`, { kinds: ['coach', 'official'] }, adminToken)
+    // (Staff accounts get official passes too; here only the team's people.)
+    const passes = (await call('GET', `/tournaments/${t.id}/passes`, undefined, adminToken)).body.passes.filter((p) => p.team === 'Dewas Dojo')
+    expect(passes.map((p) => [p.name, p.role]).sort()).toEqual([
+      ['Asha Rao', 'Team Manager & Coach'], ['Ravi Kumar', 'Judge & Referee'], ['Vinay Patel', 'Coach & Referee'],
+    ])
+    expect(passes.find((p) => p.name === 'Ravi Kumar').kind).toBe('official')
+
+    // Deleting the team takes its members with it.
+    expect((await call('DELETE', `/tournaments/${t.id}/teams/${team.id}`, undefined, adminToken)).status).toBe(204)
+    expect((await call('GET', `/tournaments/${t.id}/team-members`, undefined, adminToken)).body.members).toHaveLength(0)
+  })
+
+  it('lets a coach manage only their own team\'s members', async () => {
+    const t = await stores.tournaments.insert({ name: 'Coach Members', location: 'X', date: '2027-06-01', template: 'kumite' })
+    const admin = { uid: 'admin-uid-001', role: 'admin' }
+    await tms.updateTournament(admin, t.id, {
+      type: 'kata_kumite', masterAgeDate: '2027-06-01', organizer: 'Org', venue: 'Hall', startDate: '2027-06-01', endDate: '2099-12-31',
+      registrationStart: '2020-01-01', registrationClose: '2099-12-30', contactMobile: '9800000000', contactEmail: 'o@x.in',
+    })
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
+    const mine = await tms.teams.create(admin, t.id, { name: 'Mine' })
+    const other = await tms.teams.create(admin, t.id, { name: 'Other' })
+    const coach = { uid: 'c1', role: 'coach', tournamentId: t.id, teamId: mine.id }
+    const m = await tms.teamMembers.create(coach, t.id, { teamId: other.id, name: 'Sneaky Entry', roles: ['coach'] })
+    expect(m.teamId).toBe(mine.id) // a coach always adds to their own team
+    const theirs = await tms.teamMembers.create(admin, t.id, { teamId: other.id, name: 'Their Coach', roles: ['coach'] })
+    await expect(tms.teamMembers.remove(coach, t.id, theirs.id)).rejects.toMatchObject({ code: 'not_your_team' })
+    expect((await tms.coachOverview(coach)).members.map((x) => x.name)).toEqual(['Sneaky Entry'])
+  })
+})

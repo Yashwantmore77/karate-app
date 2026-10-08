@@ -4,7 +4,7 @@ import { validate } from '../lib/validate.js'
 import { signCoachToken } from '../auth/jwt.js'
 import { createCoachAccount } from '../auth/users.js'
 import { badRequest } from '../lib/errors.js'
-import { playerBody, withMeta } from './tms.js'
+import { playerBody, withMeta, TEAM_MEMBER } from './tms.js'
 import { FILE_SCHEMA, sendFile } from './files.js'
 import { certificatesPdf } from '../lib/pdf.js'
 
@@ -63,6 +63,19 @@ export function coachRoutes(tms) {
   })
   router.delete('/players/:id', async (req, res) => {
     await tms.removePlayer(withMeta(req), t(req), req.params.id)
+    res.status(204).end()
+  })
+
+  // The team's managers, coaches, judges and referees.
+  router.get('/members', async (req, res) => res.json({ members: req.user.teamId ? await tms.teamMembers.list(t(req), { teamId: req.user.teamId }) : [] }))
+  router.post('/members', async (req, res) => {
+    res.status(201).json({ member: await tms.teamMembers.create(withMeta(req), t(req), validate(req.body, TEAM_MEMBER)) })
+  })
+  router.patch('/members/:id', async (req, res) => {
+    res.json({ member: await tms.teamMembers.update(withMeta(req), t(req), req.params.id, validate(req.body, TEAM_MEMBER, { partial: true })) })
+  })
+  router.delete('/members/:id', async (req, res) => {
+    await tms.teamMembers.remove(withMeta(req), t(req), req.params.id)
     res.status(204).end()
   })
 

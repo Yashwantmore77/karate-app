@@ -62,6 +62,12 @@ export const tms = {
   ageGroups: crud('age-groups', 'ageGroup'),
   weightCategories: crud('weight-categories', 'weightCategory'),
   teams: crud('teams', 'team'),
+  teamMembers: {
+    list: async (tid) => (await get(`${T(tid)}/team-members`)).members,
+    create: async (tid, doc) => (await send('POST', `${T(tid)}/team-members`, doc)).member,
+    update: async (tid, id, patch) => (await send('PATCH', `${T(tid)}/team-members/${id}`, patch)).member,
+    remove: (tid, id) => send('DELETE', `${T(tid)}/team-members/${id}`),
+  },
   applyCategoryPreset: (tid, preset) => send('POST', `${T(tid)}/category-presets`, { preset }),
   players: {
     list: async (tid, filter) => (await get(`${T(tid)}/players${qs(filter)}`)).players,
@@ -167,6 +173,9 @@ export const tms = {
       return { team: res.team, session: { ...session, token: res.token } }
     },
     updateTeam: async (session, patch) => (await send('PATCH', '/coach/team', patch, { token: session.token })).team,
+    createMember: async (session, doc) => (await send('POST', '/coach/members', doc, { token: session.token })).member,
+    updateMember: async (session, id, patch) => (await send('PATCH', `/coach/members/${id}`, patch, { token: session.token })).member,
+    removeMember: (session, id) => send('DELETE', `/coach/members/${id}`, undefined, { token: session.token }),
     createPlayer: async (session, doc) => (await send('POST', '/coach/players', doc, { token: session.token })).player,
     updatePlayer: async (session, id, patch) => (await send('PATCH', `/coach/players/${id}`, patch, { token: session.token })).player,
     removePlayer: (session, id) => send('DELETE', `/coach/players/${id}`, undefined, { token: session.token }),

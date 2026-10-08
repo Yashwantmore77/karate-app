@@ -161,9 +161,19 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
     return { id: t.id, slug: base.slug, masterAgeDate, groups, categories }
   }
 
+  /**
+   * Teams, each with its people: the head coach (from the team form), a team
+   * manager who also coaches, and on every other team someone who is both a
+   * judge and a referee.
+   */
   async function teams(t, count = TEAMS.length) {
     const rows = []
-    for (const team of TEAMS.slice(0, count)) rows.push(await tms.teams.create(admin, t.id, team))
+    for (const [i, team] of TEAMS.slice(0, count).entries()) {
+      const row = await tms.teams.create(admin, t.id, team)
+      await tms.teamMembers.create(admin, t.id, { teamId: row.id, name: name(i % 2 ? 'F' : 'M'), roles: ['team_manager', 'coach'], mobile: `97${String(10000000 + i * 4321).slice(0, 8)}` })
+      if (i % 2 === 0) await tms.teamMembers.create(admin, t.id, { teamId: row.id, name: name('M'), roles: ['judge', 'referee'], qualification: 'State referee (Grade B)' })
+      rows.push(row)
+    }
     return rows
   }
 
@@ -419,6 +429,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
       'A possible duplicate player (same name and date of birth)',
       'A player too old for every age group (no category)',
       'An inactive team that cannot add players',
+      'Team members: head coach, a team manager who also coaches, and judges who also referee',
       'Kata only, Kumite only, and Kata + Kumite entries',
     ])
   }

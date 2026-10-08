@@ -237,7 +237,7 @@ export const ROLE_GUIDE = {
     'Open Scoreboard on the display device and add ?mat=N to show one mat.',
   ],
   coach: [
-    'Add your team\'s players while registration is open.',
+    'Add your team\'s players while registration is open, and your team members (manager, coaches, judges, referees).',
     'Check their status (approved, payment, weigh-in) and download certificates after the event.',
   ],
   viewer: [
@@ -306,7 +306,7 @@ export const HELP = {
   'registrations.teams': { title: 'Teams', text: 'Clubs or schools taking part. Each player belongs to one team. Coaches create their own team when they register.' },
   'registrations.views': {
     title: 'Lists on this page',
-    text: 'Players: everyone registered, with their status. Teams: the clubs taking part. Possible duplicates: players who may have been entered twice. Bulk upload: add many players at once from an Excel file.',
+    text: 'Players: everyone registered, with their status. Teams: the clubs taking part. Team members: each team\'s team managers, coaches, judges and referees (one person can hold several roles). Possible duplicates: players who may have been entered twice. Bulk upload: add many players at once from an Excel file.',
   },
   'registrations.approveAll': {
     title: 'Approve all pending',
@@ -469,6 +469,6 @@ export const HELP = {
   },
   'coach.portal': {
     title: 'Team registration',
-    text: 'Register your team and add players while registration is open. Check each player\'s status, and download certificates after the event.',
+    text: 'Register your team and add players while registration is open. Under Team members, list your team managers, coaches and any judges or referees you bring; tick every role a person holds. Check each player\'s status, and download certificates after the event.',
   },
 }
