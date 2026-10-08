@@ -280,3 +280,55 @@ describe('team members: managers, coaches, judges and referees', () => {
     expect((await tms.coachOverview(coach)).members.map((x) => x.name)).toEqual(['Sneaky Entry'])
   })
 })
+
+describe('arranging a bracket by hand', () => {
+  it('rebuilds the first round from the arrangement, until the first bout starts', async () => {
+    const adminToken = await login('admin@kata.local')
+    const admin = { uid: 'admin-uid-001', role: 'admin' }
+    const t = await stores.tournaments.insert({ name: 'Bracket Cup', location: 'Dewas', date: '2027-06-01', template: 'kumite' })
+    await tms.updateTournament(admin, t.id, {
+      type: 'kumite', masterAgeDate: '2027-06-01', organizer: 'Org', venue: 'Hall', startDate: '2027-06-01', endDate: '2099-12-31',
+      registrationStart: '2020-01-01', registrationClose: '2099-12-30', contactMobile: '9800000000', contactEmail: 'o@x.in',
+      settings: { poolSystem: 'knockout', requireWeighInForDraw: false, emailNotifications: false },
+    })
+    const g = await tms.ageGroups.create(admin, t.id, { name: 'Seniors', gender: 'M', minAge: 18, maxAge: 40 })
+    await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-60 KG', maxWeight: 60 })
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
+    const team = await tms.teams.create(admin, t.id, { name: 'Dojo' })
+    for (const n of ['Aarav Shah', 'Bhavin Rao', 'Chetan Iyer', 'Dev Patil', 'Eshan More']) {
+      const p = await tms.createPlayer(admin, t.id, { teamId: team.id, name: n, dob: '2000-01-01', gender: 'M', events: ['kumite'], weight: 55, country: 'India' })
+      await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
+    }
+    await tms.categorize(admin, t.id)
+    await tms.setEntriesLock(admin, t.id, true)
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+
+    const list = (await call('GET', `/tournaments/${t.id}/brackets`, undefined, adminToken)).body.brackets
+    expect(list).toHaveLength(1)
+    const key = list[0].divisionKey
+    const view = (await call('GET', `/tournaments/${t.id}/bracket?divisionKey=${encodeURIComponent(key)}`, undefined, adminToken)).body.bracket
+    expect(view).toMatchObject({ size: 8, started: false })
+    expect(view.entries).toHaveLength(5)
+
+    // Five players in eight places: every bout needs at least one of them.
+    const ids = view.entries.map((e) => e.id)
+    const put = (layout) => call('PUT', `/tournaments/${t.id}/bracket/layout`, { divisionKey: key, layout }, adminToken)
+    expect((await put([...ids, null, null, null])).body.error).toBe('empty_bout')
+    expect((await put([ids[0], ids[0], ids[2], null, ids[3], null, ids[4], null])).body.error).toBe('invalid_layout')
+    expect((await put(ids)).body.error).toBe('invalid_layout') // not 8 places
+    const good = [ids[4], ids[3], ids[2], null, ids[1], null, ids[0], null]
+    const arranged = (await put(good)).body.bracket
+    expect(arranged.layout).toEqual(good)
+    expect(arranged.rounds[0].matches.map((m) => [m.aka?.id || null, m.ao?.id || null])).toEqual([[ids[4], ids[3]], [ids[2], null], [ids[1], null], [ids[0], null]])
+    // Only the real bout exists; the three byes go straight through.
+    expect((await tms.listMatches(t.id)).filter((m) => m.stage === 'knockout' && m.round === 1)).toHaveLength(1)
+
+    // Once a bout is fought, the arrangement is fixed.
+    const bout = (await tms.listMatches(t.id)).find((m) => m.stage === 'knockout' && m.redId && m.blueId)
+    await tms.correctResult(admin, t.id, bout.id, { winner: 'red', avgRed: 3, avgBlue: 0 })
+    expect((await put(good)).body.error).toBe('bracket_started')
+    expect((await stores.auditLog.list({ tournamentId: t.id })).some((a) => a.action === 'bracket.arranged')).toBe(true)
+  })
+})

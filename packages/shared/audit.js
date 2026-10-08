@@ -30,6 +30,7 @@ export const AUDIT_ACTIONS = {
   MATCHES_GENERATED: 'matches.generated',
   MATCH_SCHEDULED: 'match.scheduled',
   BRACKET_GENERATED: 'bracket.generated',
+  BRACKET_ARRANGED: 'bracket.arranged',
   RESULTS_PUBLISHED: 'results.published',
   RESULTS_UNPUBLISHED: 'results.unpublished',
   CERTIFICATES_GENERATED: 'certificates.generated',

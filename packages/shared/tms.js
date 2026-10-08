@@ -25,7 +25,7 @@ import { DomainError, rule, invalid, missing, denied } from './errors.js'
 import { DEFAULT_POOL_SIZE, DRAW_METHODS, POOL_MODES, drawPools, roundRobin, seededRandom, poolName, shuffle as shuffleWith, isUneven } from './pools.js'
 import {
   DEFAULT_RESULT_RULES, poolStandings, poolComplete, qualifierSeeds, buildBracket,
-  bracketMedals, poolMedals, medalTally, boutOutcome,
+  bracketMedals, poolMedals, medalTally, boutOutcome, nextPow2,
 } from './results.js'
 import {
   formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, playerIdentity, withoutReadOnly,
@@ -2350,7 +2350,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   async function syncBracket(tournamentId, key) {
     const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
     if (!bracket) return null
-    const skeleton = buildBracket(bracket.entries)
+    const skeleton = buildBracket(bracket.entries, bracket.layout || null)
     const stored = new Map((await stores.matches.list({ categoryId: bracket.categoryId }))
       .filter((m) => m.stage === 'knockout').map((m) => [m.bracketKey, m]))
     const merged = new Map()
@@ -2427,6 +2427,43 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return [...merged.values()]
   }
 
+  /**
+   * The organiser arranges the first round by hand (drag and drop on the
+   * bracket): `layout` lists the places AKA, AO, AKA, AO … with null for a
+   * bye. Allowed until the first bout of the bracket starts; the bouts are
+   * then rebuilt from the new arrangement (times and panels set on the old
+   * ones go with them).
+   */
+  async function arrangeBracket(actor, tournamentId, key, layout) {
+    const tournament = await writableTournament(tournamentId)
+    const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
+    if (!bracket) throw missing('bracket_not_found')
+    const bouts = (await stores.matches.list({ categoryId: bracket.categoryId })).filter((m) => m.stage === 'knockout')
+    if (bouts.some((m) => boutOutcome(m) || ['live', 'open', 'paused'].includes(m.status))) throw rule('bracket_started')
+    const ids = bracket.entries.map((e) => e.id)
+    const size = nextPow2(ids.length)
+    if (!Array.isArray(layout) || layout.length !== size) throw invalid('invalid_layout', { size })
+    const placed = layout.filter(Boolean)
+    if (placed.length !== ids.length || new Set(placed).size !== placed.length || placed.some((id) => !ids.includes(id))) throw invalid('invalid_layout', { size })
+    // Every first-round bout needs at least one player, or the next round waits for nobody.
+    for (let i = 0; i < size; i += 2) if (!layout[i] && !layout[i + 1]) throw invalid('empty_bout', { bout: i / 2 + 1 })
+    if (layout.some((id) => !id)) assertByesAllowed(ids.length, settingsOf(tournament))
+    for (const m of bouts) await stores.matches.remove(m.id)
+    await stores.brackets.update(bracket.id, { layout: layout.map((id) => id || null) })
+    const names = new Map((await stores.competitors.list({ categoryId: bracket.categoryId })).map((c) => [c.id, c.name]))
+    await record(actor, { tournamentId, action: A.BRACKET_ARRANGED, entity: 'division', entityId: key, after: { firstRound: Array.from({ length: size / 2 }, (_, i) => `${names.get(layout[i * 2]) || 'bye'} v ${names.get(layout[i * 2 + 1]) || 'bye'}`) } })
+    return bracketView(tournamentId, key)
+  }
+
+  /** Every bracket in the tournament, for choosing one on the bracket screen. */
+  async function listBrackets(tournamentId) {
+    const labels = new Map((await divisions(tournamentId)).map((d) => [d.key, d.label]))
+    return (await stores.brackets.list({ tournamentId })).map((b) => ({
+      divisionKey: b.divisionKey, label: labels.get(b.divisionKey) || b.divisionKey, entries: b.entries.length,
+      knockoutOnly: !!b.knockoutOnly, thirdPlace: !!b.thirdPlace, arranged: !!b.layout,
+    })).sort((a, b) => a.label.localeCompare(b.label))
+  }
+
   async function bracketView(tournamentId, key) {
     const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
     if (!bracket) return null
@@ -2443,9 +2480,18 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
           aka: s.aka ? { id: s.aka, name: competitors.get(s.aka)?.name, playerId: competitors.get(s.aka)?.playerId } : null,
           ao: s.ao ? { id: s.ao, name: competitors.get(s.ao)?.name, playerId: competitors.get(s.ao)?.playerId } : null,
           akaScore: s.avgRed ?? null, aoScore: s.avgBlue ?? null,
+          won: (() => { const o = boutOutcome(s); return o && o.winner !== 'draw' ? o.winner : null })(),
+          live: ['live', 'open', 'paused'].includes(s.status),
         })),
       })),
       slots,
+      // For the drag-and-drop board: the first round place by place, and who is in it.
+      size: (bracket.layout || []).length || nextPow2(bracket.entries.length),
+      layout: bracket.layout || buildBracket(bracket.entries).filter((m) => m.round === 1).sort((a, b) => a.slot - b.slot).flatMap((m) => [m.aka || null, m.ao || null]),
+      entries: bracket.entries.map((e) => ({ id: e.id, playerId: e.playerId, pool: e.pool || null, place: e.place || null, name: competitors.get(e.id)?.name || '', team: competitors.get(e.id)?.teamId || null })),
+      thirdPlace: !!bracket.thirdPlace,
+      started: slots.some((m) => boutOutcome(m) || ['live', 'open', 'paused'].includes(m.status)),
+      categoryId: bracket.categoryId,
     }
   }
 
@@ -3232,7 +3278,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     generateMatches, listMatches, correctResult, swapCorners, callMatch, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
-    assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket,
+    assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket, arrangeBracket, listBrackets,
     publishResults, verifyResult, assertResultEditable, setDivisionLock, coachCertificates, generatePasses, listPasses, checkIn, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
     // rulesets and locks
     listRulesets, resolveRuleset, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,

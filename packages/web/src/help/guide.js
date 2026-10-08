@@ -167,6 +167,11 @@ export const TAB_GUIDE = {
     before: { tab: 'draw', text: 'Matches generated' },
     after: { tab: 'call', text: 'Call the matches on competition day' },
   },
+  bracket: {
+    text: 'The draw sheet on screen. Before the first bout, drag players between places to arrange the draw (or give byes), then save. During the event, drag each winner into the next box to record the result; 1st, 2nd and 3rd fill in by themselves.',
+    before: { tab: 'draw', text: 'Matches generated (knockout categories)' },
+    after: { tab: 'results', text: 'Check and publish results' },
+  },
   kata: {
     text: 'Kata rounds per category: open a round, seat the judges, enter scores and choose who goes through.',
     before: { tab: 'draw', text: 'Kata pools drawn' },
@@ -360,6 +365,13 @@ export const HELP = {
     next: 'On the day: Call matches, then score on the console.',
   },
 
+  'bracket.board': {
+    title: 'Bracket',
+    text: 'Pick a category. "Arrange draw": drag a player onto another place to swap them, or onto an empty place for a bye, then Save draw. "Record results": drag the winner into the next box (or tap the bout) and say how it ended.',
+    tips: ['On a phone or tablet, tap one place and then another to swap.', 'The draw is fixed once the first bout of the bracket starts.', 'Bouts scored on the referee console show here too.', 'Print gives the paper sheet for the mat table.'],
+    before: 'Matches generated for a knockout category, or the final stage generated in Results.',
+    next: 'Results: verify and publish the medals.',
+  },
   'kata.rounds': {
     title: 'Kata rounds',
     text: 'For each Kata category: open round 1, choose the judges for each seat, enter or collect scores, then finish the round and open the next one.',

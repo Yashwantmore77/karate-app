@@ -113,6 +113,11 @@ export const tms = {
   correctResult: async (tid, mid, body, reason) => (await send('POST', `${T(tid)}/matches/${mid}/correct`, { ...body, reason: reason || null })).match,
   results: async (tid) => (await get(`${T(tid)}/results`)).results,
   generateBracket: async (tid, divisionKey) => (await send('POST', `${T(tid)}/brackets/generate`, { divisionKey })).bracket,
+  brackets: {
+    list: async (tid) => (await get(`${T(tid)}/brackets`)).brackets,
+    get: async (tid, divisionKey) => (await get(`${T(tid)}/bracket${qs({ divisionKey })}`)).bracket,
+    arrange: async (tid, divisionKey, layout) => (await send('PUT', `${T(tid)}/bracket/layout`, { divisionKey, layout })).bracket,
+  },
   publishResults: (tid, publish) => send('POST', `${T(tid)}/results/publish`, { publish }),
   medals: async (tid) => (await get(`${T(tid)}/medals`)).medals,
   tally: async (tid, by) => (await get(`${T(tid)}/medal-tally${qs({ by })}`)).tally,

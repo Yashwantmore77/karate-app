@@ -14,6 +14,7 @@ import RegistrationsTab from './RegistrationsTab'
 import WeighInTab from './WeighInTab'
 import DrawTab from './DrawTab'
 import MatchesTab from './MatchesTab'
+import BracketTab from './BracketTab'
 import KataTab from './KataTab'
 import CallTab from './CallTab'
 import ResultsTab from './ResultsTab'
@@ -36,6 +37,8 @@ export const TABS = [
   { key: 'weighin', label: 'Weigh-in', perm: P.WEIGHIN_RECORD, Component: WeighInTab, event: 'kumite' },
   { key: 'draw', label: 'Draw / Pools', perm: P.POOL_MANAGE, Component: DrawTab },
   { key: 'matches', label: 'Matches', perm: P.MATCH_GENERATE, Component: MatchesTab },
+  // The draw sheet on screen: arrange the first round, drag winners forward.
+  { key: 'bracket', label: 'Bracket', perm: [P.POOL_MANAGE, P.RESULT_MANAGE], Component: BracketTab },
   { key: 'kata', label: 'Kata panel', perm: P.MATCH_GENERATE, Component: KataTab, event: 'kata' },
   { key: 'call', label: 'Call matches', perm: P.MATCH_CALL, Component: CallTab },
   // Passes and QR check-in: the door (registration, weigh-in) and the mat.

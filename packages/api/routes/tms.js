@@ -587,6 +587,26 @@ export function tmsRoutes(tms, stores) {
     const { divisionKey, locked, reason } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, locked: { type: 'boolean', required: true }, reason: REASON })
     res.json(await tms.setDivisionLock(withMeta(req), tid(req), divisionKey, locked, reason))
   })
+  // The bracket screen: every bracket, one bracket, and arranging its first round.
+  router.get('/:tid/brackets', async (req, res) => res.json({ brackets: await tms.listBrackets(tid(req)) }))
+  router.get('/:tid/bracket', async (req, res) => {
+    const key = typeof req.query.divisionKey === 'string' ? req.query.divisionKey : ''
+    const bracket = await tms.bracketView(tid(req), key)
+    if (!bracket) return res.status(404).json({ error: 'bracket_not_found' })
+    const { slots, ...view } = bracket
+    res.json({ bracket: view })
+  })
+  router.put('/:tid/bracket/layout', requirePermission(P.POOL_MANAGE), async (req, res) => {
+    const { divisionKey } = validate({ divisionKey: req.body?.divisionKey }, { divisionKey: { type: 'string', required: true, max: 200 } })
+    // Places in order; null (or empty) is a bye.
+    const layout = req.body?.layout
+    if (!Array.isArray(layout) || layout.length > 128 || layout.some((id) => id != null && (typeof id !== 'string' || id.length > 80))) {
+      return res.status(400).json({ error: 'invalid_layout' })
+    }
+    const { slots, ...view } = await tms.arrangeBracket(withMeta(req), tid(req), divisionKey, layout.map((id) => id || null))
+    res.json({ bracket: view })
+  })
+
   router.post('/:tid/brackets/generate', requirePermission(P.MATCH_GENERATE), async (req, res) => {
     const { divisionKey } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 } })
     res.status(201).json({ bracket: await tms.generateBracket(withMeta(req), tid(req), divisionKey) })
