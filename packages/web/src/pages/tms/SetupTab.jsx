@@ -5,7 +5,7 @@ import {
 } from '@mui/material'
 import { ArrowUpward, ArrowDownward, Delete, Add, ContentCopy, Tune } from '@mui/icons-material'
 import { formFields, FIELD_TYPES } from '@kumite/shared/registration.js'
-import { settingsOf, POOL_SYSTEMS, KATA_METHODS, registrationReadiness } from '@kumite/shared/tms.js'
+import { settingsOf, POOL_SYSTEMS, KATA_METHODS, registrationReadiness, tournamentEvents } from '@kumite/shared/tms.js'
 import { DEFAULT_TIME_ZONE } from '@kumite/shared/timezone.js'
 import AdvancedSettings, { advancedPayload } from '../../components/tms/AdvancedSettings'
 import FieldPropertiesDialog from '../../components/tms/FieldPropertiesDialog'
@@ -16,6 +16,8 @@ import { tms } from '../../data/tms'
 import { readFileBase64 } from '../../components/tms/download'
 import { checkFile } from '@kumite/shared/files.js'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { paymentsEnabled } from '@kumite/shared/features.js'
+import { PageLoader } from '../../components/Loader'
 
 const DETAIL_FIELDS = [
   ['name', 'Tournament name', 12], ['description', 'Description', 12],
@@ -58,6 +60,8 @@ export default function SetupTab({ tournament, reload, action }) {
   const [settings, setSettings] = useState(() => settingsOf(tournament))
   const [fields, setFields] = useState(() => formFields(tournament))
   const [link, setLink] = useState(null)
+  // Until the link has loaded, "Generate link" must not show: it would replace the coaches' link.
+  const [linkLoaded, setLinkLoaded] = useState(false)
   const [linkPassword, setLinkPassword] = useState('')
   const [linkExpiry, setLinkExpiry] = useState('')
   const [rulesets, setRulesets] = useState([])
@@ -68,7 +72,7 @@ export default function SetupTab({ tournament, reload, action }) {
   const [issuedKey, setIssuedKey] = useState(null)
 
   useEffect(() => {
-    tms.link(tid).then((l) => { setLink(l); setLinkExpiry(l?.expiresAt?.slice(0, 10) || '') }).catch(() => {})
+    tms.link(tid).then((l) => { setLink(l); setLinkExpiry(l?.expiresAt?.slice(0, 10) || '') }).catch(() => {}).finally(() => setLinkLoaded(true))
     tms.rulesets().then(setRulesets).catch(() => {})
     tms.partnerKey(tid).then(setPartnerKey).catch(() => {})
   }, [tid])
@@ -104,7 +108,7 @@ export default function SetupTab({ tournament, reload, action }) {
     out.fees = Object.fromEntries(Object.entries(settings.fees).map(([k, v]) => [k, Number(v) || 0]))
     out.points = Object.fromEntries(Object.entries(settings.points).map(([k, v]) => [k, Number(v)]))
     for (const [k] of KATA_SETTINGS) out[k] = Number(settings[k])
-    for (const k of ['poolMode', 'poolSystem', 'kataMode', 'kataMethod']) out[k] = settings[k]
+    for (const k of ['poolMode', 'poolSystem', 'kataMode', 'kataMethod', 'firstEvent']) out[k] = settings[k]
     out.ruleset = String(settings.ruleset || 'WKF')
     out.officialsSeeAssignedOnly = !!settings.officialsSeeAssignedOnly
     Object.assign(out, advancedPayload(settings))
@@ -246,6 +250,15 @@ export default function SetupTab({ tournament, reload, action }) {
               {POOL_SYSTEMS.map((m) => <MenuItem key={m} value={m}>{POOL_SYSTEM_LABEL[m] || m}</MenuItem>)}
             </TextField>
           </Grid>
+          {tournamentEvents(tournament).length === 2 && (
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              {/* Kata and Kumite take turns on the mats; this one goes first. */}
+              <TextField select fullWidth label="Event on the mats first" helperText="Kata and Kumite run one at a time; switch sessions at the top of the page" value={settings.firstEvent || 'kata'} onChange={(e) => setSettings({ ...settings, firstEvent: e.target.value })}>
+                <MenuItem value="kata">Kata, then Kumite</MenuItem>
+                <MenuItem value="kumite">Kumite, then Kata</MenuItem>
+              </TextField>
+            </Grid>
+          )}
           <Grid size={{ xs: 12, sm: 6, md: 4 }}>
             <TextField select fullWidth label="Kata is decided by" value={settings.kataMode} onChange={(e) => setSettings({ ...settings, kataMode: e.target.value })}>
               <MenuItem value="panel">A judging panel scoring each performance</MenuItem>
@@ -270,7 +283,8 @@ export default function SetupTab({ tournament, reload, action }) {
             <FormControlLabel control={<Switch checked={!!settings.officialsSeeAssignedOnly} onChange={(e) => setSettings({ ...settings, officialsSeeAssignedOnly: e.target.checked })} />}
               label="Referees and judges see only the matches they are assigned to" />
           </Grid>
-          {Object.keys(settings.fees).map((k) => (
+          {/* Entry fees: off while the system is free (features.js). */}
+          {paymentsEnabled() && Object.keys(settings.fees).map((k) => (
             <Grid key={k} size={{ xs: 6, md: 3 }}>
               <TextField fullWidth type="number" label={`Fee: ${k === 'both' ? 'Kata + Kumite' : k}`} value={settings.fees[k]}
                 onChange={(e) => setSettings({ ...settings, fees: { ...settings.fees, [k]: e.target.value } })}
@@ -297,7 +311,8 @@ export default function SetupTab({ tournament, reload, action }) {
             Coaches can open this link, but cannot register until you move the tournament to <b>Registration open</b> on the Dashboard tab.
           </Alert>
         )}
-        {!link && <Button variant="contained" onClick={() => saveLink({})}>Generate link</Button>}
+        {!linkLoaded && <PageLoader label="Loading the registration link…" minHeight={80} />}
+        {linkLoaded && !link && <Button variant="contained" onClick={() => saveLink({})}>Generate link</Button>}
         {link && (
           <Stack spacing={2}>
             <TextField fullWidth label="Link for coaches" value={linkUrl} slotProps={{

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createTms, TMS_COLLECTIONS, registrationReadiness } from './tms.js'
+import { createTms, TMS_COLLECTIONS, registrationReadiness, runningEvent } from './tms.js'
 import { memoryStores } from './memoryStore.js'
 import { evaluateOutcome, DEFAULT_RULES } from './rules.js'
 import { applyCommand, initialMatchState, rulesFrom } from './commands.js'
@@ -248,6 +248,8 @@ describe('PRD v1 §12-13 draw and matches', () => {
     await tms.setDrawLock(admin, t.id, true)
     await tms.generateMatches(admin, t.id)
     const [m] = await tms.listMatches(t.id)
+    // Kata and Kumite take turns; these are kumite bouts.
+    await tms.setRunningEvent(admin, t.id, 'kumite')
     expect((await tms.callMatch({ uid: 'a', role: 'announcer' }, t.id, m.id)).status).toBe('called')
     await tms.markAttendance({ uid: 'a', role: 'announcer' }, t.id, m.id, 'aka', true)
     expect((await tms.markAttendance({ uid: 'a', role: 'announcer' }, t.id, m.id, 'ao', true)).status).toBe('ready')
@@ -514,5 +516,51 @@ describe('security review: input and export helpers', () => {
     expect(neutralizeFormula('+91 98765 43210')).toBe('+91 98765 43210')
     expect(toExportCsv([['Name'], ['=1+1']])).toBe("Name\r\n'=1+1")
     expect(toCsv([['=1+1']])).toBe('=1+1')
+  })
+})
+
+describe('Kata and Kumite take turns', () => {
+  it('runs one event at a time, switching only when nothing is under way', async () => {
+    const { tms, t, add, stores } = await world({ settings: { kataJudges: 3, requireWeighInForDraw: false } })
+    await add(6, { fields: { events: ['kata', 'kumite'] } })
+    await tms.categorize(admin, t.id)
+    await tms.setEntriesLock(admin, t.id, true)
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    const [bout] = await tms.listMatches(t.id)
+    const [kata] = await tms.kataDivisions(t.id)
+
+    // Kata first by default: kumite bouts wait, on the call, the status and the console.
+    expect(runningEvent(await stores.tournaments.get(t.id))).toBe('kata')
+    await expect(tms.callMatch(admin, t.id, bout.id)).rejects.toMatchObject({ code: 'event_not_running', details: { event: 'kumite', running: 'kata' } })
+    await expect(tms.setMatchStatus(admin, t.id, bout.id, 'open')).rejects.toMatchObject({ code: 'event_not_running' })
+    expect(await tms.liveCommandBlock(bout.id)).toBe('event_not_running')
+
+    // An open kata round holds the mats.
+    const round = await tms.createKataRound(admin, t.id, kata.key, { seed: 1, start: true })
+    await expect(tms.setRunningEvent(admin, t.id, 'kumite')).rejects.toMatchObject({ code: 'event_in_progress', details: { event: 'kata', rounds: 1 } })
+    for (const playerId of round.performerIds) for (let seat = 1; seat <= 3; seat += 1) await tms.submitKataScore(admin, t.id, round.id, { playerId, seat, score: 7 + seat / 10 })
+    await tms.completeKataRound(admin, t.id, round.id)
+
+    expect(await tms.setRunningEvent(admin, t.id, 'kumite')).toEqual({ event: 'kumite', from: 'kata' })
+    expect((await tms.callMatch(admin, t.id, bout.id)).status).toBe('called')
+    expect(await tms.liveCommandBlock(bout.id)).toBe(null)
+    // Kata rounds can be set up meanwhile, but not started.
+    await expect(tms.createKataRound(admin, t.id, kata.key, { seed: 1, start: true })).rejects.toMatchObject({ code: 'event_not_running' })
+    const later = await tms.createKataRound(admin, t.id, kata.key, { seed: 1 })
+    await expect(tms.startKataRound(admin, t.id, later.id)).rejects.toMatchObject({ code: 'event_not_running' })
+    // A called kumite bout holds the mats too.
+    await expect(tms.setRunningEvent(admin, t.id, 'kata')).rejects.toMatchObject({ code: 'event_in_progress', details: { event: 'kumite', bouts: 1 } })
+    const audit = await stores.auditLog.list({ tournamentId: t.id })
+    expect(audit.some((a) => a.action === 'tournament.event_switched')).toBe(true)
+  })
+
+  it('starts with the event chosen in the settings; a single-event tournament is always on its event', async () => {
+    const { tms, t, stores } = await world({ settings: { firstEvent: 'kumite' } })
+    expect(runningEvent(await stores.tournaments.get(t.id))).toBe('kumite')
+    await stores.tournaments.update(t.id, { type: 'kata' })
+    expect(runningEvent(await stores.tournaments.get(t.id))).toBe('kata')
+    await expect(tms.setRunningEvent(admin, t.id, 'kumite')).rejects.toMatchObject({ code: 'event_not_in_tournament' })
   })
 })

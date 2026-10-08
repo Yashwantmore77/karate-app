@@ -10,7 +10,7 @@ export default function MyAccount() {
   const [setup, setSetup] = useState(null)
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState(null)
-  const [sessions, setSessions] = useState([])
+  const [sessions, setSessions] = useState(null)
 
   const load = () => request('/auth/account').then((r) => setAccount(r.account)).catch(() => setAccount(null))
   const loadSessions = () => request('/auth/sessions').then((r) => setSessions(r.sessions)).catch(() => setSessions([]))
@@ -68,16 +68,17 @@ export default function MyAccount() {
         {/* PRD v1 §26: where this account is signed in, and ending those sessions. */}
         <Typography variant="h3" gutterBottom sx={{ mt: 4 }}>Where you are signed in</Typography>
         <List dense>
-          {sessions.map((x) => (
+          {!sessions && <PageLoader label="Loading sessions…" minHeight={80} />}
+          {(sessions || []).map((x) => (
             <ListItem key={x.sid} disableGutters secondaryAction={!x.current && <Button size="small" onClick={() => endSession(x.sid)}>Sign out</Button>}>
               <ListItemText
                 primary={<>{(x.userAgent || 'Unknown device').slice(0, 70)} {x.current && <Chip size="small" color="primary" label="This device" sx={{ ml: 1 }} />}</>}
                 secondary={`${x.ip || 'unknown address'} · signed in ${new Date(x.createdAt).toLocaleString()} · last active ${new Date(x.lastSeenAt).toLocaleString()}`} />
             </ListItem>
           ))}
-          {!sessions.length && <Typography color="text.secondary">No other sessions.</Typography>}
+          {sessions && !sessions.length && <Typography color="text.secondary">No other sessions.</Typography>}
         </List>
-        {sessions.filter((x) => !x.current).length > 0 && <Button variant="outlined" color="warning" onClick={endOthers}>Sign out everywhere else</Button>}
+        {(sessions || []).filter((x) => !x.current).length > 0 && <Button variant="outlined" color="warning" onClick={endOthers}>Sign out everywhere else</Button>}
       </Paper>
     </Container>
   )

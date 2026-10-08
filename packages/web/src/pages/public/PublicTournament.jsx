@@ -23,14 +23,20 @@ const FEE_LABEL = { kata: 'Kata', kumite: 'Kumite', both: 'Kata + Kumite', team:
 function PublicCertificates({ tournament }) {
   const [q, setQ] = useState('')
   const [rows, setRows] = useState(null)
-  const search = () => q.trim().length >= 2 && tms.public.certificates(tournament.slug || tournament.id, q.trim()).then(setRows).catch(() => setRows([]))
+  const [searching, setSearching] = useState(false)
+  const search = () => {
+    if (q.trim().length < 2 || searching) return
+    setSearching(true)
+    tms.public.certificates(tournament.slug || tournament.id, q.trim()).then(setRows).catch(() => setRows([])).finally(() => setSearching(false))
+  }
   return (
     <Paper sx={{ p: 2 }}>
       <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
         <TextField size="small" fullWidth label="Your name" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()} />
         <Button variant="contained" onClick={search} disabled={q.trim().length < 2}>Find</Button>
       </Stack>
-      {rows && !rows.length && <Typography color="text.secondary">No certificate found for that name.</Typography>}
+      {searching && <PageLoader label="Searching…" minHeight={80} />}
+      {!searching && rows && !rows.length && <Typography color="text.secondary">No certificate found for that name.</Typography>}
       {rows?.map((c) => (
         <Stack key={c.certificateId} direction="row" spacing={2} sx={{ alignItems: 'center', py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Box sx={{ flex: 1 }}>
@@ -140,6 +146,8 @@ export default function PublicTournament() {
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
           <StatusBadge status={t.lifecycleStatus} />
           {live.length > 0 && <Chip color="error" size="small" label={`● ${live.length} live`} />}
+          {/* Kata and Kumite take turns on the mats. */}
+          {!['kata', 'kumite'].includes(t.type) && ['READY', 'LIVE'].includes(t.lifecycleStatus) && t.runningEvent && <Chip color="secondary" size="small" label={`On the mats: ${t.runningEvent === 'kata' ? 'Kata' : 'Kumite'}`} />}
           <Button size="small" component={RouterLink} to="/tournaments">All tournaments</Button>
           <Button size="small" component={RouterLink} to={`/live?t=${encodeURIComponent(t.slug || t.id)}`}>Live board</Button>
         </Stack>

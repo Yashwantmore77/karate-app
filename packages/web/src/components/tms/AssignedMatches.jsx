@@ -5,6 +5,7 @@ import { boutOutcome } from '@kumite/shared/results.js'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { tms } from '../../data/tms'
 import StatusBadge from './StatusBadge'
+import { PageLoader } from '../Loader'
 
 /**
  * PRD sections 3.5, 3.6 and 53: the matches a referee or judge has been put
@@ -18,7 +19,7 @@ export default function AssignedMatches({ uid, field = 'refereeId', basePath }) 
     let alive = true
     ;(async () => {
       const out = []
-      for (const t of await tournamentStore.list()) {
+      for (const t of await tournamentStore.list().catch(() => [])) {
         const matches = await tms.matches(t.id).catch(() => [])
         for (const m of matches) {
           const mine = field === 'judgeIds' ? (m.judgeIds || []).includes(uid) : m.refereeId === uid
@@ -30,7 +31,9 @@ export default function AssignedMatches({ uid, field = 'refereeId', basePath }) 
     return () => { alive = false }
   }, [uid, field])
 
-  if (!rows?.length) return null
+  // Every tournament's bouts are read, which can take a moment.
+  if (!rows) return <Paper sx={{ p: 2, mb: 3 }}><PageLoader label="Finding the bouts assigned to you…" minHeight={80} /></Paper>
+  if (!rows.length) return null
   const pending = rows.filter((m) => !boutOutcome(m) && m.status !== 'cancelled')
   const done = rows.length - pending.length
 

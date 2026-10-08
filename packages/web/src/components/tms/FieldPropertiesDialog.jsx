@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Grid, TextField, MenuItem, Typography } from '@mui/material'
 import { CALCULATED_FORMULAS, SYSTEM_SOURCES, safePattern } from '@kumite/shared/registration.js'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 
 const CHOICE_TYPES = ['dropdown', 'radio', 'checkbox', 'multiselect']
 
@@ -36,7 +37,7 @@ export default function FieldPropertiesDialog({ field, fields, onSave, onClose }
           {f.type === 'system' && (
             <Grid size={{ xs: 12 }}>
               <TextField select fullWidth label="Shows" value={f.source || ''} onChange={(e) => set('source', e.target.value)}>
-                {Object.entries(SYSTEM_SOURCES).map(([k, label]) => <MenuItem key={k} value={k}>{label}</MenuItem>)}
+                {Object.entries(SYSTEM_SOURCES).filter(([k]) => k !== 'paymentStatus' || paymentsEnabled()).map(([k, label]) => <MenuItem key={k} value={k}>{label}</MenuItem>)}
               </TextField>
             </Grid>
           )}

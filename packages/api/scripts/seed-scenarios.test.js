@@ -27,16 +27,16 @@ describe('test tournament scenarios', () => {
     expect(officials.filter((o) => o.role === 'judge')).toHaveLength(4)
 
     expect(summary.map((s) => s.status)).toEqual([
-      'DRAFT', 'REGISTRATION_OPEN', 'REGISTRATION_OPEN', 'VERIFICATION', 'WEIGH_IN', 'DRAW_GENERATED', 'READY', 'LIVE', 'COMPLETED', 'ARCHIVED',
+      'DRAFT', 'REGISTRATION_OPEN', 'REGISTRATION_OPEN', 'VERIFICATION', 'WEIGH_IN', 'DRAW_GENERATED', 'READY', 'LIVE', 'COMPLETED', 'ARCHIVED', 'REGISTRATION_OPEN', 'LIVE',
     ])
     const tms = createTms(stores)
     const by = Object.fromEntries(summary.map((s) => [s.title, s.id]))
     const players = (title) => stores.players.list({ tournamentId: by[title] })
 
-    // Registration open: every registration and payment case.
+    // Registration open: every registration case. (Payments are off: no payment records.)
     const reg = await players('District Open')
-    expect(Object.keys(count(reg, (p) => p.registrationStatus))).toEqual(expect.arrayContaining(['PAYMENT_VERIFIED', 'APPROVED', 'REJECTED', 'DRAFT', 'PENDING_VERIFICATION', 'SUBMITTED']))
-    expect(Object.keys(count(reg, (p) => p.payment.status))).toEqual(expect.arrayContaining(['PAID', 'PENDING', 'FAILED', 'REFUNDED']))
+    expect(Object.keys(count(reg, (p) => p.registrationStatus))).toEqual(expect.arrayContaining(['APPROVED', 'REJECTED', 'DRAFT', 'PENDING_VERIFICATION', 'SUBMITTED']))
+    expect(reg.every((p) => p.payment == null)).toBe(true)
     expect(reg.some((p) => p.duplicateOf)).toBe(true)
     expect(await stores.teams.list({ tournamentId: by['District Open'], active: false })).toHaveLength(1)
     // Team members with several roles each.
@@ -68,6 +68,9 @@ describe('test tournament scenarios', () => {
     const results = count(await tms.results(by['State Championship']), (d) => d.resultStatus)
     expect(Object.keys(results)).toEqual(expect.arrayContaining(['PROVISIONAL', 'VERIFIED', 'PUBLISHED', 'LOCKED']))
     expect((await players('State Championship')).some((p) => p.registrationStatus === 'WITHDRAWN')).toBe(true)
+    // Kata and Kumite take turns: the kata session is over, kumite is on the mats.
+    expect((await stores.tournaments.get(by['State Championship'])).activeEvent).toBe('kumite')
+    expect((await stores.kataRounds.list({ tournamentId: by['State Championship'] })).some((r) => r.status === 'open')).toBe(false)
 
     // Closed: results locked and certificates issued.
     for (const title of ['Diwali Karate Cup', 'Winter Open 2025']) {
@@ -76,6 +79,22 @@ describe('test tournament scenarios', () => {
       expect(r.every((d) => d.resultStatus === 'LOCKED')).toBe(true)
       expect(Object.keys(count(await stores.certificates.list({ tournamentId: by[title] }), (c) => c.type))).toEqual(expect.arrayContaining(['gold', 'participation', 'custom']))
     }
+
+    // Kata only, categories from the SGFI preset.
+    const school = await stores.tournaments.get(by['School Kata Championship'])
+    expect(school.type).toBe('kata')
+    expect((await stores.ageGroups.list({ tournamentId: school.id })).map((g) => g.name)).toEqual(expect.arrayContaining(['U-14 Boys', 'U-19 Girls']))
+    expect((await players('School Kata Championship')).every((p) => p.events.length === 1 && p.events[0] === 'kata')).toBe(true)
+
+    // Kumite only, brackets arranged by hand: started ones locked, one still movable.
+    const league = by['Junior Kumite League']
+    expect((await stores.tournaments.get(league)).type).toBe('kumite')
+    const boards = await tms.listBrackets(league)
+    expect(boards.length).toBeGreaterThanOrEqual(4)
+    expect(boards.every((x) => x.arranged)).toBe(true)
+    const started = await Promise.all(boards.map(async (x) => (await tms.bracketView(league, x.divisionKey)).started))
+    expect(started).toContain(true)
+    expect(started).toContain(false)
 
     // Not built twice; a wipe on its own clears it all.
     expect(await seedScenarios(stores, { log: quiet })).toBeNull()

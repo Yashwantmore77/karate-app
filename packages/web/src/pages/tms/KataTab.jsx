@@ -11,6 +11,8 @@ import KataRoundTable from '../../components/tms/KataRoundTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { runningEvent } from '@kumite/shared/tms.js'
+import { hasSessions } from '../../components/tms/EventSession'
 
 /**
  * PRD point 19, sections 32-33: kata judged by a panel. The admin opens each
@@ -74,6 +76,8 @@ export default function KataTab({ tournament, version, action, role }) {
   return (
     <Stack spacing={2}>
       {!tournament.entriesLocked && <Alert severity="warning">Lock entries on the Draw tab before opening kata rounds.</Alert>}
+      {/* Kata and Kumite take turns on the mats. */}
+      {hasSessions(tournament) && runningEvent(tournament) !== 'kata' && <Alert severity="info">Kumite is on the mats now. Rounds can be set up; they start when the session is switched to Kata (top of the page).</Alert>}
       {divisions.map((d) => {
         const last = d.rounds[d.rounds.length - 1]
         const canStart = tournament.entriesLocked && (!last || (last.status === 'completed' && last.name !== 'Final'))
@@ -98,7 +102,8 @@ export default function KataTab({ tournament, version, action, role }) {
               </Stack>
             </Stack>
 
-            {round && round.divisionKey === d.key && (
+            {selected && round?.id !== selected && d.rounds.some((r) => r.id === selected) && <PageLoader label="Loading the round…" minHeight={100} />}
+            {round && round.id === selected && round.divisionKey === d.key && (
               <Box sx={{ mt: 2 }}>
                 <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
                   <Typography variant="h4">{round.name}</Typography>

@@ -4,7 +4,7 @@ import {
   Switch, FormControlLabel, IconButton, Alert, Box,
 } from '@mui/material'
 import { Add, Edit, Delete, Tune, PlaylistAdd } from '@mui/icons-material'
-import { settingsOf, POOL_SYSTEMS, KATA_METHODS } from '@kumite/shared/tms.js'
+import { settingsOf, tournamentEvents, POOL_SYSTEMS, KATA_METHODS } from '@kumite/shared/tms.js'
 import { POOL_MODES } from '@kumite/shared/pools.js'
 import { KATA_METHOD_LABEL } from '@kumite/shared/kata.js'
 import { tms, describeError } from '../../data/tms'
@@ -47,6 +47,8 @@ export default function CategoriesTab({ tournament, version, action }) {
   const [preset, setPreset] = useState(null) // key of the set being previewed
   const locked = !!tournament.entriesLocked
   const base = settingsOf(tournament)
+  // Weight categories are for Kumite only; a kata-only event has none to show.
+  const hasKumite = tournamentEvents(tournament).includes('kumite')
 
   const saveRules = async () => {
     const { kind, row, settings } = rules
@@ -128,7 +130,7 @@ export default function CategoriesTab({ tournament, version, action }) {
             { key: 'gender', label: 'Gender', render: (g) => GENDER[g.gender] || g.gender },
             { key: 'minAge', label: 'Min age' },
             { key: 'maxAge', label: 'Max age' },
-            { key: 'weights', label: 'Weight categories', value: (g) => weights.filter((w) => w.ageGroupId === g.id).length, render: (g) => weights.filter((w) => w.ageGroupId === g.id).map((w) => w.label || w.name).join(', ') || '—' },
+            ...(!hasKumite ? [] : [{ key: 'weights', label: 'Weight categories', value: (g) => weights.filter((w) => w.ageGroupId === g.id).length, render: (g) => weights.filter((w) => w.ageGroupId === g.id).map((w) => w.label || w.name).join(', ') || '—' }]),
             { key: 'rules', label: 'Own rules', sortable: false, value: (g) => rulesSummary(g.settings), render: (g) => rulesSummary(g.settings) || 'Tournament defaults' },
             { key: 'active', label: 'Status', render: (g) => <StatusBadge status={g.active !== false ? 'APPROVED' : 'DRAFT'} label={g.active !== false ? 'Active' : 'Inactive'} /> },
             { key: 'actions', label: '', sortable: false, render: (g) => (
@@ -142,6 +144,7 @@ export default function CategoriesTab({ tournament, version, action }) {
         />
       </Box>
 
+      {hasKumite && (
       <Box>
         <HelpTitle id="categories.weight" variant="h3" gutterBottom>Weight categories (Kumite)</HelpTitle>
         <DataTable
@@ -167,6 +170,7 @@ export default function CategoriesTab({ tournament, version, action }) {
           ]}
         />
       </Box>
+      )}
 
       <Dialog open={!!editing} onClose={closeEditor} maxWidth="sm" fullWidth>
         <DialogTitle>{r.id ? 'Edit' : 'Add'} {editing?.kind === 'group' ? 'age group' : 'weight category'}</DialogTitle>
@@ -263,7 +267,7 @@ export default function CategoriesTab({ tournament, version, action }) {
                   <Grid key={g.name} size={{ xs: 12, sm: 6 }}>
                     <Paper variant="outlined" sx={{ p: 1.25 }}>
                       <Typography sx={{ fontWeight: 700 }}>{g.name} <Typography component="span" variant="body2" color="text.secondary">ages {g.minAge}–{g.maxAge}</Typography></Typography>
-                      <Typography variant="body2" color="text.secondary">{weightClasses(g.weights).map((w) => w.name.replace(' KG', '')).join(', ')} kg</Typography>
+                      {hasKumite && <Typography variant="body2" color="text.secondary">{weightClasses(g.weights).map((w) => w.name.replace(' KG', '')).join(', ')} kg</Typography>}
                     </Paper>
                   </Grid>
                 ))}

@@ -18,6 +18,7 @@ import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { teamProblems } from '@kumite/shared/tms.js'
 import TeamMembers from '../../components/tms/TeamMembers'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Head coach (first team member)', 4],
@@ -208,7 +209,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
           <Typography><b>{players.length}</b> players</Typography>
           <Typography><b>{(me.members || []).length}</b> team members</Typography>
           <Typography><b>{players.filter((p) => !['DRAFT', 'SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus)).length}</b> approved</Typography>
-          <Typography><b>{players.filter((p) => p.payment?.status === 'PAID').length}</b> paid</Typography>
+          {paymentsEnabled() && <Typography><b>{players.filter((p) => p.payment?.status === 'PAID').length}</b> paid</Typography>}
           <Button size="small" component={RouterLink} to={`/tournament/${me.tournament.slug || me.tournament.id}`} target="_blank">Draw & results</Button>
           {!accountToken && <Button size="small" onClick={() => setAccount({ email: me.team.email || '', password: '' })}>Create my own login</Button>}
           {accountToken && onSignOut && <Button size="small" onClick={onSignOut}>Sign out</Button>}
@@ -241,7 +242,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
             { key: 'registrationStatus', label: 'Registration', render: (p) => (
               <Box><StatusBadge status={p.registrationStatus} />{p.rejectionReason && <Typography variant="body2" color="warning.main">{p.rejectionReason}</Typography>}</Box>
             ) },
-            { key: 'payment', label: 'Payment', value: (p) => p.payment?.status, render: (p) => <StatusBadge status={p.payment?.status || 'PENDING'} label={`${humanize(p.payment?.status || 'PENDING')}${p.payment?.amount ? ` · ₹${p.payment.amount}` : ''}`} /> },
+            ...(!paymentsEnabled() ? [] : [{ key: 'payment', label: 'Payment', value: (p) => p.payment?.status, render: (p) => <StatusBadge status={p.payment?.status || 'PENDING'} label={`${humanize(p.payment?.status || 'PENDING')}${p.payment?.amount ? ` · ₹${p.payment.amount}` : ''}`} /> }]),
             { key: 'weighIn', label: 'Weigh-in', value: (p) => p.weighIn?.status, render: (p) => (p.weighIn ? <StatusBadge status={p.weighIn.status} /> : 'n/a') },
             { key: 'actions', label: '', sortable: false, render: (p) => canWrite && (
               <Stack direction="row">

@@ -1,11 +1,13 @@
-import { request } from '../http'
+import { request, track } from '../http'
 import { apiUrl, getToken } from '../session'
 
 // Files come back as bytes, not JSON; read them with the caller's token.
 async function fetchFile(path, token) {
-  const res = await fetch(apiUrl(path), { headers: token ? { authorization: `Bearer ${token}` } : {} })
-  if (!res.ok) throw Object.assign(new Error('file'), { status: res.status, code: res.status === 403 ? 'forbidden' : 'not_found' })
-  return { blob: await res.blob(), type: res.headers.get('content-type') }
+  return track(async () => {
+    const res = await fetch(apiUrl(path), { headers: token ? { authorization: `Bearer ${token}` } : {} })
+    if (!res.ok) throw Object.assign(new Error('file'), { status: res.status, code: res.status === 403 ? 'forbidden' : 'not_found' })
+    return { blob: await res.blob(), type: res.headers.get('content-type') }
+  })
 }
 
 // The same surface as ./local, over the REST API of PRD section 56.
@@ -95,6 +97,8 @@ export const tms = {
   matches: async (tid, filter) => (await get(`${T(tid)}/matches${qs(filter)}`)).matches,
   generateMatches: (tid, opts = {}) => send('POST', `${T(tid)}/matches/generate`, opts),
   swapCorners: async (tid, mid, reason) => (await send('POST', `${T(tid)}/matches/${mid}/swap-corners`, { reason: reason || null })).match,
+  // Kata and Kumite take turns: switch the session on the mats.
+  setRunningEvent: (tid, event) => send('POST', `${T(tid)}/running-event`, { event }),
   callMatch: async (tid, mid, mat) => (await send('POST', `${T(tid)}/matches/${mid}/call`, { mat: mat ?? null })).match,
   matchEvents: async (tid, mid) => (await get(`${T(tid)}/matches/${mid}/events`)).events,
   overrideMedals: (tid, divisionKey, medals, reason) => send('POST', `${T(tid)}/results/medals/override`, { divisionKey, medals, reason }),

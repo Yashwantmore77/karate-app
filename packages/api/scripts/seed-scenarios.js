@@ -26,8 +26,10 @@ import { createStores, COLLECTIONS } from '../lib/store.js'
 import { createBackup } from '../lib/backup.js'
 import { isMongoConfigured, closeMongo } from '../db/mongo.js'
 import { createTms } from '@kumite/shared/tms.js'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 import { seededRandom } from '@kumite/shared/pools.js'
 import { boutOutcome } from '@kumite/shared/results.js'
+import { CATEGORY_PRESETS, weightClasses } from '@kumite/shared/presets.js'
 import { listAssignableOfficials, listCoachAccounts, deleteUser, createUser, findUserRecordByEmail } from '../auth/users.js'
 import { DEFAULT_SLOT_MINUTES, endOfSlot } from '../lib/schedule.js'
 
@@ -145,7 +147,7 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
       registrationStart: day(spec.regOpen ?? start - 40), registrationClose: day(spec.regClose ?? start - 5),
       weighInDate: day(start - 1), startDate: day(start), endDate: day(start + (spec.days || 2) - 1),
       rules: 'WKF rules apply. Protective gear (mitts, shin and foot guards, mouth guard) is compulsory for Kumite.',
-      terms: 'Coaches confirm every player is medically fit and insured. Entry fees are not refundable.',
+      terms: 'Coaches confirm every player is medically fit and insured.',
       settings: { poolSize: 8, mats: 3, matchDurationSec: 120, pointGap: 8, emailNotifications: false, fees: { kata: 500, kumite: 700, both: 1000, team: 0 }, ...settings },
       ...extra,
     } : { ...base, ...extra })
@@ -211,7 +213,8 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
   const approve = async (t, list, { paid = 1 } = {}) => {
     for (const p of list) {
       await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
-      if (random() < paid) await tms.recordPayment(admin, t.id, p.id, { status: 'PAID', method: pick(['UPI', 'Cash', 'Bank transfer']), transactionId: `TXN${Math.floor(random() * 1e8)}` })
+      // Payments are off while the system is free (features.js).
+      if (paymentsEnabled() && random() < paid) await tms.recordPayment(admin, t.id, p.id, { status: 'PAID', method: pick(['UPI', 'Cash', 'Bank transfer']), transactionId: `TXN${Math.floor(random() * 1e8)}` })
     }
   }
 
@@ -396,7 +399,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
 
   // 3. REGISTRATION OPEN, coaches entering players: every registration case ------------
   {
-    const t = await b.tournament({ name: 'Test 03 · District Open (registration open)', slug: 'district-open', start: 25, regOpen: -10, regClose: 15, groups: JUNIORS, description: 'Coaches are registering. Every registration and payment case is here.' })
+    const t = await b.tournament({ name: 'Test 03 · District Open (registration open)', slug: 'district-open', start: 25, regOpen: -10, regClose: 15, groups: JUNIORS, description: 'Coaches are registering. Every registration case is here.' })
     await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
     const link = await tms.saveLink(admin, t.id, { password: LINK_PASSWORD, expiresAt: `${day(15)}T23:59:59.000Z` })
     const teamRows = await b.teams(t)
@@ -410,8 +413,12 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     await b.approve(t, unpaid, { paid: 0 })
     for (const p of rejected) await tms.setRegistrationStatus(admin, t.id, p.id, 'reject', 'Age proof does not match the date of birth')
     for (const p of correction) await tms.setRegistrationStatus(admin, t.id, p.id, 'request_correction', 'Please upload a clearer photo')
-    for (const p of failed) { await tms.setRegistrationStatus(admin, t.id, p.id, 'approve'); await tms.recordPayment(admin, t.id, p.id, { status: 'FAILED', method: 'UPI', transactionId: 'TXNFAILED01' }) }
-    for (const p of refunded) { await tms.setRegistrationStatus(admin, t.id, p.id, 'approve'); await tms.recordPayment(admin, t.id, p.id, { status: 'REFUNDED', method: 'Bank transfer', transactionId: 'TXNREFUND01', note: 'Player injured before the event' }) }
+    if (paymentsEnabled()) {
+      for (const p of failed) { await tms.setRegistrationStatus(admin, t.id, p.id, 'approve'); await tms.recordPayment(admin, t.id, p.id, { status: 'FAILED', method: 'UPI', transactionId: 'TXNFAILED01' }) }
+      for (const p of refunded) { await tms.setRegistrationStatus(admin, t.id, p.id, 'approve'); await tms.recordPayment(admin, t.id, p.id, { status: 'REFUNDED', method: 'Bank transfer', transactionId: 'TXNREFUND01', note: 'Player injured before the event' }) }
+    } else {
+      for (const p of [...failed, ...refunded]) await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
+    }
     // Entered by a coach through the link: "Submitted", waiting for the officer.
     const submitted = await b.players(t, teamRows, 'Boys 14-15', [{ events: ['kumite'], weight: '-57 KG', count: 3 }], { status: 'SUBMITTED' })
     // A possible duplicate (same name and date of birth), confirmed on purpose.
@@ -424,8 +431,8 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     await tms.teams.update(admin, t.id, inactive.id, { active: false })
     note(t, 'District Open', 'REGISTRATION_OPEN', [
       `Coach link /register/${link.token} (password ${LINK_PASSWORD}), expires in 15 days`,
-      'Players: approved + paid, approved + unpaid, pending verification, submitted by coach, rejected (with reason), sent back for correction (draft)',
-      'Payments: paid, pending, failed, refunded',
+      'Players: approved, pending verification, submitted by coach, rejected (with reason), sent back for correction (draft)',
+      ...(paymentsEnabled() ? ['Payments: paid, pending, failed, refunded'] : []),
       'A possible duplicate player (same name and date of birth)',
       'A player too old for every age group (no category)',
       'An inactive team that cannot add players',
@@ -448,7 +455,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     await tms.setSoftLock(admin, t.id, true)
     await tms.saveLink(admin, t.id, { active: false })
     await b.steps(t, ['REGISTRATION_CLOSED', 'VERIFICATION'])
-    note(t, 'Coastal Cup', 'VERIFICATION', ['Registration window closed by date; coach link switched off', 'Coach entries soft-locked', `${all.length - 12} players still waiting for verification`, 'Some approved players have not paid'])
+    note(t, 'Coastal Cup', 'VERIFICATION', ['Registration window closed by date; coach link switched off', 'Coach entries soft-locked', `${all.length - 12} players still waiting for verification`, ...(paymentsEnabled() ? ['Some approved players have not paid'] : [])])
   }
 
   // 5. WEIGH-IN: every weigh-in result --------------------------------------------------
@@ -575,6 +582,14 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     }
     const done = []
 
+    // Kata and Kumite take turns. The kata session ran first: the men's kata
+    // to the final. The women's round 1 is set up for a later kata session.
+    const kataKey = key('Seniors Male', 'kata')
+    if (kataKey) await b.kata(t, kataKey)
+    await tms.createKataRound(admin, t.id, key('Seniors Female', 'kata'), { seed: 2026 })
+    // Kumite is on the mats now.
+    await tms.setRunningEvent(admin, t.id, 'kumite')
+
     // Single entries: one awarded the gold, one "no competition".
     await tms.decideSingleEntry(admin, t.id, key('-60 KG'), 'award')
     await tms.decideSingleEntry(admin, t.id, key('-50 KG'), 'no_competition')
@@ -639,12 +654,6 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     const withdrawn = big.slice(17).flatMap((m) => [m.akaPlayerId, m.aoPlayerId]).find((id) => id && !busy.has(id))
     if (withdrawn) await tms.withdrawPlayer(admin, t.id, withdrawn, 'Injured in an earlier bout; doctor advised no further bouts')
 
-    // Kata: the men's category in its final, half the performers scored.
-    const kataKey = key('Seniors Male', 'kata')
-    if (kataKey) await b.kata(t, kataKey, { leaveOpen: true, partial: 2 })
-    // The women's kata: round 1 set up, not started yet.
-    await tms.createKataRound(admin, t.id, key('Seniors Female', 'kata'), { seed: 2026 })
-
     await b.schedule(t) // knockout bouts created as winners went through
     await tms.generatePasses(admin, t.id, { kinds: ['player', 'coach'] })
     const passes = await tms.listPasses(t.id)
@@ -658,7 +667,8 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
       'Single entries: one awarded gold, one "no competition"',
       'Category results: provisional (with medals set by hand), verified, published, locked',
       '17 players in pools of 9 + 8; knockout category with the first round fought',
-      'Kata: men\'s final open with only some performers scored; women\'s round 1 set up, not started',
+      'Kata and Kumite take turns: the kata session ran first (men\'s kata to the final); Kumite is on the mats now',
+      'Women\'s kata round 1 set up, waiting for the next kata session',
       'Passes printed; about 70% checked in',
     ])
   }
@@ -712,6 +722,87 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     const t = await completed({ name: 'Test 10 · Winter Open 2025 (archived)', slug: 'winter-open-2025', start: -300, description: 'Last season. Archived: read-only history.' })
     await tms.setLifecycle(admin, t.id, 'ARCHIVED')
     note(t, 'Winter Open 2025', 'ARCHIVED', ['Read-only history: nothing can be changed', 'Results, certificates and the audit log still visible'])
+  }
+
+  // 11. KATA ONLY, categories loaded from the SGFI preset, registration open -------------------
+  {
+    const t = await b.tournament({ name: 'Test 11 · School Kata Championship (kata only, SGFI categories)', slug: 'school-kata', type: 'kata', start: 30, regOpen: -5, regClose: 20, description: 'A kata-only school event. Categories come from the SGFI preset in one step.' })
+    await tms.applyCategoryPreset(admin, t.id, 'sgfi')
+    // The preset's groups, in the shape the player builder reads.
+    t.groups = CATEGORY_PRESETS.sgfi.groups.map((g) => ({ ...g, weights: weightClasses(g.weights).map((w) => [w.name, w.minWeight, w.maxWeight]) }))
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
+    await tms.saveLink(admin, t.id, {})
+    const teamRows = await b.teams(t, 5)
+    const all = [
+      ...await b.players(t, teamRows, 'U-14 Boys', [{ events: ['kata'], count: 7 }]),
+      ...await b.players(t, teamRows, 'U-14 Girls', [{ events: ['kata'], count: 6 }]),
+      ...await b.players(t, teamRows, 'U-17 Boys', [{ events: ['kata'], count: 5 }]),
+      ...await b.players(t, teamRows, 'U-17 Girls', [{ events: ['kata'], count: 4 }]),
+      ...await b.players(t, teamRows, 'U-19 Boys', [{ events: ['kata'], count: 1 }]),
+    ]
+    await b.approve(t, all.slice(0, 15))
+    await tms.setRegistrationStatus(admin, t.id, all[15].id, 'reject', 'Birth certificate does not match the school record')
+    note(t, 'School Kata Championship', 'REGISTRATION_OPEN', [
+      'Tournament type Kata only: no kumite entries, weigh-in or weight classes in use',
+      `SGFI preset loaded: ${CATEGORY_PRESETS.sgfi.groups.length} age groups (U-14, U-17, U-19, boys and girls)`,
+      'Coach link open; 15 approved, 1 rejected, the rest waiting for approval',
+      'U-19 Girls has no entries; U-19 Boys has a single entry',
+    ])
+  }
+
+  // 12. KUMITE ONLY, knockout brackets arranged by hand on the bracket board, LIVE ------------
+  {
+    const groups = [
+      { name: 'Juniors Male', gender: 'M', minAge: 16, maxAge: 17, weights: [['-61 KG', null, 61, { poolSystem: 'knockout' }], ['-68 KG', 61, 68, { poolSystem: 'knockout' }], ['+68 KG', 68, null, { poolSystem: 'knockout' }]] },
+      { name: 'Juniors Female', gender: 'F', minAge: 16, maxAge: 17, weights: [['-53 KG', null, 53, { poolSystem: 'knockout' }], ['+53 KG', 53, null]] },
+    ]
+    const t = await b.tournament({ name: 'Test 12 · Junior Kumite League (kumite only, bracket board, LIVE)', slug: 'junior-kumite', type: 'kumite', start: 0, regOpen: -40, regClose: -6, groups, settings: { thirdPlaceMatch: true }, description: 'Kumite only, knockout brackets. Draws arranged by drag and drop; winners recorded on the bracket.' })
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
+    const teamRows = await b.teams(t, 6)
+    const all = [
+      ...await b.players(t, teamRows, 'Juniors Male', [{ events: ['kumite'], weight: '-61 KG', count: 8 }, { events: ['kumite'], weight: '-68 KG', count: 6 }, { events: ['kumite'], weight: '+68 KG', count: 5 }]),
+      ...await b.players(t, teamRows, 'Juniors Female', [{ events: ['kumite'], weight: '-53 KG', count: 7 }, { events: ['kumite'], weight: '+53 KG', count: 4 }]),
+    ]
+    await b.approve(t, all)
+    await b.steps(t, ['REGISTRATION_CLOSED', 'WEIGH_IN'])
+    await b.weighAll(t)
+    await b.draw(t)
+    const brackets = new Map((await tms.listBrackets(t.id)).map((x) => [x.label, x.divisionKey]))
+    const keyOf = (part) => [...brackets].find(([label]) => label.includes(part))?.[1]
+    /** Same places (byes stay where they are), players in the reverse order. */
+    const rearrange = async (key) => {
+      const view = await tms.bracketView(t.id, key)
+      const players = view.layout.filter(Boolean).reverse()
+      return tms.arrangeBracket(admin, t.id, key, view.layout.map((id) => (id ? players.shift() : null)))
+    }
+    const arranged = []
+    for (const part of ['-61 KG', '-68 KG', '+68 KG', '-53 KG']) {
+      const key = keyOf(part)
+      if (key) { await rearrange(key); arranged.push(part) }
+    }
+    await b.schedule(t)
+    await b.steps(t, ['READY', 'LIVE'])
+    // -61 KG (8 players): quarter-finals fought, semi-finals waiting.
+    const k61 = keyOf('-61 KG')
+    if (k61) for (const m of await b.openBouts(t, k61)) await b.fight(t, m)
+    // -68 KG (6 players, two byes): one quarter-final won by walkover.
+    const k68 = keyOf('-68 KG')
+    if (k68) {
+      const [first] = await b.openBouts(t, k68)
+      if (first) await b.fight(t, first, { type: 'WALKOVER', winner: 'blue', aka: 0, ao: 0, finishReason: 'AKA did not report to the mat' })
+    }
+    // -53 KG (7 players): fought to the end, bronze bout included.
+    const k53 = keyOf('-53 KG')
+    if (k53) await b.finishDivision(t, k53)
+    await b.schedule(t)
+    note(t, 'Junior Kumite League', 'LIVE', [
+      'Tournament type Kumite only',
+      `Knockout brackets arranged by hand (bracket board): ${arranged.join(', ')}`,
+      '-61 KG: quarter-finals done, semi-finals waiting (the draw can no longer be moved)',
+      '-68 KG: 6 players with byes; one bout won by walkover',
+      '+68 KG: arranged, not started, so it can still be dragged around',
+      '-53 KG: finished, with a third-place bout; +53 KG uses pools',
+    ])
   }
 
   const width = Math.max(...summary.map((s) => s.title.length))

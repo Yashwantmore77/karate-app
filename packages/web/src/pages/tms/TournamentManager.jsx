@@ -4,6 +4,7 @@ import { Container, Box, Toolbar, Typography, IconButton, Tabs, Tab, Alert, Stac
 import { ArrowBack, Lock, LockOpen } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import StatusBadge from '../../components/tms/StatusBadge'
+import EventSession from '../../components/tms/EventSession'
 import useAction from '../../components/tms/useAction'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
@@ -105,6 +106,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
             <StatusBadge status={tournament.drawLocked ? 'COMPLETED' : 'DRAFT'} label={tournament.drawLocked ? 'Draw locked' : 'Draw open'} />
             {tournament.softLocked && !tournament.entriesLocked && <StatusBadge status="PENDING_VERIFICATION" label="Coach entries closed" />}
             {tournament.weighInClosed && <StatusBadge status="COMPLETED" label="Weigh-in closed" />}
+            <EventSession tournament={tournament} role={role} action={action} reload={reload} dense />
           </Stack>
         </Toolbar>
         <Tabs value={current?.key || false} onChange={(_e, key) => setParams({ tab: key })} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ px: 1 }}>

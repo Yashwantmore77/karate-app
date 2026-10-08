@@ -9,6 +9,7 @@ import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { LockIcon } from './TournamentManager'
 import { PageLoader } from '../../components/Loader'
 import InfoTip, { HelpTitle } from '../../components/help/InfoTip'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 
 const ORDER = Object.values(TOURNAMENT_STATUS)
 
@@ -110,7 +111,7 @@ export default function OverviewTab({ tournament, reload, version, action, role 
       <Grid container spacing={2}>
         {[
           ['Teams', s.teams], ['Players', s.players], ['Kata players', s.kataPlayers], ['Kumite players', s.kumitePlayers],
-          ['Pending verification', s.pendingVerification, 'warning'], ['Pending payment', s.pendingPayment, 'warning'],
+          ['Pending verification', s.pendingVerification, 'warning'], ...(paymentsEnabled() ? [['Pending payment', s.pendingPayment, 'warning']] : []),
           ['Pending weigh-in', s.pendingWeighIn, 'warning'], ['Pools', s.pools], ['Matches', s.matches],
           ['Completed matches', s.completedMatches, 'success'], ['Pending matches', s.pendingMatches],
           ['Gold', s.gold], ['Silver', s.silver], ['Bronze', s.bronze],

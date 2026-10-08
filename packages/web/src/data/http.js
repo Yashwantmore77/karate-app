@@ -24,22 +24,43 @@ export class HttpError extends Error {
 let onUnauthorized = null
 export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn }
 
-// Requests in flight, for the progress bar at the top of the app. Background
-// polls pass `quiet` so a hall screen's heartbeat never shows as loading.
+// Requests in flight, for the app's loading spinner. Background polls pass
+// `quiet` so a hall screen's heartbeat never shows as loading. Writes are
+// counted apart, so the spinner can say "Saving" rather than "Loading".
 let inFlight = 0
+let writes = 0
 const activityListeners = new Set()
-const setInFlight = (n) => { inFlight = n; activityListeners.forEach((fn) => fn(inFlight)) }
+const requestListeners = new Set()
+const notifyActivity = () => activityListeners.forEach((fn) => fn(inFlight, writes))
 export const getInFlight = () => inFlight
+export const getWrites = () => writes
 export const onActivity = (fn) => { activityListeners.add(fn); return () => activityListeners.delete(fn) }
+/**
+ * Told when a request starts; may return a function called when it ends.
+ * The screens use it to put a spinner on the button that asked.
+ */
+export const onRequest = (fn) => { requestListeners.add(fn); return () => requestListeners.delete(fn) }
+
+/** Counts any call to the server as loading, including ones not made through request(). */
+export async function track(work, { method = 'GET' } = {}) {
+  const write = method !== 'GET'
+  inFlight += 1
+  if (write) writes += 1
+  notifyActivity()
+  const ends = [...requestListeners].map((fn) => fn({ method })).filter((end) => typeof end === 'function')
+  try {
+    return await (typeof work === 'function' ? work() : work)
+  } finally {
+    inFlight -= 1
+    if (write) writes -= 1
+    notifyActivity()
+    ends.forEach((end) => end())
+  }
+}
 
 export async function request(path, { quiet = false, ...options } = {}) {
   if (quiet) return send(path, options)
-  setInFlight(inFlight + 1)
-  try {
-    return await send(path, options)
-  } finally {
-    setInFlight(inFlight - 1)
-  }
+  return track(() => send(path, options), { method: options.method || 'GET' })
 }
 
 async function send(path, { method = 'GET', body, signal, token: explicitToken, anonymous = false } = {}) {

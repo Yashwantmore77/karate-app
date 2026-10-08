@@ -362,6 +362,12 @@ export default function KumiteConsole({
         <Alert severity="info" sx={{ mb: 2 }}>{mat.replayErrors} offline action{mat.replayErrors === 1 ? ' was' : 's were'} refused by the server (for example, the bout was already decided).</Alert>
       )}
 
+      {!observing && mat.lastError === 'event_not_running' && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Kata is on the mats now, so this kumite bout cannot be scored yet. It starts when the organiser switches the session to Kumite.
+        </Alert>
+      )}
+
       {!observing && mat.lastError === 'taken_over' && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Another referee took over this mat. Your controls are now read-only.

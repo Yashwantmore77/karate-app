@@ -1,10 +1,13 @@
 // Automated mock tournament: a rehearsal of a whole event, end to end,
-// through the same API and live sockets the screens use. Every step is
+// through the same API and live sockets the screens use. It is a Kata + Kumite
+// tournament: players enter kata only, kumite only or both, and both events
+// run to medals, certificates and the public page. Every step is
 // checked and reported; a failing step names what went wrong. Run from
 // packages/api:
 //
 //   npm run mock                                         in-process server, demo accounts
 //   npm run mock -- --teams 6 --players 8 --mats 3
+//   npm run mock -- --kata bouts                         kata by flags on the mats (default: judges' panel)
 //   npm run mock -- --url https://staging.example.org --email admin@… --password … [--cleanup]
 //
 // Against a real server only the admin account is needed: the admin does the
@@ -35,7 +38,7 @@ async function startLocal() {
 
 export async function runMockTournament({
   url = null, email = 'admin@kata.local', password = 'test123', teams = 4, players = 6, mats = 2,
-  demoAccounts = !url, cleanup = false, quiet = false,
+  kataMode = 'panel', demoAccounts = !url, cleanup = false, quiet = false,
 } = {}) {
   const local = url ? null : await startLocal()
   const base = url || local.url
@@ -68,7 +71,7 @@ export async function runMockTournament({
   }
   const must = (ok, what) => { if (!ok) throw new Error(what) }
 
-  log(`Mock tournament against ${url || 'an in-process server'}: ${teams} teams × ${players} players, ${mats} mats`)
+  log(`Mock tournament against ${url || 'an in-process server'}: ${teams} teams × ${players} players, ${mats} mats, kata by ${kataMode === 'bouts' ? 'bouts (flags)' : 'judges\' panel'}`)
   const ctx = {}
   const login = async (who, pass = password) => (await call('POST', '/auth/login', { email: who, password: pass })).token
 
@@ -94,8 +97,8 @@ export async function runMockTournament({
       await call('POST', `${T}/weight-categories`, { ageGroupId: ageGroup.id, name: '-40 KG', maxWeight: 40 }, ctx.admin)
       await call('POST', `${T}/weight-categories`, { ageGroupId: ageGroup.id, name: '+40 KG', minWeight: 40, maxWeight: 200 }, ctx.admin)
       // No emails to real people from a rehearsal.
-      await call('PATCH', `${T}/settings`, { poolSize: 4, mats, kataJudges: 3, kataRounds: 1, requireWeighInForDraw: true, emailNotifications: false, notificationChannels: { email: false, sms: false, whatsapp: false } }, ctx.admin)
-      return '1 age group, 2 weight categories'
+      await call('PATCH', `${T}/settings`, { poolSize: 4, mats, kataMode, kataJudges: 3, kataRounds: 2, kataQualifiers: 4, requireWeighInForDraw: true, emailNotifications: false, notificationChannels: { email: false, sms: false, whatsapp: false } }, ctx.admin)
+      return `1 age group, 2 weight categories, kata by ${kataMode}`
     })
 
     await step('Open registration and publish the coach link', async () => {
@@ -113,32 +116,43 @@ export async function runMockTournament({
         ctx.coaches.push(token)
         for (let j = 0; j < players; j += 1) {
           const n = i * players + j
+          // Every third player both events, the rest kumite only or kata only.
+          const events = [['kata', 'kumite'], ['kumite'], ['kata']][j % 3]
           await call('POST', '/coach/players', {
             name: `${FIRST[n % FIRST.length]} ${LAST[(n * 7 + i) % LAST.length]} ${n + 1}`, dob: `2014-0${(j % 9) + 1}-1${j % 9}`, gender: 'M',
-            events: j % 3 === 0 ? ['kata', 'kumite'] : ['kumite'], weight: 32 + ((n * 3) % 16),
+            // A kata-only entry needs no weight.
+            events, ...(events.includes('kumite') ? { weight: 32 + ((n * 3) % 16) } : {}),
           }, token)
           added += 1
         }
       }
+      const { players: mine } = await call('GET', '/coach/me', undefined, ctx.coaches[0])
+      must(mine.some((p) => p.events.length === 2), 'the coach portal does not show a player in both events')
       return `${added} players in ${teams} teams`
     })
 
     await step('Bulk upload preview and import', async () => {
-      const csv = 'Player Name,DOB,Gender,Event,Weight\nBulk Entrant One,2014-02-02,M,kumite,36\nBulk Entrant Two,2014-03-03,M,kumite,44\n'
+      const csv = 'Player Name,DOB,Gender,Event,Weight\nBulk Entrant One,2014-02-02,M,kumite,36\nBulk Entrant Two,2014-03-03,M,Kata + Kumite,44\nBulk Entrant Three,2014-04-04,M,kata,\n'
       const preview = await call('POST', '/coach/players/bulk/preview', { csv }, ctx.coaches[0])
       must(!preview.errors.length, `preview errors: ${JSON.stringify(preview.errors)}`)
       const done = await call('POST', '/coach/players/bulk', { csv }, ctx.coaches[0])
       return `${done.created} imported`
     })
 
-    await step('Verify registrations and record payments', async () => {
+    await step('Verify registrations', async () => {
       const registrar = await as('registrar@kata.local')
       const { players: list } = await call('GET', `${T}/players`, undefined, registrar)
-      for (const [i, p] of list.entries()) {
+      for (const p of list) {
         await call('POST', `${T}/players/${p.id}/registration`, { action: 'approve' }, registrar)
-        if (i % 2 === 0) await call('PUT', `${T}/players/${p.id}/payment`, { status: 'PAID', amount: 500, method: 'UPI' }, registrar)
       }
-      return `${list.length} approved`
+      ctx.byEvent = {
+        both: list.filter((p) => p.events.length === 2).map((p) => p.id),
+        kata: list.filter((p) => p.events.includes('kata')).map((p) => p.id),
+        kumite: list.filter((p) => p.events.includes('kumite')).map((p) => p.id),
+      }
+      const kataOnly = list.length - ctx.byEvent.kumite.length
+      must(ctx.byEvent.both.length && kataOnly && list.length - ctx.byEvent.kata.length, 'entries should cover kata only, kumite only and both')
+      return `${list.length} approved: ${ctx.byEvent.kata.length} kata, ${ctx.byEvent.kumite.length} kumite, ${ctx.byEvent.both.length} in both`
     })
 
     await step('Weigh-in', async () => {
@@ -146,18 +160,67 @@ export async function runMockTournament({
       await call('POST', `${T}/lifecycle`, { to: 'WEIGH_IN' }, ctx.admin)
       const officer = await as('weighin@kata.local')
       const { players: list } = await call('GET', `${T}/players?event=kumite`, undefined, officer)
+      // Only kumite is fought by weight: kata-only players are not on the scale.
+      must(list.length === ctx.byEvent.kumite.length && list.every((p) => p.events.includes('kumite')), 'the weigh-in list is not the kumite entries')
       for (const p of list) await call('POST', `${T}/players/${p.id}/weigh-in`, { actualWeight: p.weight }, officer)
-      return `${list.length} weighed`
+      return `${list.length} weighed, ${ctx.byEvent.kata.length - ctx.byEvent.both.length} kata-only skipped`
     })
 
     await step('Categorise, lock entries and draw pools', async () => {
       await call('POST', `${T}/categorize`, {}, ctx.admin)
       await call('POST', `${T}/locks/entries`, { locked: true }, ctx.admin)
       const drawn = await call('POST', `${T}/pools/generate`, { seed: 42 }, ctx.admin)
+      // Kata-only players were never weighed, and still go into the draw.
       must(!drawn.excluded.length, `${drawn.excluded.length} players left out of the draw`)
+      const { divisions } = await call('GET', `${T}/divisions`, undefined, ctx.admin)
+      const kataDivs = divisions.filter((d) => d.event === 'kata')
+      const kumiteDivs = divisions.filter((d) => d.event === 'kumite')
+      must(kataDivs.length && kumiteDivs.length, 'expected kata and kumite categories')
+      const inBoth = ctx.byEvent.both.filter((id) => kataDivs.some((d) => d.playerIds.includes(id)) && kumiteDivs.some((d) => d.playerIds.includes(id)))
+      must(inBoth.length === ctx.byEvent.both.length, 'a player entered in both events is missing from one of them')
       await call('POST', `${T}/locks/draw`, { locked: true }, ctx.admin)
       const { created } = await call('POST', `${T}/matches/generate`, {}, ctx.admin)
-      return `${drawn.pools.length} pools, ${created} bouts`
+      return `${drawn.pools.length} pools, ${created} bouts; ${kataDivs.length} kata + ${kumiteDivs.length} kumite categories`
+    })
+
+    const isKata = (m) => /kata/i.test(m.divisionKey || '')
+
+    await step('Timetable the mats: kata session, then kumite, nobody in two places', async () => {
+      const { tournament } = await call('GET', T, undefined, ctx.admin)
+      const slot = (tournament.slotMinutes || 15) * 60_000
+      const start = new Date(`${tournament.startDate}T03:30:00Z`).getTime()
+      const { matches } = await call('GET', `${T}/matches`, undefined, ctx.admin)
+      const bouts = matches.filter((m) => m.redId && m.blueId)
+      // Kata and Kumite take turns: the kata session first, kumite after it.
+      // Greedy within a session: each bout at the first slot where its mat and both players are free.
+      const busy = new Map() // slot -> Set of mats and players
+      let placed = 0
+      let from = 0
+      for (const session of [bouts.filter(isKata), bouts.filter((m) => !isKata(m))]) {
+        let last = from - 1
+        for (const m of session) {
+          const people = [`mat:${m.mat}`, m.akaPlayerId, m.aoPlayerId]
+          let k = from
+          while (people.some((x) => busy.get(k)?.has(x))) k += 1
+          if (!busy.has(k)) busy.set(k, new Set())
+          people.forEach((x) => busy.get(k).add(x))
+          await call('PATCH', `/matches/${m.id}`, { scheduledAt: new Date(start + k * slot).toISOString() }, ctx.admin)
+          last = Math.max(last, k)
+          placed += 1
+        }
+        from = last + 1
+      }
+      // Even by hand, a player in both events cannot be put on a kata bout and a kumite bout at once.
+      const kataBout = bouts.find((m) => isKata(m) && [m.akaPlayerId, m.aoPlayerId].some((id) => ctx.byEvent.both.includes(id)))
+      if (kataBout) {
+        const shared = [kataBout.akaPlayerId, kataBout.aoPlayerId].find((id) => ctx.byEvent.both.includes(id))
+        const kumiteBout = bouts.find((m) => !isKata(m) && [m.akaPlayerId, m.aoPlayerId].includes(shared))
+        const { match: timed } = await call('GET', `/matches/${kataBout.id}`, undefined, ctx.admin)
+        const refused = await call('PATCH', `/matches/${kumiteBout.id}`, { scheduledAt: timed.scheduledAt, mat: (kataBout.mat % mats) + 1 }, ctx.admin).then(() => null, (err) => err)
+        must(refused?.status === 409 && refused.payload?.details?.clashes?.some((c) => c.otherEvent), 'a player was booked in kata and kumite at the same time')
+        return `${placed} bouts timed in two sessions; a kata/kumite double booking was refused`
+      }
+      return `${placed} bouts timed in two sessions`
     })
 
     await step('Issue passes and check athletes in at the door', async () => {
@@ -210,51 +273,110 @@ export async function runMockTournament({
       return scored
     }
 
-    await step('Score every pool bout live, mats in parallel', async () => {
-      const { matches } = await call('GET', `${T}/matches`, undefined, ctx.admin)
-      const pool = matches.filter((m) => m.redId && m.blueId && m.stage !== 'knockout')
-      return `${await fight(pool)} bouts scored`
-    })
-
-    await step('Final stages: brackets fought to the end', async () => {
+    // Kata bouts are decided by the judges' flags, not on the kumite console.
+    const flags = async (bouts) => {
+      for (const m of bouts) {
+        const redWins = (m.matchNumber.charCodeAt(m.matchNumber.length - 1) % 2) === 0
+        await call('PATCH', `/matches/${m.id}`, { status: 'completed', winner: redWins ? 'red' : 'blue', avgRed: redWins ? 3 : 2, avgBlue: redWins ? 2 : 3, result: { method: 'flags', type: 'COMPLETED' } }, ctx.admin)
+      }
+      return bouts.length
+    }
+    const openBouts = async (stage) => (await call('GET', `${T}/matches`, undefined, ctx.admin)).matches
+      .filter((m) => m.redId && m.blueId && !['completed', 'cancelled'].includes(m.status) && (stage === 'pool' ? m.stage !== 'knockout' : m.stage === 'knockout'))
+    /** Brackets for the event's categories whose pools are done, then every knockout round. */
+    const finalStages = async (event, decide) => {
       let brackets = 0
       const { results } = await call('GET', `${T}/results`, undefined, ctx.admin)
-      for (const d of results.filter((r) => r.canGenerateBracket)) {
+      for (const d of results.filter((r) => r.event === event && r.canGenerateBracket)) {
         await call('POST', `${T}/brackets/generate`, { divisionKey: d.key }, ctx.admin)
         brackets += 1
       }
       // Rounds open as earlier ones finish.
       let fought = 0
       for (let round = 0; round < 6; round += 1) {
-        const { matches } = await call('GET', `${T}/matches`, undefined, ctx.admin)
-        const open = matches.filter((m) => m.stage === 'knockout' && m.redId && m.blueId && !['completed', 'cancelled'].includes(m.status))
+        const open = (await openBouts('knockout')).filter((m) => isKata(m) === (event === 'kata'))
         if (!open.length) break
-        fought += await fight(open)
+        fought += await decide(open)
       }
-      return `${brackets} brackets, ${fought} knockout bouts`
+      return { brackets, fought }
+    }
+
+    await step('Kata session: kumite waits its turn', async () => {
+      const { tournament } = await call('GET', `/public/tournaments/${ctx.slug}`)
+      must(tournament.runningEvent === 'kata', `the kata session should run first, not ${tournament.runningEvent}`)
+      // A kumite bout cannot be called, or started on the console, during the kata session.
+      const [kumiteBout] = (await openBouts('pool')).filter((m) => !isKata(m))
+      const refused = await call('POST', `${T}/matches/${kumiteBout.id}/call`, {}, ctx.admin).then(() => null, (err) => err)
+      must(refused?.payload?.error === 'event_not_running', 'a kumite bout was called during the kata session')
+      const socket = connect(base, { auth: { token: ctx.admin }, transports: ['websocket'], reconnection: false })
+      await new Promise((resolve, reject) => { socket.on('connect', resolve); socket.on('connect_error', reject) })
+      await new Promise((resolve) => socket.timeout(8000).emit('match:join', { matchId: kumiteBout.id, control: true }, resolve))
+      const started = await new Promise((resolve) => socket.timeout(8000).emit('match:cmd', { matchId: kumiteBout.id, cmd: 'CLOCK_START', clientEventId: `${kumiteBout.id}-early` }, (err, reply) => resolve(err ? { error: 'timeout' } : reply)))
+      socket.close()
+      must(started?.error === 'event_not_running', 'a kumite bout started on the console during the kata session')
     })
 
-    await step('Kata panel: judges assigned, round scored and closed', async () => {
-      const { divisions } = await call('GET', `${T}/kata/divisions`, undefined, ctx.admin)
-      if (!divisions.length) return 'no kata categories'
-      let rounds = 0
-      for (const d of divisions) {
-        const { round } = await call('POST', `${T}/kata/rounds`, { divisionKey: d.key, seed: 7, start: true }, ctx.admin)
-        for (const [i, playerId] of round.performerIds.entries()) {
-          for (let seat = 1; seat <= round.judges; seat += 1) {
-            await call('POST', `${T}/kata/rounds/${round.id}/scores`, { playerId, seat, score: Math.round((7 + i * 0.3 + seat * 0.1) * 10) / 10 }, ctx.admin)
+    if (kataMode === 'bouts') {
+      await step('Kata session: bouts decided by flags, brackets to the final', async () => {
+        const pool = await flags((await openBouts('pool')).filter(isKata))
+        const { brackets, fought } = await finalStages('kata', flags)
+        return `${pool} pool bouts, ${brackets} brackets, ${fought} knockout bouts`
+      })
+    } else {
+      await step('Kata session: rounds scored by the judges up to the final', async () => {
+        const { divisions } = await call('GET', `${T}/kata/divisions`, undefined, ctx.admin)
+        must(divisions.length, 'no kata categories on the judges\' panel')
+        let rounds = 0
+        for (const d of divisions) {
+          for (let guard = 0; guard < 5; guard += 1) {
+            const { round } = await call('POST', `${T}/kata/rounds`, { divisionKey: d.key, seed: 7, start: true }, ctx.admin)
+            // The kata session cannot end while a round is open.
+            if (!rounds) {
+              const early = await call('POST', `${T}/running-event`, { event: 'kumite' }, ctx.admin).then(() => null, (err) => err)
+              must(early?.payload?.error === 'event_in_progress', 'switched to kumite with a kata round still open')
+            }
+            for (const [i, playerId] of round.performerIds.entries()) {
+              for (let seat = 1; seat <= round.judges; seat += 1) {
+                await call('POST', `${T}/kata/rounds/${round.id}/scores`, { playerId, seat, score: Math.round((7 + i * 0.3 + seat * 0.1) * 10) / 10 }, ctx.admin)
+              }
+            }
+            await call('POST', `${T}/kata/rounds/${round.id}/complete`, {}, ctx.admin)
+            rounds += 1
+            if (round.name === 'Final') break
           }
         }
-        await call('POST', `${T}/kata/rounds/${round.id}/complete`, {}, ctx.admin)
-        rounds += 1
-      }
-      return `${rounds} round(s)`
+        return `${rounds} rounds in ${divisions.length} categories`
+      })
+    }
+
+    await step('Switch the mats to the kumite session', async () => {
+      const switched = await call('POST', `${T}/running-event`, { event: 'kumite' }, ctx.admin)
+      must(switched.event === 'kumite' && switched.from === 'kata', 'the session did not switch')
+      const { tournament } = await call('GET', `/public/tournaments/${ctx.slug}`)
+      must(tournament.runningEvent === 'kumite', 'the public page does not show kumite running')
+    })
+
+    await step('Kumite session: every pool bout scored live, mats in parallel', async () => {
+      const pool = (await openBouts('pool')).filter((m) => !isKata(m))
+      // While a kumite bout is called, the mats cannot go back to kata.
+      await call('POST', `${T}/matches/${pool[0].id}/call`, {}, ctx.admin)
+      const back = await call('POST', `${T}/running-event`, { event: 'kata' }, ctx.admin).then(() => null, (err) => err)
+      must(back?.payload?.error === 'event_in_progress', 'switched back to kata with a kumite bout called')
+      return `${await fight(pool)} bouts scored`
+    })
+
+    await step('Kumite final stages: brackets fought to the end', async () => {
+      const { brackets, fought } = await finalStages('kumite', fight)
+      return `${brackets} brackets, ${fought} knockout bouts`
     })
 
     await step('Verify, publish and lock results', async () => {
       const published = await call('POST', `${T}/results/publish`, {}, ctx.admin)
       must(published.medals > 0, 'no medals were published')
       const { results } = await call('GET', `${T}/results`, undefined, ctx.admin)
+      for (const event of ['kata', 'kumite']) {
+        must(results.some((r) => r.event === event && r.medals.some((m) => m.medal === 'gold')), `no ${event} gold medal`)
+      }
       const decided = results.find((r) => r.resultStatus === 'PUBLISHED')
       if (decided) await call('POST', `${T}/results/lock`, { divisionKey: decided.key, locked: true }, ctx.admin)
       return `${published.medals} medals`
@@ -263,6 +385,9 @@ export async function runMockTournament({
     await step('Certificates', async () => {
       const { created } = await call('POST', `${T}/certificates/generate`, { types: ['medal', 'participation'] }, ctx.admin)
       const { certificates } = await call('GET', `${T}/certificates`, undefined, ctx.admin)
+      for (const event of ['kata', 'kumite']) must(certificates.some((c) => c.type === 'gold' && c.event === event), `no ${event} gold certificate`)
+      // One participation certificate per player, naming both events for those in both.
+      must(certificates.some((c) => c.type === 'participation' && /kata/i.test(c.event) && /kumite/i.test(c.event)), 'no participation certificate for both events')
       const verified = await call('GET', `/public/certificates/${certificates[0].certificateId}`)
       must(verified.certificate.valid, 'certificate did not verify')
       const pdf = await call('GET', `${T}/certificates.pdf`, undefined, ctx.admin, { raw: true })
@@ -273,6 +398,7 @@ export async function runMockTournament({
     await step('Public page shows results and nothing private', async () => {
       const view = await call('GET', `/public/tournaments/${ctx.slug}`)
       must(view.results?.length > 0, 'no results on the public page')
+      must(['kata', 'kumite'].every((event) => view.results.some((r) => r.event === event)), 'the public page should show kata and kumite results')
       must(!/"dob"|"mobile"|"email"|passwordHash/.test(JSON.stringify(view)), 'private data on the public page')
       return `${view.results.length} categories public`
     })
@@ -307,6 +433,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const report = await runMockTournament({
     url: opt('url', null), email: opt('email', 'admin@kata.local'), password: opt('password', 'test123'),
     teams: Number(opt('teams', 4)), players: Number(opt('players', 6)), mats: Number(opt('mats', 2)), cleanup: opt('cleanup', false) === true,
+    kataMode: opt('kata', 'panel') === 'bouts' ? 'bouts' : 'panel',
   })
   process.exit(report.ok ? 0 : 1)
 }

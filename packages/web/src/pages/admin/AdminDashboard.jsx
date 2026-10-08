@@ -11,6 +11,7 @@ import StatCard from '../../components/tms/StatCard'
 import StatusBadge from '../../components/tms/StatusBadge'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { paymentsEnabled } from '@kumite/shared/features.js'
 
 const SUM_KEYS = ['teams', 'players', 'kataPlayers', 'kumitePlayers', 'pendingVerification', 'pendingPayment', 'pendingWeighIn', 'matches', 'completedMatches', 'liveMatches', 'pendingMatches', 'gold', 'silver', 'bronze']
 
@@ -64,7 +65,7 @@ export default function AdminDashboard({ profile }) {
           ['Tournaments', rows.length], ['Running now', running], ['Teams', total.teams], ['Players', total.players],
           ['Kata entries', total.kataPlayers], ['Kumite entries', total.kumitePlayers],
           ['Awaiting approval', total.pendingVerification, total.pendingVerification ? 'warning' : null],
-          ['Payment pending', total.pendingPayment, total.pendingPayment ? 'warning' : null],
+          ...(paymentsEnabled() ? [['Payment pending', total.pendingPayment, total.pendingPayment ? 'warning' : null]] : []),
           ['Weigh-in pending', total.pendingWeighIn, total.pendingWeighIn ? 'warning' : null],
           ['Matches live', total.liveMatches, total.liveMatches ? 'error' : null],
           ['Matches done', `${total.completedMatches} / ${total.matches}`],

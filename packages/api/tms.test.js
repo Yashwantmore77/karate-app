@@ -176,6 +176,35 @@ describe('PRD tournament management over HTTP', () => {
     expect((await call('GET', `/public/tournaments/${tournament.id}`)).status).toBe(404)
   })
 
+  it('does not book a player in kata and kumite at the same time', async () => {
+    const { t, link } = await setUpTournament()
+    // Kata fought as bouts, so both events have bouts on the mats.
+    await call('PATCH', `/tournaments/${t}/settings`, { kataMode: 'bouts' }, tokens.admin)
+    const coach = await openCoach(link)
+    for (let i = 0; i < 3; i += 1) {
+      const { body: { player } } = await call('POST', '/coach/players', { name: `Both ${i}`, dob: '2014-06-15', gender: 'M', events: ['kata', 'kumite'], weight: 33 }, coach)
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    }
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)
+    await call('POST', `/tournaments/${t}/locks/draw`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
+    const all = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
+    const kata = all.find((m) => /kata/i.test(m.divisionKey))
+    const kumite = all.find((m) => /kumite/i.test(m.divisionKey) && [m.akaPlayerId, m.aoPlayerId].some((id) => [kata.akaPlayerId, kata.aoPlayerId].includes(id)))
+    expect(kata && kumite).toBeTruthy()
+    // Different competitor ids, same player.
+    expect([kumite.redId, kumite.blueId]).not.toContain(kata.redId)
+
+    expect((await call('PATCH', `/matches/${kata.id}`, { mat: 1, scheduledAt: '2027-01-15T09:00:00Z' }, tokens.admin)).status).toBe(200)
+    const clash = await call('PATCH', `/matches/${kumite.id}`, { mat: 2, scheduledAt: '2027-01-15T09:00:00Z' }, tokens.admin)
+    expect(clash.status).toBe(409)
+    expect(clash.body.details.clashes[0]).toMatchObject({ role: 'competitor', otherEvent: true, mat: 1 })
+    expect(clash.body.details.clashes[0].name).toMatch(/^Both /)
+    // The next slot is fine.
+    expect((await call('PATCH', `/matches/${kumite.id}`, { mat: 2, scheduledAt: '2027-01-15T10:00:00Z' }, tokens.admin)).status).toBe(200)
+  })
+
   it('assigns officials to a match and records a walkover and a cancellation', async () => {
     const { t, link } = await setUpTournament()
     const coach = await openCoach(link)
