@@ -43,7 +43,7 @@ export default function AssignedMatches({ uid, field = 'refereeId', basePath }) 
       <Typography variant="body2" color="text.secondary">{pending.length} to fight · {done} finished</Typography>
       <List dense>
         {pending.slice(0, 20).map((m) => (
-          <ListItemButton key={m.id} onClick={() => navigate(`${basePath}/match/${m.id}`)}>
+          <ListItemButton key={m.id} data-tip="Opens this bout" onClick={() => navigate(`${basePath}/match/${m.id}`)}>
             <ListItemText
               primary={`${m.matchNumber} · Mat ${m.mat || '—'} · ${m.categoryName}`}
               secondary={`AKA ${m.akaName || 'TBD'} vs AO ${m.aoName || 'TBD'} · ${m.tournamentName}${m.scheduledAt ? ` · ${new Date(m.scheduledAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}` : ''}`} />

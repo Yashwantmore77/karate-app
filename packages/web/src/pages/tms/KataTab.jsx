@@ -94,7 +94,7 @@ export default function KataTab({ tournament, version, action, role }) {
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                 {d.rounds.length > 0 && (
                   <ToggleButtonGroup exclusive size="small" value={selected} onChange={(_e, v) => v && setSelected(v)}>
-                    {d.rounds.map((r) => <ToggleButton key={r.id} value={r.id}>{r.name}{r.status === 'open' ? ' •' : r.status === 'pending' ? ' (not started)' : ''}</ToggleButton>)}
+                    {d.rounds.map((r) => <ToggleButton key={r.id} value={r.id} data-tip={`Shows ${r.name}: its performers, scores and judges${r.status === 'open' ? ' (scoring is open)' : r.status === 'pending' ? ' (not started yet)' : ''}`}>{r.name}{r.status === 'open' ? ' •' : r.status === 'pending' ? ' (not started)' : ''}</ToggleButton>)}
                   </ToggleButtonGroup>
                 )}
                 {canStart && <Button variant="contained" onClick={() => start(d)}>{last ? 'Open next round' : 'Open round 1'}</Button>}

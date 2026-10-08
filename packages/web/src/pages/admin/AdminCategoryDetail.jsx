@@ -132,7 +132,7 @@ export default function AdminCategoryDetail({ uid }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
       <PageBar>
         <Toolbar>
-          <IconButton color="inherit" onClick={() => navigate(`/admin/tournament/${tournamentId}`)} sx={{ mr: 2 }}>
+          <IconButton color="inherit" aria-label="Back" onClick={() => navigate(`/admin/tournament/${tournamentId}`)} sx={{ mr: 2 }}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
@@ -195,10 +195,10 @@ export default function AdminCategoryDetail({ uid }) {
                     <TableCell sx={{ fontWeight: 500 }}>{c.name}</TableCell>
                     <TableCell>{c.age}</TableCell>
                     <TableCell align="right">
-                      <IconButton size="small" color="primary" onClick={() => handleOpenEdit(c.id)} title="Edit" sx={{ mr: 1 }}>
+                      <IconButton size="small" color="primary" onClick={() => handleOpenEdit(c.id)} aria-label="Edit" sx={{ mr: 1 }}>
                         <Edit fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" color="error" onClick={() => setDeleteConfirm(c.id)} title="Delete">
+                      <IconButton size="small" color="error" onClick={() => setDeleteConfirm(c.id)} aria-label="Delete">
                         <Delete fontSize="small" />
                       </IconButton>
                     </TableCell>

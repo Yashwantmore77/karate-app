@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createTms, TMS_COLLECTIONS, registrationReadiness, runningEvent } from './tms.js'
+import { createTms, TMS_COLLECTIONS, registrationReadiness, runningEvent, registrationPath } from './tms.js'
 import { memoryStores } from './memoryStore.js'
 import { evaluateOutcome, DEFAULT_RULES } from './rules.js'
 import { applyCommand, initialMatchState, rulesFrom } from './commands.js'
@@ -602,5 +602,65 @@ describe('players with no category', () => {
     expect(drawn.flatMap((pool) => pool.playerIds)).toContain(heavier)
     const audit = await stores.auditLog.list({ tournamentId: t.id })
     expect(audit.find((a) => a.action === 'pools.generated').changes.uncategorized.to).toBe(1)
+  })
+})
+
+describe('what needs attention', () => {
+  it('says what is wrong at each stage, worst first, with the tab that fixes it', async () => {
+    const { tms, t, add, team } = await world()
+    const ids = (list) => list.map((a) => a.id)
+    // Classes stop at 35 kg: anyone heavier has nowhere to go.
+    let list = await tms.attention(t.id)
+    expect(ids(list)).toEqual(['weight_gaps'])
+    expect(list[0]).toMatchObject({ level: 'warning', tab: 'categories', items: ['Boys 12-13: nothing above 35 kg'] })
+
+    await add(2)
+    await add(1, { suffix: ' Heavy', fields: { weight: 44 } })
+    await tms.createPlayer(admin, t.id, { teamId: team.id, name: 'Waiting Player', dob: '2014-02-02', gender: 'M', events: ['kumite'], weight: 31 })
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
+    list = await tms.attention(t.id)
+    // The player with no category comes first: that one would be left out of the draw.
+    expect(ids(list)).toEqual(['uncategorized', 'weight_gaps', 'no_link', 'approvals'])
+    expect(list[0]).toMatchObject({ level: 'error', tab: 'registrations', items: ['Player 00 Heavy (Kumite): No weight category in Boys 12-13 covers 44 kg'] })
+    expect(list.find((a) => a.id === 'approvals').items).toEqual(['Waiting Player'])
+
+    await tms.saveLink(admin, t.id, {})
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_CLOSED')
+    await tms.setLifecycle(admin, t.id, 'WEIGH_IN')
+    list = await tms.attention(t.id)
+    expect(list.find((a) => a.id === 'not_weighed')).toMatchObject({ tab: 'weighin', title: '3 kumite players not weighed in yet' })
+    expect(ids(list)).not.toContain('no_link')
+  })
+
+  it('has nothing to say about a finished tournament, and rides on the dashboard', async () => {
+    const { tms, t, stores } = await world()
+    expect((await tms.dashboard(t.id)).attention.map((a) => a.id)).toEqual(['weight_gaps'])
+    await stores.tournaments.update(t.id, { lifecycleStatus: 'COMPLETED' })
+    expect(await tms.attention(t.id)).toEqual([])
+  })
+})
+
+describe('registration actions offered only where they work', () => {
+  it('knows which actions each status allows', () => {
+    // A player already weighed in can no longer be rejected (withdraw or delete them instead).
+    expect(registrationPath('WEIGH_IN_VERIFIED', 'reject')).toBeNull()
+    expect(registrationPath('WEIGH_IN_VERIFIED', 'approve')).toBeNull()
+    expect(registrationPath('PENDING_VERIFICATION', 'reject')).toEqual(['REJECTED'])
+    expect(registrationPath('APPROVED', 'reject')).toEqual(['REJECTED'])
+    // A rejection can be reversed, back through verification.
+    expect(registrationPath('REJECTED', 'approve')).toEqual(['PENDING_VERIFICATION', 'APPROVED'])
+    expect(registrationPath('SUBMITTED', 'approve')).toEqual(['PENDING_VERIFICATION', 'APPROVED'])
+    expect(registrationPath('DRAFT', 'nonsense')).toBeNull()
+  })
+
+  it('reverses a rejection only with a reason, and refuses the rest by name', async () => {
+    const { tms, t, team, stores } = await world()
+    const p = await tms.createPlayer(admin, t.id, { teamId: team.id, name: 'Reconsidered Player', dob: '2014-03-03', gender: 'M', events: ['kumite'], weight: 31 })
+    await tms.setRegistrationStatus(admin, t.id, p.id, 'reject', 'Age proof unreadable')
+    await expect(tms.setRegistrationStatus(admin, t.id, p.id, 'approve')).rejects.toMatchObject({ code: 'reason_required' })
+    expect((await tms.setRegistrationStatus(admin, t.id, p.id, 'approve', 'Original age proof seen at the desk')).registrationStatus).toBe('APPROVED')
+    expect((await stores.players.get(p.id)).rejectionReason).toBeNull()
+    await stores.players.update(p.id, { registrationStatus: 'WEIGH_IN_VERIFIED' })
+    await expect(tms.setRegistrationStatus(admin, t.id, p.id, 'reject', 'Too late')).rejects.toMatchObject({ code: 'invalid_transition', details: { from: 'WEIGH_IN_VERIFIED', to: 'REJECTED' } })
   })
 })

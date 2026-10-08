@@ -87,7 +87,7 @@ function KataPanel({ tid, accountSeat, uid }) {
         <Paper sx={{ mb: 2 }}>
           <List dense>
             {open.map((r) => (
-              <ListItemButton key={r.id} selected={r.id === roundId} onClick={() => setRoundId(r.id)}>
+              <ListItemButton key={r.id} data-tip="Shows this round so you can score its performers" selected={r.id === roundId} onClick={() => setRoundId(r.id)}>
                 <ListItemText primary={`${r.label} — ${r.name}`} secondary={`${r.performers} performers`} />
               </ListItemButton>
             ))}

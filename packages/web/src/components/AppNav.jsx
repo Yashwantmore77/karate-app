@@ -22,56 +22,56 @@ const CONNECTION = {
 // one screen anyone might want to throw onto a second display mid-session.
 const MENUS = {
   admin: [
-    { label: 'Dashboard', to: '/admin/dashboard' },
-    { label: 'Tournaments', to: '/admin' },
-    { label: 'Analytics', to: '/admin/analytics' },
+    { label: 'Dashboard', to: '/admin/dashboard', tip: 'Every tournament at a glance: entries, weigh-ins, bouts and what needs doing.' },
+    { label: 'Tournaments', to: '/admin', tip: 'Create a tournament, or open one to manage it.' },
+    { label: 'Analytics', to: '/admin/analytics', tip: 'Results across tournaments: clubs, athletes and medals.' },
     // The referee screens, which an admin may also use: scheduling, panels,
     // the draw, and deleting a bout.
-    { label: 'Matches', to: '/referee' },
-    { label: 'Accounts', to: '/admin/accounts' },
-    { label: 'Sign-ins', to: '/admin/sign-ins' },
-    { label: 'System', to: '/admin/system' },
-    { label: 'Scoreboard', to: '/display' },
-    { label: 'Live board', to: '/live' },
-    { label: 'Public site', to: '/tournaments' },
+    { label: 'Matches', to: '/referee', tip: 'The bouts you can score or manage, by category.' },
+    { label: 'Accounts', to: '/admin/accounts', tip: 'Staff accounts: referees, judges, officers and organisers, and their roles.' },
+    { label: 'Sign-ins', to: '/admin/sign-ins', tip: 'Who signed in, when and from where (failed attempts too).' },
+    { label: 'System', to: '/admin/system', tip: 'Backups and the system-wide audit log.' },
+    { label: 'Scoreboard', to: '/display', tip: 'The hall scoreboard for the big screen (opens full screen).' },
+    { label: 'Live board', to: '/live', tip: 'Every mat: the bout on it and what comes next, for a screen in the hall.' },
+    { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
   registration_officer: [
-    { label: 'Registrations', to: '/registration_officer' },
-    { label: 'Public site', to: '/tournaments' },
+    { label: 'Registrations', to: '/registration_officer', tip: 'Check and approve the players registered by coaches.' },
+    { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
   weighin_officer: [
-    { label: 'Weigh-in', to: '/weighin_officer' },
-    { label: 'Public site', to: '/tournaments' },
+    { label: 'Weigh-in', to: '/weighin_officer', tip: 'Record each kumite player\'s weight on the day.' },
+    { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
   referee: [
-    { label: 'Matches', to: '/referee' },
-    { label: 'Scoreboard', to: '/display' },
+    { label: 'Matches', to: '/referee', tip: 'The bouts you can score or manage, by category.' },
+    { label: 'Scoreboard', to: '/display', tip: 'The hall scoreboard for the big screen (opens full screen).' },
   ],
   judge: [
-    { label: 'Matches', to: '/judge' },
-    { label: 'Kata scoring', to: '/judge/kata' },
-    { label: 'Scoreboard', to: '/display' },
+    { label: 'Matches', to: '/judge', tip: 'The bouts you are judging.' },
+    { label: 'Kata scoring', to: '/judge/kata', tip: 'Score kata performers when a round you judge is open.' },
+    { label: 'Scoreboard', to: '/display', tip: 'The hall scoreboard for the big screen (opens full screen).' },
   ],
   announcer: [
-    { label: 'Call matches', to: '/announcer' },
-    { label: 'Live board', to: '/live' },
-    { label: 'Public site', to: '/tournaments' },
+    { label: 'Call matches', to: '/announcer', tip: 'Call the next bout to each mat and mark who reported.' },
+    { label: 'Live board', to: '/live', tip: 'Every mat: the bout on it and what comes next, for a screen in the hall.' },
+    { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
   // PRD v1 §4: runs the hall screens.
   scoreboard_operator: [
-    { label: 'Scoreboard control', to: '/scoreboard_operator' },
-    { label: 'Scoreboard', to: '/display' },
-    { label: 'Live board', to: '/live' },
+    { label: 'Scoreboard control', to: '/scoreboard_operator', tip: 'Choose what the hall scoreboards show.' },
+    { label: 'Scoreboard', to: '/display', tip: 'The hall scoreboard for the big screen (opens full screen).' },
+    { label: 'Live board', to: '/live', tip: 'Every mat: the bout on it and what comes next, for a screen in the hall.' },
   ],
   coach: [
-    { label: 'My team', to: '/coach' },
-    { label: 'Public site', to: '/tournaments' },
+    { label: 'My team', to: '/coach', tip: 'Your team, players, draw and results.' },
+    { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
   viewer: [
     { label: 'Tournaments', to: '/viewer' },
     { label: 'Analytics', to: '/viewer/analytics' },
-    { label: 'Live board', to: '/live' },
-    { label: 'Public site', to: '/tournaments' },
+    { label: 'Live board', to: '/live', tip: 'Every mat: the bout on it and what comes next, for a screen in the hall.' },
+    { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
 }
 
@@ -153,6 +153,7 @@ export default function AppNav({ user, profile }) {
               return (
                 <Button
                   key={item.to}
+                  data-tip={item.tip}
                   onClick={() => go(item.to)}
                   aria-current={isActive ? 'page' : undefined}
                   sx={{
@@ -184,27 +185,17 @@ export default function AppNav({ user, profile }) {
           />
 
           {/* The step-by-step guide, from any page: what to do, in what order. */}
-          <Tooltip title="How it works: step-by-step guide">
-            <Button color="inherit" startIcon={<HelpOutline />} onClick={() => setGuideOpen(true)} sx={{ mr: 0.5, minWidth: 0, px: { xs: 1, sm: 1.5 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }} aria-label="Guide">
-              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Guide</Box>
-            </Button>
-          </Tooltip>
+          <Button color="inherit" startIcon={<HelpOutline />} onClick={() => setGuideOpen(true)} sx={{ mr: 0.5, minWidth: 0, px: { xs: 1, sm: 1.5 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }} aria-label="Guide">
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Guide</Box>
+          </Button>
 
           {canInstall && (
-            <Tooltip title="Install the app on this device">
-              <IconButton color="inherit" aria-label="Install app" onClick={install} sx={{ mr: 0.5 }}><InstallMobile /></IconButton>
-            </Tooltip>
+            <IconButton color="inherit" aria-label="Install app" onClick={install} sx={{ mr: 0.5 }}><InstallMobile /></IconButton>
           )}
 
-          <Tooltip title="Sign out">
-            <IconButton
-              color="inherit"
-              aria-label="Sign out"
-              onClick={logout}
-            >
-              <Logout />
-            </IconButton>
-          </Tooltip>
+          <IconButton color="inherit" aria-label="Sign out" onClick={logout}>
+            <Logout />
+          </IconButton>
 
           <IconButton
             color="inherit"
@@ -230,6 +221,7 @@ export default function AppNav({ user, profile }) {
               return (
                 <ListItemButton
                   key={item.to}
+                  data-tip={item.tip}
                   selected={isActive}
                   aria-current={isActive ? 'page' : undefined}
                   onClick={() => go(item.to)}

@@ -17,6 +17,17 @@ const AO = '#5B7BFF'
 
 const SECTIONS = ['info', 'categories', 'teams', 'players', 'draw', 'live', 'results', 'medals', 'certificates']
 const LABEL = { info: 'Tournament', categories: 'Categories', teams: 'Teams', players: 'Players', draw: 'Draw', live: 'Live matches', results: 'Results', medals: 'Medal tally', certificates: 'Certificates' }
+const TIP = {
+  info: 'Dates, venue, contact, rules and how to register.',
+  categories: 'The age groups and weight classes, and how many are in each.',
+  teams: 'The teams (clubs) taking part.',
+  players: 'Everyone taking part, by team and category.',
+  draw: 'The pools and brackets for each category.',
+  live: 'What is on each mat now and what comes next.',
+  results: 'Standings and medals for each category, once published.',
+  medals: 'Medals counted by club, district and state.',
+  certificates: 'Find and download your certificate by name.',
+}
 const FEE_LABEL = { kata: 'Kata', kumite: 'Kumite', both: 'Kata + Kumite', team: 'Team' }
 
 /** PRD v1 §17: a player finds their certificate by name and downloads it. */
@@ -152,7 +163,7 @@ export default function PublicTournament() {
           <Button size="small" component={RouterLink} to={`/live?t=${encodeURIComponent(t.slug || t.id)}`}>Live board</Button>
         </Stack>
         <Tabs value={tab} onChange={(_e, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 3 }}>
-          {SECTIONS.filter((s) => s !== 'certificates' || t.publicCertificates).map((s) => <Tab key={s} value={s} label={LABEL[s]} />)}
+          {SECTIONS.filter((s) => s !== 'certificates' || t.publicCertificates).map((s) => <Tab key={s} value={s} label={LABEL[s]} data-tip={TIP[s]} />)}
         </Tabs>
 
         {tab === 'info' && (

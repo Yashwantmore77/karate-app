@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid, IconButton, Tooltip,
-  Typography, Box, ToggleButtonGroup, ToggleButton, Alert, Switch, FormControlLabel, Chip,
+  Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid, IconButton, Typography, Box,
+  ToggleButtonGroup, ToggleButton, Alert, Switch, FormControlLabel, Chip,
 } from '@mui/material'
 import { Add, Edit, Delete, Check, Close, Undo, Payments, Category, DirectionsWalk } from '@mui/icons-material'
 import { formFields } from '@kumite/shared/registration.js'
 import { REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS, teamProblems, missingCategories } from '@kumite/shared/tms.js'
+import { PAYMENT_STATUS, teamProblems, missingCategories, registrationPath } from '@kumite/shared/tms.js'
 import UncategorizedAlert from '../../components/tms/UncategorizedAlert'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 import { tms } from '../../data/tms'
@@ -100,11 +100,14 @@ export default function RegistrationsTab({ tournament, version, action, role, go
   }
 
   const regAction = (p, act) => {
-    const needsReason = act !== 'approve'
+    // Approving someone already rejected reverses that decision: say why.
+    const reversing = act === 'approve' && p.registrationStatus === 'REJECTED'
+    const needsReason = act !== 'approve' || reversing
     setConfirm({
       title: `${act === 'approve' ? 'Approve' : act === 'reject' ? 'Reject' : 'Request correction for'} ${p.name}?`,
+      message: reversing ? `${p.name} was rejected${p.rejectionReason ? ` (${p.rejectionReason})` : ''}. Approving reverses that; the reason is kept in the audit log.` : undefined,
       requireReason: needsReason,
-      reasonLabel: act === 'reject' ? 'Rejection reason' : 'What needs correcting',
+      reasonLabel: act === 'reject' ? 'Rejection reason' : reversing ? 'Why the rejection is reversed' : 'What needs correcting',
       danger: act === 'reject',
       run: (reason) => action.run(() => tms.registration(tid, p.id, act, reason), `${p.name}: ${act === 'approve' ? 'approved' : act === 'reject' ? 'rejected' : 'returned for correction'}`).then(load),
     })
@@ -256,10 +259,10 @@ export default function RegistrationsTab({ tournament, version, action, role, go
               render: (p) => <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>{p.of.map((d) => <Chip key={d.id} size="small" label={`${d.name} · ${d.playerNumber} · ${teamName(d.teamId)}`} />)}</Stack> },
             { key: 'registrationStatus', label: 'Status', render: (p) => <StatusBadge status={p.registrationStatus} /> },
             { key: 'actions', label: '', sortable: false, render: (p) => manage && !locked && (
-              <Tooltip title="Delete the duplicate"><IconButton size="small" onClick={() => setConfirm({
+              <IconButton aria-label="Delete the duplicate" size="small" onClick={() => setConfirm({
                 title: `Delete ${p.name} (${p.playerNumber})?`, danger: true, confirmLabel: 'Delete',
                 run: () => action.run(() => tms.players.remove(tid, p.id), 'Duplicate deleted').then(() => setDupeRows((r) => r.filter((x) => x.id !== p.id))),
-              })}><Delete fontSize="small" /></IconButton></Tooltip>
+              })}><Delete fontSize="small" /></IconButton>
             ) },
           ]}
         />
@@ -318,36 +321,36 @@ export default function RegistrationsTab({ tournament, version, action, role, go
             ) }]),
             { key: 'actions', label: '', sortable: false, render: (p) => (
               <Stack direction="row" sx={{ flexWrap: 'nowrap' }}>
-                {manage && ['SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus) && (
-                  <Tooltip title="Approve"><IconButton size="small" color="success" onClick={() => regAction(p, 'approve')}><Check fontSize="small" /></IconButton></Tooltip>
+                {manage && registrationPath(p.registrationStatus, 'approve') && (
+                  <IconButton aria-label="Approve" size="small" color="success" onClick={() => regAction(p, 'approve')}><Check fontSize="small" /></IconButton>
                 )}
-                {manage && !['REJECTED', 'DRAFT', 'COMPLETED', 'DRAW_ASSIGNED'].includes(p.registrationStatus) && (
-                  <Tooltip title="Reject"><IconButton size="small" color="error" onClick={() => regAction(p, 'reject')}><Close fontSize="small" /></IconButton></Tooltip>
+                {manage && registrationPath(p.registrationStatus, 'reject') && (
+                  <IconButton aria-label="Reject" size="small" color="error" onClick={() => regAction(p, 'reject')}><Close fontSize="small" /></IconButton>
                 )}
-                {manage && ['SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus) && (
-                  <Tooltip title="Request correction"><IconButton size="small" onClick={() => regAction(p, 'request_correction')}><Undo fontSize="small" /></IconButton></Tooltip>
+                {manage && registrationPath(p.registrationStatus, 'request_correction') && (
+                  <IconButton aria-label="Request correction" size="small" onClick={() => regAction(p, 'request_correction')}><Undo fontSize="small" /></IconButton>
                 )}
                 {can(role, P.PLAYER_EDIT) && (
-                  <Tooltip title="Edit"><IconButton size="small" onClick={() => { setPlayerErrors([]); setPlayerEdit({ ...p }) }}><Edit fontSize="small" /></IconButton></Tooltip>
+                  <IconButton aria-label="Edit" size="small" onClick={() => { setPlayerErrors([]); setPlayerEdit({ ...p }) }}><Edit fontSize="small" /></IconButton>
                 )}
                 {mayPlace && (
-                  <Tooltip title="Change category"><IconButton size="small" onClick={() => placeCategory(p)}><Category fontSize="small" /></IconButton></Tooltip>
+                  <IconButton aria-label="Change category" size="small" onClick={() => placeCategory(p)}><Category fontSize="small" /></IconButton>
                 )}
                 {can(role, P.RESULT_MANAGE) && !['WITHDRAWN', 'REJECTED', 'DRAFT'].includes(p.registrationStatus) && (
-                  <Tooltip title="Withdraw (injury, no-show)"><IconButton size="small" onClick={() => setConfirm({
+                  <IconButton aria-label="Withdraw (injury, no-show)" size="small" onClick={() => setConfirm({
                     title: `Withdraw ${p.name}?`, danger: true, confirmLabel: 'Withdraw', requireReason: true, reasonLabel: 'Why (e.g. injured after the first bout)',
                     message: 'Bouts they still have are completed as walkovers for the opponent; finished results stay.',
                     run: (reason) => action.run(() => tms.withdrawPlayer(tid, p.id, reason), `${p.name} withdrawn`).then(load),
-                  })}><DirectionsWalk fontSize="small" /></IconButton></Tooltip>
+                  })}><DirectionsWalk fontSize="small" /></IconButton>
                 )}
                 {manage && paymentsEnabled() && (
-                  <Tooltip title="Payment"><IconButton size="small" onClick={() => setPayment({ player: p, status: p.payment?.status || 'PENDING', amount: p.payment?.amount ?? 0, method: p.payment?.method || '', transactionId: p.payment?.transactionId || '', date: p.payment?.date || '', receipt: p.payment?.receipt || '' })}><Payments fontSize="small" /></IconButton></Tooltip>
+                  <IconButton aria-label="Payment" size="small" onClick={() => setPayment({ player: p, status: p.payment?.status || 'PENDING', amount: p.payment?.amount ?? 0, method: p.payment?.method || '', transactionId: p.payment?.transactionId || '', date: p.payment?.date || '', receipt: p.payment?.receipt || '' })}><Payments fontSize="small" /></IconButton>
                 )}
                 {manage && !locked && (
-                  <Tooltip title="Delete"><IconButton size="small" onClick={() => setConfirm({
+                  <IconButton aria-label="Delete" size="small" onClick={() => setConfirm({
                     title: `Delete ${p.name}?`, danger: true, confirmLabel: 'Delete',
                     run: () => action.run(() => tms.players.remove(tid, p.id), 'Player deleted').then(load),
-                  })}><Delete fontSize="small" /></IconButton></Tooltip>
+                  })}><Delete fontSize="small" /></IconButton>
                 )}
               </Stack>
             ) },

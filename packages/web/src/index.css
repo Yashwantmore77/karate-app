@@ -125,3 +125,8 @@ input { width: 100%; padding: 13px 14px; border-radius: 8px; border: 1px solid v
 [data-kt-busy].Mui-disabled::after, [data-kt-busy]:disabled::after { border-color: rgba(255, 255, 255, 0.85); border-right-color: transparent; }
 @keyframes kt-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { [data-kt-busy]::after { animation-duration: 2s; } }
+
+/* A disabled button still explains itself on hover (components/help/ActionTips.jsx):
+   MUI turns the pointer off for disabled buttons; a real <button disabled> still
+   ignores the click, so only those get it back. */
+button.MuiButtonBase-root.Mui-disabled { pointer-events: auto !important; cursor: not-allowed; }

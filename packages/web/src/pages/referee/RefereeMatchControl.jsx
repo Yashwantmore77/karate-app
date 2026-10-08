@@ -78,7 +78,7 @@ export default function RefereeMatchControl() {
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
       <PageBar>
         <Toolbar>
-          <IconButton color="inherit" onClick={() => navigate(-1)} sx={{ mr: 2 }}>
+          <IconButton color="inherit" aria-label="Back" onClick={() => navigate(-1)} sx={{ mr: 2 }}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>

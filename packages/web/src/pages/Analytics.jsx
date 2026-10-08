@@ -40,9 +40,9 @@ export default function Analytics() {
         Across {data.tournaments.length} tournament{data.tournaments.length === 1 ? '' : 's'}. An athlete is recognised across events by name and date of birth; medals count once results are published.
       </Typography>
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab value="clubs" label={`Clubs (${data.clubs.length})`} />
-        <Tab value="athletes" label={`Athletes (${data.athletes.length})`} />
-        <Tab value="tournaments" label={`Tournaments (${data.tournaments.length})`} />
+        <Tab value="clubs" label={`Clubs (${data.clubs.length})`} data-tip="Medals and entries by club, across tournaments." />
+        <Tab value="athletes" label={`Athletes (${data.athletes.length})`} data-tip="Each athlete's record across tournaments (matched by name and date of birth)." />
+        <Tab value="tournaments" label={`Tournaments (${data.tournaments.length})`} data-tip="Entries, bouts and medals for each tournament." />
       </Tabs>
 
       {tab === 'clubs' && (

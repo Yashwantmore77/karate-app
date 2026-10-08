@@ -98,7 +98,7 @@ export default function AdminLoginLog() {
     }}>
       <PageBar>
         <Toolbar>
-          <IconButton color="inherit" onClick={() => navigate('/admin')} sx={{ mr: 2 }}>
+          <IconButton color="inherit" aria-label="Back" onClick={() => navigate('/admin')} sx={{ mr: 2 }}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>

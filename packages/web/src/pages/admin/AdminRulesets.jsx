@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Container, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Stack, Grid, MenuItem, Switch,
-  FormControlLabel, IconButton, Tooltip, Alert,
+  FormControlLabel, IconButton, Alert,
 } from '@mui/material'
 import { Add, Edit, ContentCopy, SettingsBackupRestore } from '@mui/icons-material'
 import { OVERTIME_MODES, KATA_TIE_BREAKS } from '@kumite/shared/rulesets.js'
@@ -67,12 +67,12 @@ export default function AdminRulesets() {
           { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.supersededBy ? 'DRAFT' : r.active === false ? 'REJECTED' : 'APPROVED'} label={r.supersededBy ? 'Superseded' : r.active === false ? 'Inactive' : r.builtIn ? 'Standard' : r.standard ? 'Standard (edited)' : 'Active'} /> },
           { key: 'actions', label: '', sortable: false, render: (r) => (
             <Stack direction="row">
-              {!r.supersededBy && <Tooltip title={r.builtIn ? 'Edit (saved as a new version)' : 'Edit'}><IconButton size="small" aria-label={`Edit ${r.name}`} onClick={() => open(r)}><Edit fontSize="small" /></IconButton></Tooltip>}
+              {!r.supersededBy && <IconButton size="small" aria-label={`Edit ${r.name}`} onClick={() => open(r)}><Edit fontSize="small" /></IconButton>}
               {r.standard && !r.supersededBy && (
-                <Tooltip title="Restore the standard rules as shipped"><IconButton size="small" aria-label={`Restore ${r.name}`}
-                  onClick={() => action.run(() => tms.restoreRuleset(r.family), 'Standard rules restored').then(load)}><SettingsBackupRestore fontSize="small" /></IconButton></Tooltip>
+                <IconButton size="small" aria-label={`Restore ${r.name}`}
+                  onClick={() => action.run(() => tms.restoreRuleset(r.family), 'Standard rules restored').then(load)}><SettingsBackupRestore fontSize="small" /></IconButton>
               )}
-              <Tooltip title="Copy"><IconButton size="small" aria-label={`Copy ${r.name}`} onClick={() => open(r, true)}><ContentCopy fontSize="small" /></IconButton></Tooltip>
+              <IconButton size="small" aria-label={`Copy ${r.name}`} onClick={() => open(r, true)}><ContentCopy fontSize="small" /></IconButton>
               {!r.builtIn && !r.standard && !r.supersededBy && (
                 <Switch size="small" checked={r.active !== false} slotProps={{ input: { 'aria-label': `${r.name} active` } }}
                   onChange={(e) => action.run(() => tms.setRulesetActive(r.id, e.target.checked), e.target.checked ? 'Activated' : 'Deactivated').then(load)} />

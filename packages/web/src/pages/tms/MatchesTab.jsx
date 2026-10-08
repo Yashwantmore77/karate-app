@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Stack, TextField, MenuItem, Button, Dialog, DialogTitle, DialogContent, DialogActions, Grid, Typography, Box, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, Alert, Menu,
+  Stack, TextField, MenuItem, Button, Dialog, DialogTitle, DialogContent, DialogActions, Grid, Typography, Box, IconButton,
+  ToggleButtonGroup, ToggleButton, Alert, Menu,
 } from '@mui/material'
 import { Schedule, EditNote, SportsMma, SwapHoriz, History, PlaylistPlay } from '@mui/icons-material'
 import { matchLifecycle } from '@kumite/shared/lifecycle.js'
@@ -62,6 +63,16 @@ export function describeLiveEvent(e) {
   const a = e.scoreAfter
   const changed = b && a && (b.aka !== a.aka || b.ao !== a.ao)
   return changed ? `${what} — AKA ${b.aka} → ${a.aka}, AO ${b.ao} → ${a.ao}` : what
+}
+
+// What each status in the "Change status" menu means.
+const STATUS_TIP = {
+  scheduled: 'Back in the queue: not called yet.',
+  called: 'Called to the mat: the players and their coaches are told to come now.',
+  ready: 'Both players are at the mat and ready to start.',
+  open: 'The scoring console is open; the bout has not started.',
+  live: 'The bout is being fought.',
+  paused: 'The clock is stopped (an injury, a timeout or a discussion).',
 }
 
 /** Sections 25-28 and 37: the match queue per mat, scheduling and Rule 6 corrections. */
@@ -136,16 +147,16 @@ export default function MatchesTab({ tournament, version, action }) {
           { key: 'status', label: 'Status', render: (m) => <StatusBadge status={m.resultType && m.resultType !== 'COMPLETED' ? m.resultType : m.status} /> },
           { key: 'actions', label: '', sortable: false, render: (m) => (
             <Stack direction="row">
-              <Tooltip title="Open scoring console"><span><IconButton size="small" aria-label="Open scoring console" disabled={!m.redId || !m.blueId} onClick={() => navigate(`/admin/match/${m.id}`)}><SportsMma fontSize="small" /></IconButton></span></Tooltip>
-              <Tooltip title="Schedule"><IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, categoryId: m.categoryId, number: m.matchNumber, mat: m.mat || 1, scheduledAt: m.scheduledAt ? m.scheduledAt.slice(0, 16) : '', refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton></Tooltip>
+              <IconButton size="small" aria-label="Open scoring console" disabled={!m.redId || !m.blueId} onClick={() => navigate(`/admin/match/${m.id}`)}><SportsMma fontSize="small" /></IconButton>
+              <IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, categoryId: m.categoryId, number: m.matchNumber, mat: m.mat || 1, scheduledAt: m.scheduledAt ? m.scheduledAt.slice(0, 16) : '', refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton>
               {/* PRD point 15: swap AKA and AO before the bout. */}
-              <Tooltip title="Swap AKA / AO"><span><IconButton size="small" aria-label="Swap AKA and AO" disabled={!!boutOutcome(m) || ON_MAT.includes(m.status) || (!m.redId && !m.blueId)}
-                onClick={() => action.run(() => tms.swapCorners(tid, m.id), `${m.matchNumber}: corners swapped`).then(load)}><SwapHoriz fontSize="small" /></IconButton></span></Tooltip>
+              <IconButton size="small" aria-label="Swap AKA and AO" disabled={!!boutOutcome(m) || ON_MAT.includes(m.status) || (!m.redId && !m.blueId)}
+                onClick={() => action.run(() => tms.swapCorners(tid, m.id), `${m.matchNumber}: corners swapped`).then(load)}><SwapHoriz fontSize="small" /></IconButton>
               {!boutOutcome(m) && matchLifecycle.next(m.status || 'scheduled').length > 0 && (
-                <Tooltip title="Change status (called, ready, paused…)"><IconButton size="small" aria-label="Change status" onClick={(e) => setStatusMenu({ anchor: e.currentTarget, m })}><PlaylistPlay fontSize="small" /></IconButton></Tooltip>
+                <IconButton size="small" aria-label="Change status" onClick={(e) => setStatusMenu({ anchor: e.currentTarget, m })}><PlaylistPlay fontSize="small" /></IconButton>
               )}
-              <Tooltip title="Live score log"><IconButton size="small" aria-label="Live score log" onClick={async () => setLog({ m, events: await tms.matchEvents(tid, m.id).catch(() => []) })}><History fontSize="small" /></IconButton></Tooltip>
-              <Tooltip title={boutOutcome(m) ? 'Correct result' : 'Enter result'}><span><IconButton size="small" aria-label={boutOutcome(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '', finishReason: m.finishReason || '' })}><EditNote fontSize="small" /></IconButton></span></Tooltip>
+              <IconButton size="small" aria-label="Live score log" onClick={async () => setLog({ m, events: await tms.matchEvents(tid, m.id).catch(() => []) })}><History fontSize="small" /></IconButton>
+              <IconButton size="small" aria-label={boutOutcome(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '', finishReason: m.finishReason || '' })}><EditNote fontSize="small" /></IconButton>
             </Stack>
           ) },
         ]}
@@ -153,7 +164,7 @@ export default function MatchesTab({ tournament, version, action }) {
 
       <Menu open={!!statusMenu} anchorEl={statusMenu?.anchor} onClose={() => setStatusMenu(null)}>
         {statusMenu && matchLifecycle.next(statusMenu.m.status || 'scheduled').filter((st) => !['completed', 'cancelled'].includes(st)).map((st) => (
-          <MenuItem key={st} onClick={() => {
+          <MenuItem key={st} data-tip={STATUS_TIP[st]} onClick={() => {
             const { m } = statusMenu
             setStatusMenu(null)
             action.run(() => tms.setMatchStatus(tid, m.id, st), `${m.matchNumber}: ${humanize(st)}`).then(load)

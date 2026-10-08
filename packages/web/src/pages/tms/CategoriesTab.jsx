@@ -59,7 +59,7 @@ export default function CategoriesTab({ tournament, version, action }) {
     if (ok) { setRules(null); load() }
   }
   const rulesButton = (kind, row) => (
-    <IconButton size="small" aria-label="Category rules" title="Category rules (pool size, duration, rounds)" onClick={() => setRules({ kind, row, settings: { ...(row.settings || {}) } })}><Tune fontSize="small" /></IconButton>
+    <IconButton size="small" aria-label="Category rules" onClick={() => setRules({ kind, row, settings: { ...(row.settings || {}) } })}><Tune fontSize="small" /></IconButton>
   )
 
   const { loading, refreshing, wrap } = useLoading()

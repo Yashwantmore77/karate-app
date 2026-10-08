@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Stack, Paper, Typography, Button, Alert, FormGroup, FormControlLabel, Checkbox, TextField, MenuItem, IconButton, Tooltip,
-  Dialog, DialogTitle, DialogContent, DialogActions, Grid,
+  Stack, Paper, Typography, Button, Alert, FormGroup, FormControlLabel, Checkbox, TextField, MenuItem, IconButton, Dialog,
+  DialogTitle, DialogContent, DialogActions, Grid,
 } from '@mui/material'
 import { PictureAsPdf } from '@mui/icons-material'
 import { tms } from '../../data/tms'
@@ -73,8 +73,8 @@ export default function CertificatesTab({ tournament, version, action, basePath 
           { key: 'medal', label: 'Medal', render: (c) => (c.medal ? `${MEDAL_ICON[c.medal] || ''} ${c.medal}` : '—') },
           { key: 'issuedAt', label: 'Issued', render: (c) => new Date(c.issuedAt).toLocaleDateString() },
           { key: 'pdf', label: '', sortable: false, render: (c) => (
-            <Tooltip title="Download this certificate"><IconButton size="small" aria-label={`Download ${c.certificateId}`}
-              onClick={() => action.run(() => tms.pdf(tid, `certificates/${encodeURIComponent(c.certificateId)}.pdf`, `${c.certificateId}.pdf`))}><PictureAsPdf fontSize="small" /></IconButton></Tooltip>
+            <IconButton size="small" aria-label={`Download ${c.certificateId}`}
+              onClick={() => action.run(() => tms.pdf(tid, `certificates/${encodeURIComponent(c.certificateId)}.pdf`, `${c.certificateId}.pdf`))}><PictureAsPdf fontSize="small" /></IconButton>
           ) },
         ]} />
 

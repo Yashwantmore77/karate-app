@@ -66,7 +66,7 @@ export default function GuideDialog({ open, onClose, steps = null, next = null, 
                   <Typography variant="caption" color="text.secondary">Where: {step.where} · Who: {step.who}</Typography>
                 </Box>
                 {step.tab && canGo(step.tab) && (
-                  <Button size="small" variant={isNext ? 'contained' : 'outlined'} endIcon={<ArrowForward />} onClick={() => onGo(step.tab)} sx={{ flexShrink: 0 }}>Go</Button>
+                  <Button size="small" variant={isNext ? 'contained' : 'outlined'} endIcon={<ArrowForward />} onClick={() => onGo(step.tab)} sx={{ flexShrink: 0 }} data-tip={`Opens the page for “${step.title}”.`}>Go</Button>
                 )}
               </Box>
             )

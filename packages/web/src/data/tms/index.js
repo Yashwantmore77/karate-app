@@ -18,6 +18,10 @@ export function describeError(err) {
   }
   // Kata and Kumite take turns on the mats.
   const EVENT_NAME = { kata: 'Kata', kumite: 'Kumite' }
+  if (code === 'invalid_transition' && details?.from && details?.to) {
+    const name = (v) => String(v).replace(/_/g, ' ').toLowerCase()
+    return `This cannot go from "${name(details.from)}" to "${name(details.to)}". Only the actions offered on screen are possible at this stage.`
+  }
   if (code === 'no_weight_category') return `No weight class${details?.ageGroup ? ` in ${details.ageGroup}` : ''} covers ${details?.weight ?? 'this'} kg, so the player cannot pass into one. Add the class in Categories (or change the player's category in Registrations), then record the weigh-in again.`
   if (code === 'event_not_running' && details?.event) return `${EVENT_NAME[details.event]} is not on the mats now: ${EVENT_NAME[details.running]} is. Switch the session to ${EVENT_NAME[details.event]} first.`
   if (code === 'event_in_progress' && details?.event) {
