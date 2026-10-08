@@ -70,10 +70,12 @@ export function describeClashes(clashes, nameFor) {
     if (clash.role === 'mat') {
       return `Mat ${clash.mat} already has a bout at ${formatSlot(clash.scheduledAt)}.`
     }
-    const who = nameFor?.(clash.uid) || clash.uid
+    const who = nameFor?.(clash.uid) || clash.name || clash.uid
     const doing = ROLE_WORDS[clash.otherRole] || 'is already on'
     const when = formatSlot(clash.scheduledAt)
     const where = clash.mat ? ` on mat ${clash.mat}` : ''
+    // The same player, booked in their other event (kata and kumite).
+    if (clash.otherEvent) return `${who} has a bout in their other event at ${when}${where}.`
     return `${who} ${doing} another bout at ${when}${where}.`
   })
 }

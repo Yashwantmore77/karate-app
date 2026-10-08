@@ -111,7 +111,8 @@ Dates are counted from the day it runs, so "open" is really open and "live" is t
 ```bash
 npm run seed:sample -w @kumite/api              # add the sample tournament
 npm run seed:sample -w @kumite/api -- --reset   # rebuild it from scratch
-npm run mock -w @kumite/api                     # rehearse a whole event end to end (19 checked steps)
+npm run mock -w @kumite/api                     # rehearse a whole Kata + Kumite event end to end (20 checked steps)
+npm run mock -w @kumite/api -- --kata bouts     # the same, with kata fought as bouts (flags) on the mats
 npm run loadtest -w @kumite/api                 # mats scoring live while spectators poll
 ```
 

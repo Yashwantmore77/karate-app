@@ -13,7 +13,7 @@ export function describeError(err) {
   if (details?.errors?.length) return details.errors.map((e) => (e.row ? `Row ${e.row}: ${e.message}` : e.message)).join('; ')
   // A refused schedule names who (or which mat) is already busy, and where.
   if (code === 'schedule_conflict' && details?.clashes?.length) {
-    const who = details.clashes.map((c) => (c.role === 'mat' ? `mat ${c.mat} is taken` : `the ${c.role || 'person'} is already on another bout${c.mat ? ` (mat ${c.mat})` : ''}`))
+    const who = details.clashes.map((c) => (c.role === 'mat' ? `mat ${c.mat} is taken` : c.otherEvent ? `the player has a bout in their other event${c.mat ? ` (mat ${c.mat})` : ''}` : `the ${c.role || 'person'} is already on another bout${c.mat ? ` (mat ${c.mat})` : ''}`))
     return `Time clash: ${[...new Set(who)].join('; ')}${details.clashes[0]?.scheduledAt ? ` at ${new Date(details.clashes[0].scheduledAt).toLocaleString()}` : ''}. Pick another time or mat.`
   }
   if (code === 'overlapping_age_group' && details?.with) return details.preset

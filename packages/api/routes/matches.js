@@ -157,6 +157,11 @@ export function matchRoutes(stores, tms = null) {
       excludeStatus: ['completed'],
     })
 
+    // A player entered in kata and kumite has a different competitor id in
+    // each category, so a booking across events is matched on the player.
+    const competitorOf = async (id) => (id ? competitors.get(id) : null)
+    const mine = new Set((await Promise.all([competitorOf(subject.redId), competitorOf(subject.blueId)])).map((c) => c?.playerId).filter(Boolean))
+
     const clashes = []
     for (const other of others) {
       // A mat is held the same way a person is: one bout on it at a time.
@@ -177,6 +182,15 @@ export function matchRoutes(stores, tms = null) {
           scheduledAt: other.scheduledAt,
           mat: other.mat ?? null,
         })
+      }
+      for (const side of ['redId', 'blueId']) {
+        const id = other[side]
+        // The same competitor is already reported above.
+        if (!id || id === subject.redId || id === subject.blueId) continue
+        const competitor = await competitorOf(id)
+        if (competitor?.playerId && mine.has(competitor.playerId)) {
+          clashes.push({ uid: competitor.playerId, name: competitor.name, role: 'competitor', otherRole: 'competitor', otherEvent: true, matchId: other.id, scheduledAt: other.scheduledAt, mat: other.mat ?? null })
+        }
       }
     }
 
