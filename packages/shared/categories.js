@@ -25,6 +25,28 @@ export function matchesWeight(category, weight, { upperInclusive = true } = {}) 
   return true
 }
 
+/**
+ * Where one age group's weight classes leave players without a class: gaps
+ * between classes, and no open class at the top. "-40 KG" then "+45 KG" leaves
+ * 40–45 kg uncovered; classes that stop at "-40 KG" leave everyone over 40.
+ * Returns { gaps: [{ from, to }], top } where `top` is the highest weight
+ * covered (null when the top class is open-ended), or null with no classes.
+ */
+export function weightCoverage(weightCategories = []) {
+  const rows = weightCategories.filter((c) => c.active !== false)
+    .map((c) => ({ lo: c.minWeight ?? 0, hi: c.maxWeight ?? Infinity }))
+    .sort((a, b) => a.lo - b.lo || a.hi - b.hi)
+  if (!rows.length) return null
+  const gaps = []
+  let reach = rows[0].lo
+  if (reach > 0) gaps.push({ from: 0, to: reach })
+  for (const { lo, hi } of rows) {
+    if (lo > reach) gaps.push({ from: reach, to: lo })
+    reach = Math.max(reach, hi)
+  }
+  return { gaps, top: reach === Infinity ? null : reach }
+}
+
 export function eligibleWeightCategories(weight, ageGroupId, weightCategories = [], options = {}) {
   return weightCategories.filter((category) =>
     category.active !== false

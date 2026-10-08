@@ -6,7 +6,8 @@ import {
 import { Add, Edit, Delete, Check, Close, Undo, Payments, Category, DirectionsWalk } from '@mui/icons-material'
 import { formFields } from '@kumite/shared/registration.js'
 import { REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS, teamProblems } from '@kumite/shared/tms.js'
+import { PAYMENT_STATUS, teamProblems, missingCategories } from '@kumite/shared/tms.js'
+import UncategorizedAlert from '../../components/tms/UncategorizedAlert'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
@@ -30,7 +31,7 @@ const blank = (fields) => ({ events: [], gender: '', ...Object.fromEntries(field
 const clean = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== '' && v !== undefined))
 
 /** Sections 13, 15-18 and 40-41: teams, players, verification, payment, search and filters. */
-export default function RegistrationsTab({ tournament, version, action, role }) {
+export default function RegistrationsTab({ tournament, version, action, role, goTab }) {
   const tid = tournament.id
   const fields = useMemo(() => formFields(tournament), [tournament])
   const [view, setView] = useState('players')
@@ -56,22 +57,25 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const [dupeRows, setDupeRows] = useState([])
   const manage = can(role, P.REGISTRATION_MANAGE)
   const locked = !!tournament.entriesLocked
+  // Choosing a category by hand: before the lock, or after it with the override privilege.
+  const mayPlace = can(role, P.PLAYER_EDIT) && (!locked || can(role, P.CATEGORY_OVERRIDE)) && !tournament.drawLocked
+  // Every player (not just this page) taking part with no category: the draw would leave them out.
+  const [unplaced, setUnplaced] = useState([])
 
   const { loading, refreshing, wrap } = useLoading()
-  const load = () => wrap(Promise.all([
+  // Every player, for the district/state choices and the no-category warning.
+  const loadAll = () => tms.players.list(tid).then((all) => {
+    const distinct = (key) => [...new Set(all.map((p) => p[key]).filter(Boolean))].sort()
+    setPlaces({ district: distinct('district'), state: distinct('state') })
+    setUnplaced(all.flatMap((p) => missingCategories(p, tournament).map((m) => ({ ...m, playerId: p.id, name: p.name, player: p }))))
+  }).catch(() => {})
+  const load = () => { loadAll(); return wrap(Promise.all([
     tms.teams.list(tid), tms.players.page(tid, clean({ ...filter, q: pageQuery.q }), pageQuery), tms.ageGroups.list(tid), tms.weightCategories.list(tid),
     tms.teamMembers.list(tid).catch(() => []),
-  ]).then(([t, p, g, w, m]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w); setMembers(m) }))
+  ]).then(([t, p, g, w, m]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w); setMembers(m) })) }
   useEffect(() => { load() }, [tid, version, JSON.stringify(filter), JSON.stringify(pageQuery)])
   // A filter change starts again from the first page.
   useEffect(() => { setPageQuery((q) => ({ ...q, page: 0 })) }, [JSON.stringify(filter)])
-  // District and state choices come from the players registered so far.
-  useEffect(() => {
-    tms.players.list(tid).then((all) => {
-      const distinct = (key) => [...new Set(all.map((p) => p[key]).filter(Boolean))].sort()
-      setPlaces({ district: distinct('district'), state: distinct('state') })
-    }).catch(() => {})
-  }, [tid, version])
   // PRD v1 §21: players registered although they looked like someone already entered.
   useEffect(() => {
     if (view !== 'duplicates') return
@@ -88,6 +92,12 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
     const w = weights.find((x) => x.id === e.weightCategoryId)
     return `${event === 'kata' ? 'Kata' : 'Kumite'}: ${g ? g.name : '?'}${event === 'kumite' ? ` ${w ? (w.label || w.name) : '?'}` : ''}${e.override ? ' (override)' : ''}`
   }).join(' · ')
+
+  /** Opens "Change category" on the given event, or on the first entry without a category. */
+  const placeCategory = (p, event = null) => {
+    const ev = event || missingCategories(p, tournament)[0]?.event || p.events?.[0] || 'kumite'
+    setOverride({ player: p, event: ev, ageGroupId: p.entries?.[ev]?.ageGroupId || '', weightCategoryId: p.entries?.[ev]?.weightCategoryId || '' })
+  }
 
   const regAction = (p, act) => {
     const needsReason = act !== 'approve'
@@ -178,6 +188,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
 
   return (
     <Stack spacing={2}>
+      {!tournament.drawLocked && <UncategorizedAlert rows={unplaced} goTab={goTab} onFix={mayPlace ? (r) => placeCategory(r.player, r.event) : null} />}
       <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
       <ToggleButtonGroup exclusive value={view} onChange={(_e, v) => v && setView(v)} size="small">
         <ToggleButton value="players">Players ({loading ? '…' : paged.total})</ToggleButton>
@@ -283,6 +294,10 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
               <Box>
                 <Typography variant="body2">{entryLabel(p) || '—'}</Typography>
                 {p.categoryIssues?.length > 0 && <Typography variant="body2" color="warning.main">{p.categoryIssues[0].message}</Typography>}
+                {/* The fix sits next to the problem, not at the far end of the row. */}
+                {mayPlace && missingCategories(p, tournament).length > 0 && (
+                  <Button size="small" color="warning" variant="outlined" startIcon={<Category fontSize="small" />} sx={{ mt: 0.5 }} onClick={() => placeCategory(p)}>Fix category</Button>
+                )}
               </Box>
             ) },
             { key: 'registrationStatus', label: 'Status', render: (p) => (
@@ -315,8 +330,8 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
                 {can(role, P.PLAYER_EDIT) && (
                   <Tooltip title="Edit"><IconButton size="small" onClick={() => { setPlayerErrors([]); setPlayerEdit({ ...p }) }}><Edit fontSize="small" /></IconButton></Tooltip>
                 )}
-                {can(role, P.PLAYER_EDIT) && !locked && (
-                  <Tooltip title="Change category"><IconButton size="small" onClick={() => setOverride({ player: p, event: p.events?.[0] || 'kumite', ageGroupId: p.entries?.[p.events?.[0]]?.ageGroupId || '', weightCategoryId: p.entries?.[p.events?.[0]]?.weightCategoryId || '' })}><Category fontSize="small" /></IconButton></Tooltip>
+                {mayPlace && (
+                  <Tooltip title="Change category"><IconButton size="small" onClick={() => placeCategory(p)}><Category fontSize="small" /></IconButton></Tooltip>
                 )}
                 {can(role, P.RESULT_MANAGE) && !['WITHDRAWN', 'REJECTED', 'DRAFT'].includes(p.registrationStatus) && (
                   <Tooltip title="Withdraw (injury, no-show)"><IconButton size="small" onClick={() => setConfirm({

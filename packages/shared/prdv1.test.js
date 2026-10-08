@@ -4,6 +4,7 @@ import { memoryStores } from './memoryStore.js'
 import { evaluateOutcome, DEFAULT_RULES } from './rules.js'
 import { applyCommand, initialMatchState, rulesFrom } from './commands.js'
 import { drawPools, poolSizes, seededRandom } from './pools.js'
+import { weightCoverage } from './categories.js'
 import { buildReport } from './reports.js'
 import { kataFinal, componentScore, rankKata } from './kata.js'
 import { zonedInstant } from './timezone.js'
@@ -562,5 +563,44 @@ describe('Kata and Kumite take turns', () => {
     await stores.tournaments.update(t.id, { type: 'kata' })
     expect(runningEvent(await stores.tournaments.get(t.id))).toBe('kata')
     await expect(tms.setRunningEvent(admin, t.id, 'kumite')).rejects.toMatchObject({ code: 'event_not_in_tournament' })
+  })
+})
+
+describe('players with no category', () => {
+  it('finds the weights an age group leaves without a class', () => {
+    // "-40 KG" then "+45 KG": 40–45 kg has no class.
+    expect(weightCoverage([{ maxWeight: 40 }, { minWeight: 45 }])).toEqual({ gaps: [{ from: 40, to: 45 }], top: null })
+    // Classes that stop at 40 kg leave everyone heavier.
+    expect(weightCoverage([{ maxWeight: 35 }, { minWeight: 35, maxWeight: 40 }])).toEqual({ gaps: [], top: 40 })
+    expect(weightCoverage([{ maxWeight: 40 }, { minWeight: 40 }, { minWeight: 50, active: false }])).toEqual({ gaps: [], top: null })
+    expect(weightCoverage([])).toBeNull()
+  })
+
+  it('names them, never passes them at weigh-in, says the draw left them out, and moves them on once placed', async () => {
+    const { tms, t, g, w, add, stores } = await world({ settings: { requireWeighInForDraw: false } })
+    await add(2) // 30 and 31 kg: -35 KG
+    const [heavy] = await add(1, { suffix: ' Heavy', fields: { weight: 44 } })
+    const [heavier] = await add(1, { suffix: ' Heavier', fields: { weight: 45 } })
+
+    const missing = (await tms.dashboard(t.id)).uncategorized
+    expect(missing.map((m) => m.playerId).sort()).toEqual([heavy, heavier].sort())
+    expect(missing.find((m) => m.playerId === heavy)).toMatchObject({ event: 'kumite', message: 'No weight category in Boys 12-13 covers 44 kg' })
+
+    // Weigh-in: "Passed" needs a class to pass into; left on Auto it fails.
+    await expect(tms.recordWeighIn(admin, t.id, heavy, { actualWeight: 44, status: 'PASSED' })).rejects.toMatchObject({ code: 'no_weight_category', details: { ageGroup: 'Boys 12-13', weight: 44 } })
+    expect((await tms.recordWeighIn(admin, t.id, heavy, { actualWeight: 44 })).weighIn.status).toBe('FAILED')
+
+    // Placed by hand: every entry has a category, so the player moves on, as categorisation would.
+    const placed = await tms.overrideCategory(admin, t.id, heavier, 'kumite', { ageGroupId: g.id, weightCategoryId: w.id }, 'Jury decision: compete at -35 KG')
+    expect(placed.registrationStatus).toBe('CATEGORY_CONFIRMED')
+    expect((await tms.dashboard(t.id)).uncategorized.map((m) => m.playerId)).toEqual([heavy])
+
+    // The draw says who it left out, instead of dropping them silently.
+    await tms.setEntriesLock(admin, t.id, true)
+    const drawn = await tms.generatePools(admin, t.id, { seed: 1 })
+    expect(drawn.uncategorized).toEqual([expect.objectContaining({ playerId: heavy, event: 'kumite' })])
+    expect(drawn.flatMap((pool) => pool.playerIds)).toContain(heavier)
+    const audit = await stores.auditLog.list({ tournamentId: t.id })
+    expect(audit.find((a) => a.action === 'pools.generated').changes.uncategorized.to).toBe(1)
   })
 })

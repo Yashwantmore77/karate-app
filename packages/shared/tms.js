@@ -292,6 +292,19 @@ export function tournamentEvents(t) {
 }
 
 /**
+ * A player's entries that have no category, with why: the draw leaves these
+ * out. Only for players taking part (approved onwards, not rejected).
+ */
+export function missingCategories(player, tournament = null) {
+  if (!DRAW_ELIGIBLE.has(player?.registrationStatus)) return []
+  const held = tournament ? tournamentEvents(tournament) : ['kata', 'kumite']
+  return (player.events || []).filter((event) => held.includes(event) && !player.entries?.[event]?.divisionKey).map((event) => ({
+    event,
+    message: (player.categoryIssues || []).find((i) => i.event === event)?.message || 'No category yet: run categorisation',
+  }))
+}
+
+/**
  * The event on the mats now. A tournament may hold Kata and Kumite, but only
  * one runs at a time: the organiser switches from one session to the other.
  */
@@ -1356,6 +1369,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // Moving a player is allowed only where the tournament permits it, and
     // never over an admin's explicit override (section 3.4).
     const mayMove = !previous.override && (stillFits || (suggestion.resolved && cfg.settings.weighInAutoMove))
+    // "Passed" means the player fits a weight class. With none covering the
+    // weight (and none they are already in), there is nothing to pass into.
+    if (status === 'PASSED' && !suggestion.weightCategory && !previous.weightCategoryId) {
+      throw rule('no_weight_category', { ageGroup: suggestion.ageGroup?.name || null, weight })
+    }
     let result = status
     let entries = before.entries
     if (!result) {
@@ -1493,7 +1511,12 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       ageGroupId, weightCategoryId: event === EVENTS.KATA ? null : weightCategoryId, override: true, resolved,
       divisionKey: resolved ? divisionKey(event, ageGroupId, weightCategoryId, groupDivision(before, cfg)) : null,
     }
-    const after = await stores.players.update(id, { entries })
+    const patch = { entries }
+    // Every entry placed: the player moves on, as categorisation would move them.
+    if (DRAW_ELIGIBLE.has(before.registrationStatus) && (before.events || []).every((ev) => entries[ev]?.divisionKey)) {
+      patch.registrationStatus = advanceRegistration(before, R.CATEGORY_CONFIRMED)
+    }
+    const after = await stores.players.update(id, patch)
     await record(actor, { tournamentId, action: A.PLAYER_CATEGORY_OVERRIDDEN, entity: 'player', entityId: id, before: { [event]: { ageGroupId: previous.ageGroupId, weightCategoryId: previous.weightCategoryId } }, after: { [event]: { ageGroupId, weightCategoryId } }, reason })
     return after
   }
@@ -1657,13 +1680,25 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         }
       }
     }
-    await record(actor, { tournamentId, action: A.POOLS_GENERATED, entity: 'tournament', entityId: tournamentId, after: { divisions: targets.map((d) => d.key), method: drawMethod, poolSize: size, drawSeed, excludedUnweighed: excluded.length, singleEntries: singles.length }, reason: impact.regenerates ? 'Regenerated after confirmation' : null })
+    // Players with no category are in no division, so nothing above saw them.
+    const uncategorized = only ? [] : await uncategorizedPlayers(tournamentId)
+    await record(actor, { tournamentId, action: A.POOLS_GENERATED, entity: 'tournament', entityId: tournamentId, after: { divisions: targets.map((d) => d.key), method: drawMethod, poolSize: size, drawSeed, excludedUnweighed: excluded.length, singleEntries: singles.length, uncategorized: uncategorized.length }, reason: impact.regenerates ? 'Regenerated after confirmation' : null })
     if ([T.VERIFICATION, T.WEIGH_IN, T.ENTRIES_LOCKED].includes(lifecycleOf(tournament))) {
       await stores.tournaments.update(tournamentId, { lifecycleStatus: T.DRAW_GENERATED })
       await record(actor, { tournamentId, action: A.TOURNAMENT_STATUS_CHANGED, entity: 'tournament', entityId: tournamentId, before: { lifecycleStatus: lifecycleOf(tournament) }, after: { lifecycleStatus: T.DRAW_GENERATED }, reason: 'Pools generated' })
     }
     // The drawn pools, with what stayed out of the draw and why.
-    return Object.assign(created, { excluded, singles })
+    return Object.assign(created, { excluded, singles, uncategorized })
+  }
+
+  /** Players taking part whose entries (some or all) have no category: the draw leaves those out. */
+  async function uncategorizedPlayers(tournamentId) {
+    const tournament = await tournamentOf(tournamentId)
+    const out = []
+    for (const p of await stores.players.list({ tournamentId })) {
+      for (const miss of missingCategories(p, tournament)) out.push({ playerId: p.id, name: p.name, ...miss })
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name))
   }
 
   /** Section 23, manual assignment: always logged, never once the draw is locked. */
@@ -3285,6 +3320,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       pendingVerification: count((p) => [R.SUBMITTED, R.PENDING_VERIFICATION].includes(p.registrationStatus)),
       pendingPayment: paymentsEnabled() ? count((p) => DRAW_ELIGIBLE.has(p.registrationStatus) && (p.payment?.status || 'PENDING') !== 'PAID') : 0,
       pendingWeighIn: count((p) => p.events?.includes('kumite') && DRAW_ELIGIBLE.has(p.registrationStatus) && (p.weighIn?.status || 'PENDING') !== 'PASSED'),
+      // Taking part but with an entry in no category: the draw would leave them out.
+      uncategorized: await uncategorizedPlayers(tournamentId),
       pools: pools.length,
       matches: matches.length,
       completedMatches: matches.filter((m) => boutOutcome(m)).length,
@@ -3384,7 +3421,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, drawImpact, setQualifiers, decideSingleEntry,
     // matches and results
-    generateMatches, listMatches, correctResult, swapCorners, callMatch, setRunningEvent, inProgress, overrideMedals, recordLiveEvent, liveEvents,
+    generateMatches, listMatches, correctResult, uncategorizedPlayers, swapCorners, callMatch, setRunningEvent, inProgress, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket, arrangeBracket, listBrackets,

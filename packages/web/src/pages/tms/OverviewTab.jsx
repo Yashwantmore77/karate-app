@@ -10,11 +10,12 @@ import { LockIcon } from './TournamentManager'
 import { PageLoader } from '../../components/Loader'
 import InfoTip, { HelpTitle } from '../../components/help/InfoTip'
 import { paymentsEnabled } from '@kumite/shared/features.js'
+import UncategorizedAlert from '../../components/tms/UncategorizedAlert'
 
 const ORDER = Object.values(TOURNAMENT_STATUS)
 
 /** Section 46 dashboard plus the controls that move the tournament along (sections 6, 21, 24). */
-export default function OverviewTab({ tournament, reload, version, action, role }) {
+export default function OverviewTab({ tournament, reload, version, action, role, goTab }) {
   const [stats, setStats] = useState(null)
   const [notes, setNotes] = useState([])
   const [confirm, setConfirm] = useState(null)
@@ -100,6 +101,8 @@ export default function OverviewTab({ tournament, reload, version, action, role 
             <InfoTip id="overview.locks" />
           </Stack>
         )}
+        {/* Before entries are locked and the draw is made: who it would leave out. */}
+        {!tournament.drawLocked && <UncategorizedAlert rows={s.uncategorized || []} goTab={goTab} sx={{ mt: 2 }} />}
         {status !== 'DRAFT' && (
           <Typography variant="body2" sx={{ mt: 2 }}>
             Public page: <Link href={publicUrl} target="_blank" rel="noreferrer">{publicUrl}</Link>

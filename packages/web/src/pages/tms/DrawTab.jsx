@@ -4,13 +4,14 @@ import {
   MenuItem, List, ListItem, ListItemText, IconButton, Tooltip, Chip,
 } from '@mui/material'
 import { SwapHoriz, Shuffle, Lock, Print } from '@mui/icons-material'
-import { settingsOf } from '@kumite/shared/tms.js'
+import { settingsOf, missingCategories } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { useLoading } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { printBracketSheets, sheetsForPlayers } from '../../components/tms/bracketSheet'
+import UncategorizedAlert from '../../components/tms/UncategorizedAlert'
 
 /** Sections 20-25: categorise, lock, draw pools, confirm the draw, generate matches. */
 export default function DrawTab({ tournament, reload, version, action, goTab }) {
@@ -34,6 +35,8 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
   useEffect(() => { load() }, [tid, version])
 
   const nameOf = (id) => players.find((p) => p.id === id)?.name || '?'
+  // Taking part, but in no category: the draw would leave these out.
+  const uncategorized = players.flatMap((p) => missingCategories(p, tournament).map((m) => ({ playerId: p.id, name: p.name, ...m })))
   const teamOf = (id) => teams.find((t) => t.id === players.find((p) => p.id === id)?.teamId)?.name || ''
   const locked = !!tournament.entriesLocked
   const drawLocked = !!tournament.drawLocked
@@ -54,7 +57,7 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
     setDrawDialog(null)
     const out = await action.run(() => tms.generatePools(tid, { divisionKey: divisionKey || null, method, poolSize: Number(poolSize) || null, confirm: !!impact?.regenerates }),
       (r) => `${r.pools.length} pools drawn`)
-    if (out) setOutcome({ excluded: out.excluded || [], singles: out.singles || [] })
+    if (out) setOutcome({ excluded: out.excluded || [], singles: out.singles || [], uncategorized: out.uncategorized || [] })
     await reload()
     load()
   }
@@ -100,11 +103,13 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
           <Button size="small" startIcon={<Print />} onClick={() => printBracketSheets([{ title: sheetTitle, event: '', size: 16, columns: [] }], 'Blank draw sheet')}>Blank draw sheet</Button>
         </Stack>
         {!locked && <Alert severity="info" sx={{ mb: 2 }}>Lock entries on the Dashboard before drawing pools (section 21).</Alert>}
+        {!drawLocked && <UncategorizedAlert rows={uncategorized} goTab={goTab} sx={{ mb: 2 }} />}
         {drawLocked && <Alert severity="success" sx={{ mb: 2 }} icon={<Lock />}>The draw is locked. Unlock it on the Dashboard (with a reason) to change pools.</Alert>}
         {settings.requireWeighInForDraw && <Alert severity="info" sx={{ mb: 2 }}>Only kumite players with a verified weigh-in enter the draw (Settings → Entries and weigh-in).</Alert>}
-        {outcome && (outcome.excluded.length > 0 || outcome.singles.length > 0) && (
+        {outcome && (outcome.excluded.length > 0 || outcome.singles.length > 0 || outcome.uncategorized.length > 0) && (
           <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setOutcome(null)}>
             {outcome.excluded.length > 0 && <Box>Left out (no verified weigh-in): {outcome.excluded.map((x) => `${x.name} (${x.division})`).join(', ')}</Box>}
+            {outcome.uncategorized.length > 0 && <Box>Left out (no category): {outcome.uncategorized.map((x) => `${x.name} (${x.event === 'kata' ? 'Kata' : 'Kumite'})`).join(', ')}</Box>}
             {outcome.singles.length > 0 && <Box>Only one player, so no pool: {outcome.singles.map((x) => x.label).join(', ')}. Decide each on the Results tab.</Box>}
           </Alert>
         )}

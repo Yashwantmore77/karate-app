@@ -18,6 +18,7 @@ export function describeError(err) {
   }
   // Kata and Kumite take turns on the mats.
   const EVENT_NAME = { kata: 'Kata', kumite: 'Kumite' }
+  if (code === 'no_weight_category') return `No weight class${details?.ageGroup ? ` in ${details.ageGroup}` : ''} covers ${details?.weight ?? 'this'} kg, so the player cannot pass into one. Add the class in Categories (or change the player's category in Registrations), then record the weigh-in again.`
   if (code === 'event_not_running' && details?.event) return `${EVENT_NAME[details.event]} is not on the mats now: ${EVENT_NAME[details.running]} is. Switch the session to ${EVENT_NAME[details.event]} first.`
   if (code === 'event_in_progress' && details?.event) {
     const left = [details.bouts && `${details.bouts} bout${details.bouts === 1 ? '' : 's'} called or under way`, details.rounds && `${details.rounds} kata round${details.rounds === 1 ? '' : 's'} open`].filter(Boolean).join(' and ')
@@ -94,6 +95,7 @@ const ERROR_TEXT = {
   no_pools: 'Generate pools first.',
   forbidden: 'You do not have permission to do that.',
   schedule_conflict: 'Someone on this bout is already booked at that time.',
+  no_weight_category: 'No weight class covers this weight. Add one in Categories first.',
   event_not_running: 'That event is not on the mats now. Switch the session first.',
   event_in_progress: 'Finish what is under way before switching the session.',
   event_not_in_tournament: 'This tournament does not hold that event.',
