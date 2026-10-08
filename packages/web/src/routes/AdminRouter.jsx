@@ -1,6 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import AdminTournamentList from '../pages/admin/AdminTournamentList'
-import AdminTournamentDetail from '../pages/admin/AdminTournamentDetail'
 import AdminCategoryDetail from '../pages/admin/AdminCategoryDetail'
 import AdminUserList from '../pages/admin/AdminUserList'
 import AdminLoginLog from '../pages/admin/AdminLoginLog'
@@ -24,7 +23,8 @@ export default function AdminRouter({ uid, profile }) {
       <Route path="/analytics" element={<Analytics />} />
       <Route path="/accounts" element={<AdminUserList uid={uid} />} />
       <Route path="/sign-ins" element={<AdminLoginLog />} />
-      <Route path="/tournament/:tournamentId" element={<AdminTournamentDetail uid={uid} />} />
+      {/* A tournament is run from its tournament screen; the old page only listed scoring categories. */}
+      <Route path="/tournament/:tournamentId" element={<ToManage />} />
       <Route path="/tournament/:tournamentId/category/:categoryId" element={<AdminCategoryDetail uid={uid} />} />
       {/* PRD tournament management, on top of the screens above. */}
       <Route path="/tournament/:tournamentId/manage" element={<TournamentManager uid={uid} profile={profile} />} />
@@ -33,4 +33,9 @@ export default function AdminRouter({ uid, profile }) {
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   )
+}
+
+function ToManage() {
+  const { tournamentId } = useParams()
+  return <Navigate to={`/admin/tournament/${tournamentId}/manage`} replace />
 }

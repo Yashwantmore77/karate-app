@@ -29,6 +29,7 @@ const sessionKey = (token) => `kt:coach:${token}`
 const when = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '')
 export function closedMessage(w) {
   switch (w?.closedReason) {
+    case 'tournament_not_open': return 'The organiser has not opened registration yet. Try again once they announce it.'
     case 'registration_not_yet_open': return `Registration opens ${when(w.opensAt)}.`
     case 'registration_closed': return w.closesAt && new Date(w.closesAt) < new Date() ? `Registration closed ${when(w.closesAt)}.` : 'Registration is not open.'
     case 'entry_lock_deadline_passed': return 'The deadline for changing entries has passed.'
@@ -124,9 +125,15 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   const canWrite = me.registrationOpen
 
   if (!me.team) {
+    // Why "Register team" cannot be pressed yet, in one sentence.
+    const blocker = !canWrite ? closedMessage(me)
+      : !team.name?.trim() ? 'Enter the team name.'
+        : Object.values(teamErrors)[0]
+          || (info.tournament.terms && !accepted ? 'Accept the terms and conditions.' : null)
     return (
       <Container maxWidth="md" sx={{ py: 6 }}>
         {header}
+        {!canWrite && <Alert severity="warning" sx={{ mb: 2 }}>{closedMessage(me)}</Alert>}
         <Paper sx={{ p: 3 }}>
           <HelpTitle id="coach.register" variant="h3" gutterBottom>Register your team</HelpTitle>
           <Grid container spacing={2}>
@@ -160,6 +167,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
             const out = await action.run(() => tms.coach.createTeam(session, doc), 'Team registered')
             if (out) keep(out.session)
           }}>Register team</Button>
+          {blocker && <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{blocker}</Typography>}
         </Paper>
         {action.feedback}
       </Container>

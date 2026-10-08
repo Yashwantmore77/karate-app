@@ -212,3 +212,16 @@ describe('business rules (review 7-12)', () => {
     expect(await stores.players.list({ tournamentId: t.id })).toHaveLength(0)
   })
 })
+
+describe('loading a standard category set', () => {
+  it('adds the SGFI groups in one go, and refuses when one overlaps', async () => {
+    const adminToken = await login('admin@kata.local')
+    const t = (await call('POST', '/tournaments', { name: 'School Games', location: 'Dewas', date: '2026-12-01', template: 'kumite', type: 'kata_kumite' }, adminToken)).body.tournament
+    const loaded = await call('POST', `/tournaments/${t.id}/category-presets`, { preset: 'sgfi' }, adminToken)
+    expect(loaded.status).toBe(201)
+    expect(loaded.body).toEqual({ ageGroups: 6, weightCategories: 69 })
+    const again = await call('POST', `/tournaments/${t.id}/category-presets`, { preset: 'sgfi' }, adminToken)
+    expect(again.body).toMatchObject({ error: 'overlapping_age_group', details: { with: 'U-14 Boys' } })
+    expect((await call('POST', `/tournaments/${t.id}/category-presets`, { preset: 'nope' }, adminToken)).body.error).toBe('unknown_preset')
+  })
+})

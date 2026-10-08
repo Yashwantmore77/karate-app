@@ -16,6 +16,10 @@ export function describeError(err) {
     const who = details.clashes.map((c) => (c.role === 'mat' ? `mat ${c.mat} is taken` : `the ${c.role || 'person'} is already on another bout${c.mat ? ` (mat ${c.mat})` : ''}`))
     return `Time clash: ${[...new Set(who)].join('; ')}${details.clashes[0]?.scheduledAt ? ` at ${new Date(details.clashes[0].scheduledAt).toLocaleString()}` : ''}. Pick another time or mat.`
   }
+  if (code === 'overlapping_age_group' && details?.with) return details.preset
+    ? `${details.preset} overlaps your age group "${details.with}". Delete or change "${details.with}" first, then load the set.`
+    : `These ages overlap the age group "${details.with}" for the same gender. Change the ages, or switch on "Allow overlap" if that is intended.`
+  if (code === 'overlapping_weight_category' && details?.with) return `These weights overlap "${details.with}" in the same age group. Change the weights, or switch on "Allow overlap" if that is intended.`
   if (typeof details?.matches === 'number' && COUNTED[code]) return COUNTED[code](details.matches)
   if (typeof details?.players === 'number' && COUNTED[code]) return COUNTED[code](details.players)
   // PRD v1 §6: what is still missing before registration can open, or what is wrong.
@@ -33,6 +37,10 @@ const COUNTED = {
 }
 
 const ERROR_TEXT = {
+  overlapping_age_group: 'This age group overlaps another one for the same gender.',
+  overlapping_weight_category: 'This weight class overlaps another one in the same age group.',
+  unknown_preset: 'That category set is not available.',
+  tournament_not_open: 'The organiser has not opened registration yet.',
   managed_by_draw: 'This category is run by the tournament draw. Change it from the tournament screen (Draw / Pools), not here.',
   tournament_archived: 'This tournament is archived and read-only.',
   tournament_completed: 'This tournament is completed. Nothing new can be added to it.',
@@ -114,8 +122,6 @@ const ERROR_TEXT = {
   not_enough_competitors: 'At least two players are needed.',
   not_enough_qualifiers: 'Not enough qualifiers for a final stage.',
   not_single_entry: 'This category has more than one player.',
-  overlapping_age_group: 'This age group overlaps another for the same gender. Allow overlap to save it anyway.',
-  overlapping_weight_category: 'This weight category overlaps another in the age group. Allow overlap to save it anyway.',
   player_in_pool: 'The player is already drawn into a pool; unlock the draw to change their category.',
   player_withdrawn: 'This player has withdrawn.',
   pool_full: 'That pool is full.',

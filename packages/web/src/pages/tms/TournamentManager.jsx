@@ -33,10 +33,10 @@ export const TABS = [
   { key: 'setup', label: 'Settings', perm: P.TOURNAMENT_MANAGE, Component: SetupTab },
   { key: 'categories', label: 'Categories', perm: P.CATEGORY_CONFIGURE, Component: CategoriesTab },
   { key: 'registrations', label: 'Registrations', perm: P.REGISTRATION_VIEW, Component: RegistrationsTab },
-  { key: 'weighin', label: 'Weigh-in', perm: P.WEIGHIN_RECORD, Component: WeighInTab },
+  { key: 'weighin', label: 'Weigh-in', perm: P.WEIGHIN_RECORD, Component: WeighInTab, event: 'kumite' },
   { key: 'draw', label: 'Draw / Pools', perm: P.POOL_MANAGE, Component: DrawTab },
   { key: 'matches', label: 'Matches', perm: P.MATCH_GENERATE, Component: MatchesTab },
-  { key: 'kata', label: 'Kata panel', perm: P.MATCH_GENERATE, Component: KataTab },
+  { key: 'kata', label: 'Kata panel', perm: P.MATCH_GENERATE, Component: KataTab, event: 'kata' },
   { key: 'call', label: 'Call matches', perm: P.MATCH_CALL, Component: CallTab },
   // Passes and QR check-in: the door (registration, weigh-in) and the mat.
   { key: 'checkin', label: 'Check-in & passes', perm: [P.ATTENDANCE_MARK, P.WEIGHIN_RECORD, P.CERTIFICATE_GENERATE], Component: CheckinTab },
@@ -45,6 +45,12 @@ export const TABS = [
   { key: 'reports', label: 'Reports', perm: P.REPORT_EXPORT, Component: ReportsTab },
   { key: 'audit', label: 'Audit log', perm: P.AUDIT_VIEW, Component: AuditTab },
 ]
+
+/** The events a tournament holds, from its type (older records: from the scoring template). */
+export const eventsOf = (t) => {
+  const type = t?.type || (t?.template === 'kata' ? 'kata' : t?.template === 'kumite' ? 'kumite' : 'kata_kumite')
+  return type === 'kata_kumite' ? ['kata', 'kumite'] : [type]
+}
 
 export default function TournamentManager({ uid, profile, basePath = '/admin' }) {
   const navigate = useNavigate()
@@ -68,7 +74,9 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
 
   useEffect(() => { reload() }, [reload])
 
-  const tabs = useMemo(() => TABS.filter((t) => [].concat(t.perm).some((p) => can(role, p))), [role])
+  // A tab for one event (kata panel, weigh-in) shows only when the tournament holds that event.
+  const events = eventsOf(tournament)
+  const tabs = useMemo(() => TABS.filter((t) => [].concat(t.perm).some((p) => can(role, p)) && (!t.event || events.includes(t.event))), [role, events.join()])
   const current = tabs.find((t) => t.key === params.get('tab')) || tabs[0]
 
   if (missing) return <Container sx={{ py: 4 }}><Alert severity="error">Tournament not found.</Alert></Container>
@@ -81,7 +89,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
     <Box sx={{ minHeight: '100vh' }}>
       <PageBar>
         <Toolbar sx={{ gap: 1, flexWrap: 'wrap', py: 1 }}>
-          <IconButton color="inherit" aria-label="Back" onClick={() => navigate(basePath === '/admin' ? `/admin/tournament/${tournamentId}` : basePath)}>
+          <IconButton color="inherit" aria-label="Back" onClick={() => navigate(basePath)}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>

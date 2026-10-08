@@ -62,6 +62,7 @@ export const tms = {
   ageGroups: crud('age-groups', 'ageGroup'),
   weightCategories: crud('weight-categories', 'weightCategory'),
   teams: crud('teams', 'team'),
+  applyCategoryPreset: (tid, preset) => send('POST', `${T(tid)}/category-presets`, { preset }),
   players: {
     list: async (tid, filter) => (await get(`${T(tid)}/players${qs(filter)}`)).players,
     // Screens count pages from 0 (as the MUI pager does); the API from 1.

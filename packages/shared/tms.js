@@ -11,6 +11,7 @@
 // locks, lifecycles, coaches touching only their own team, and the audit trail.
 
 import { calculateAge } from './age.js'
+import { CATEGORY_PRESETS, weightClasses } from './presets.js'
 import { categorizePlayer, categoryLabel, EVENTS } from './categories.js'
 import {
   TOURNAMENT_STATUS, REGISTRATION_STATUS, tournamentLifecycle, registrationLifecycle,
@@ -379,8 +380,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    */
   const coachWindow = (tournament) => {
     const w = registrationWindow(tournament)
+    const status = lifecycleOf(tournament)
     const reason = tournament.entriesLocked ? 'entries_locked'
-      : lifecycleOf(tournament) !== T.REGISTRATION_OPEN ? 'registration_closed' : w.reason
+      // Still being set up: the organiser has not opened registration yet.
+      : status === T.DRAFT ? 'tournament_not_open'
+        : status !== T.REGISTRATION_OPEN ? 'registration_closed' : w.reason
     return { registrationOpen: !reason, closedReason: reason, opensAt: w.opensAt, closesAt: w.closesAt }
   }
 
@@ -390,6 +394,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (actor.tournamentId !== tournament.id) throw denied()
     if (teamId !== undefined && actor.teamId !== teamId) throw denied('not_your_team')
     if (tournament.entriesLocked) throw rule('entries_locked')
+    if (lifecycleOf(tournament) === T.DRAFT) throw rule('tournament_not_open')
     if (lifecycleOf(tournament) !== T.REGISTRATION_OPEN) throw rule('registration_closed')
     const window = registrationWindow(tournament)
     if (!window.open) throw rule(window.reason)
@@ -764,6 +769,34 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       if (clash) throw rule('overlapping_weight_category', { with: clash.label || clash.name })
     }
   })
+
+  /**
+   * Loads a standard category set (presets.js): every age group and weight
+   * class at once, then one re-categorisation. Refused as a whole when one of
+   * its age groups overlaps an existing one, so nothing is half-loaded.
+   */
+  async function applyCategoryPreset(actor, tournamentId, key) {
+    const preset = CATEGORY_PRESETS[key]
+    if (!preset) throw invalid('unknown_preset')
+    const tournament = await writableTournament(tournamentId)
+    assertConfigOpen(tournament)
+    const existing = (await stores.ageGroups.list({ tournamentId })).filter((g) => g.active !== false)
+    for (const g of preset.groups) {
+      const clash = existing.find((e) => genderClash(e.gender, g.gender) && g.minAge <= e.maxAge && e.minAge <= g.maxAge)
+      if (clash) throw rule('overlapping_age_group', { with: clash.name, preset: g.name })
+    }
+    let weights = 0
+    for (const g of preset.groups) {
+      const group = await stores.ageGroups.insert({ active: true, name: g.name, gender: g.gender, minAge: g.minAge, maxAge: g.maxAge, settings: {}, tournamentId })
+      for (const w of weightClasses(g.weights)) {
+        await stores.weightCategories.insert({ active: true, ageGroupId: group.id, ...w, settings: {}, tournamentId })
+        weights += 1
+      }
+    }
+    await record(actor, { tournamentId, action: A.CONFIG_CHANGED, entity: 'category_preset', entityId: key, after: { preset: preset.label, ageGroups: preset.groups.length, weightCategories: weights } })
+    await recategorizeAll(actor, tournamentId, { silent: true })
+    return { ageGroups: preset.groups.length, weightCategories: weights }
+  }
 
   // --- teams ------------------------------------------------------------------
 
@@ -3090,7 +3123,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // tournament
     updateTournament, setLifecycle, setEntriesLock, setDrawLock, updateForm, purgeTournament,
     // configuration
-    ageGroups, weightCategories,
+    ageGroups, weightCategories, applyCategoryPreset,
     // registration
     teams, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
     setRegistrationStatus, recordPayment, recordWeighIn,

@@ -39,7 +39,7 @@ export default function GuideDialog({ open, onClose, steps = null, next = null, 
           </Alert>
         )}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Follow the steps from top to bottom. {steps ? 'A green tick means the step is done for this tournament.' : 'Open a tournament and press Manage to see which steps are done.'}
+          Follow the steps from top to bottom. {steps ? 'A green tick means the step is done for this tournament.' : 'Open a tournament to see which steps are done.'}
         </Typography>
         <Stack spacing={1}>
           {list.map((step, i) => {

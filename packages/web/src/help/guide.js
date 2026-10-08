@@ -22,7 +22,7 @@ const reached = (t, status) => ORDER.indexOf(t.lifecycleStatus || T.DRAFT) >= OR
 export const WORKFLOW = [
   {
     id: 'create', title: 'Create the tournament', tab: null, where: 'Admin → Tournaments → New tournament', who: 'Admin',
-    what: 'Give the tournament a name and date. Everything else is filled in on the tournament screen.',
+    what: 'Give the tournament a name, place, date and type (Kata, Kumite or both). Everything else is filled in on the tournament screen.',
     done: () => true,
   },
   {
@@ -203,13 +203,13 @@ export const TAB_GUIDE = {
 /** What each signed-in role does, for the "How it works" guide. */
 export const ROLE_GUIDE = {
   admin: [
-    'Create a tournament in Tournaments, then open it with "Manage" to reach every step.',
+    'Create a tournament in Tournaments, then open it (eye icon) to reach every step.',
     'The bar under the tabs always shows where you are and what comes next.',
     'Add staff accounts in Accounts and give each the right role.',
   ],
   super_admin: [
     'Everything an admin does, plus Organisations and Rulesets.',
-    'Create a tournament in Tournaments, then open it with "Manage" to reach every step.',
+    'Create a tournament in Tournaments, then open it (eye icon) to reach every step.',
   ],
   registration_officer: [
     'Choose the tournament, then go to Registrations.',
@@ -293,7 +293,8 @@ export const HELP = {
 
   'categories.age': {
     title: 'Age groups',
-    text: 'Age bands such as U12 or Cadet, worked out on the Master Age Calculation Date. Each player goes into the age group that fits.',
+    text: 'Age bands such as U-14 or Cadet, worked out on the Master Age Calculation Date. Each player goes into the age group that fits.',
+    tips: ['"Load standard categories" adds a complete set in one step (for example SGFI: U-14, U-17 and U-19 with their weight classes). Everything stays editable.', 'Two age groups for the same gender may not share an age unless you switch on "Allow overlap".'],
     next: 'Add weight categories (Kumite).',
   },
   'categories.weight': {
@@ -343,7 +344,7 @@ export const HELP = {
   'draw.pools': {
     title: 'Step 2: Lock entries and draw pools',
     text: 'Entries must be locked first. Then draw the pools for each category: players are placed at random, keeping team-mates apart where possible.',
-    tips: ['You can move a player between pools with a reason, until the draw is locked.'],
+    tips: ['You can move a player between pools with a reason, until the draw is locked.', '"Print draw sheet" prints the paper bracket for the mat table (one sheet per pool, signed by four judges and the referee). "Blank draw sheet" prints an empty one.'],
     next: 'Step 3: lock the draw and generate matches.',
   },
   'draw.matches': {
@@ -410,8 +411,8 @@ export const HELP = {
   // --- admin -------------------------------------------------------------
   'admin.tournaments': {
     title: 'Tournaments',
-    text: 'All tournaments you can manage. Create a new one here, then open it and press "Manage" to run it step by step.',
-    next: 'Open the tournament → Manage → Settings.',
+    text: 'All tournaments you can manage. Create a new one here (name, place, date and type), then open it with the eye icon to run it step by step.',
+    next: 'Open the tournament → Settings.',
   },
   'admin.tournamentDetail': {
     title: 'Tournament page',

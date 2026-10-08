@@ -3,17 +3,20 @@ import {
   Stack, Paper, Typography, Button, Alert, Grid, Box, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   MenuItem, List, ListItem, ListItemText, IconButton, Tooltip, Chip,
 } from '@mui/material'
-import { SwapHoriz, Shuffle, Lock } from '@mui/icons-material'
+import { SwapHoriz, Shuffle, Lock, Print } from '@mui/icons-material'
 import { settingsOf } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { useLoading } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
+import { printBracketSheets, sheetsForPlayers } from '../../components/tms/bracketSheet'
 
 /** Sections 20-25: categorise, lock, draw pools, confirm the draw, generate matches. */
 export default function DrawTab({ tournament, reload, version, action, goTab }) {
   const tid = tournament.id
+  // The sheet carries the organising association's name, as the paper form does.
+  const sheetTitle = String(tournament.association || tournament.organizer || tournament.name || '').toUpperCase()
   const settings = settingsOf(tournament)
   const [divisions, setDivisions] = useState([])
   const [pools, setPools] = useState([])
@@ -92,7 +95,10 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <HelpTitle id="draw.pools" variant="h3" gutterBottom>2. Lock entries and draw pools</HelpTitle>
+        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+          <HelpTitle id="draw.pools" variant="h3" gutterBottom>2. Lock entries and draw pools</HelpTitle>
+          <Button size="small" startIcon={<Print />} onClick={() => printBracketSheets([{ title: sheetTitle, event: '', size: 16, columns: [] }], 'Blank draw sheet')}>Blank draw sheet</Button>
+        </Stack>
         {!locked && <Alert severity="info" sx={{ mb: 2 }}>Lock entries on the Dashboard before drawing pools (section 21).</Alert>}
         {drawLocked && <Alert severity="success" sx={{ mb: 2 }} icon={<Lock />}>The draw is locked. Unlock it on the Dashboard (with a reason) to change pools.</Alert>}
         {settings.requireWeighInForDraw && <Alert severity="info" sx={{ mb: 2 }}>Only kumite players with a verified weigh-in enter the draw (Settings → Entries and weigh-in).</Alert>}
@@ -131,7 +137,13 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
 
       {divisions.filter((d) => d.pools).map((d) => (
         <Paper key={d.key} sx={{ p: 2 }}>
-          <Typography variant="h3" gutterBottom>{d.label}</Typography>
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+            <Typography variant="h3">{d.label}</Typography>
+            <Button size="small" variant="outlined" startIcon={<Print />} onClick={() => printBracketSheets(sheetsForPlayers({
+              title: sheetTitle, event: d.label,
+              groups: pools.filter((p) => p.divisionKey === d.key).map((p) => ({ label: `Pool ${p.name}`, names: p.playerIds.map((id) => nameOf(id)) })),
+            }), `${d.label} — draw sheet`)}>Print draw sheet</Button>
+          </Stack>
           <Grid container spacing={2}>
             {pools.filter((p) => p.divisionKey === d.key).map((pool) => (
               <Grid key={pool.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>

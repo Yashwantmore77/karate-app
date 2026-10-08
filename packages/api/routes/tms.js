@@ -275,6 +275,12 @@ export function tmsRoutes(tms, stores) {
     })
   }
 
+  // A standard category set (e.g. SGFI), loaded in one step.
+  router.post('/:tid/category-presets', requirePermission(P.CATEGORY_CONFIGURE), async (req, res) => {
+    const { preset } = validate(req.body, { preset: { type: 'string', required: true, max: 40 } })
+    res.status(201).json(await tms.applyCategoryPreset(withMeta(req), tid(req), preset))
+  })
+
   // --- teams and players (sections 13, 16, 17) ------------------------------
 
   router.get('/:tid/teams', requirePermission(P.REGISTRATION_VIEW), async (req, res) => res.json({ teams: await tms.teams.list(tid(req)) }))
