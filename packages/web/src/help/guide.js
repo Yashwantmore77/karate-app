@@ -93,7 +93,7 @@ export const WORKFLOW = [
   },
   {
     id: 'score', title: 'Call matches and score them', tab: 'call', where: 'Call matches + the referee console', who: 'Announcer, referees, judges',
-    what: 'The announcer calls each bout to its mat. The referee opens the match and scores it on the console; the result is confirmed at the end.',
+    what: 'The announcer calls each bout to its mat. The referee opens the match and scores it on the console; the result is confirmed at the end. A Kata + Kumite tournament runs one event at a time: finish the first session, then switch the mats to the other (top of the page).',
     done: (_t, s) => s.matches > 0 && s.pendingMatches === 0,
   },
   {
@@ -178,7 +178,7 @@ export const TAB_GUIDE = {
     after: { tab: 'results', text: 'Check and publish results' },
   },
   call: {
-    text: 'For the announcer: call the next bout to each mat. Players and coaches are told to come to the mat.',
+    text: 'For the announcer: call the next bout to each mat. Players and coaches are told to come to the mat. With Kata and Kumite, only the event on the mats now is listed; switch the session when it is done.',
     before: { tab: 'matches', text: 'Matches scheduled, tournament Live' },
     after: { tab: 'results', text: 'Check and publish results' },
   },

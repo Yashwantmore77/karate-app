@@ -54,6 +54,7 @@ export const AUDIT_ACTIONS = {
   MATCH_STATUS_CHANGED: 'match.status_changed',
   SCORE_BLOCKED: 'match.score_blocked',
   KATA_ROUND_STARTED: 'kata.round_started',
+  EVENT_SWITCHED: 'tournament.event_switched',
   KATA_JUDGES_ASSIGNED: 'kata.judges_assigned',
   KATA_SCORE_OVERRIDDEN: 'kata.score_overridden',
   KATA_PENALTY: 'kata.penalty',

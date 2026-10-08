@@ -183,36 +183,44 @@ export async function runMockTournament({
       return `${drawn.pools.length} pools, ${created} bouts; ${kataDivs.length} kata + ${kumiteDivs.length} kumite categories`
     })
 
-    await step('Timetable the mats: nobody in two places', async () => {
+    const isKata = (m) => /kata/i.test(m.divisionKey || '')
+
+    await step('Timetable the mats: kata session, then kumite, nobody in two places', async () => {
       const { tournament } = await call('GET', T, undefined, ctx.admin)
       const slot = (tournament.slotMinutes || 15) * 60_000
       const start = new Date(`${tournament.startDate}T03:30:00Z`).getTime()
       const { matches } = await call('GET', `${T}/matches`, undefined, ctx.admin)
       const bouts = matches.filter((m) => m.redId && m.blueId)
-      // Greedy: each bout at the first slot where its mat and both players are free.
+      // Kata and Kumite take turns: the kata session first, kumite after it.
+      // Greedy within a session: each bout at the first slot where its mat and both players are free.
       const busy = new Map() // slot -> Set of mats and players
       let placed = 0
-      for (const m of bouts) {
-        const people = [`mat:${m.mat}`, m.akaPlayerId, m.aoPlayerId]
-        let k = 0
-        while (people.some((x) => busy.get(k)?.has(x))) k += 1
-        if (!busy.has(k)) busy.set(k, new Set())
-        people.forEach((x) => busy.get(k).add(x))
-        await call('PATCH', `/matches/${m.id}`, { scheduledAt: new Date(start + k * slot).toISOString() }, ctx.admin)
-        placed += 1
+      let from = 0
+      for (const session of [bouts.filter(isKata), bouts.filter((m) => !isKata(m))]) {
+        let last = from - 1
+        for (const m of session) {
+          const people = [`mat:${m.mat}`, m.akaPlayerId, m.aoPlayerId]
+          let k = from
+          while (people.some((x) => busy.get(k)?.has(x))) k += 1
+          if (!busy.has(k)) busy.set(k, new Set())
+          people.forEach((x) => busy.get(k).add(x))
+          await call('PATCH', `/matches/${m.id}`, { scheduledAt: new Date(start + k * slot).toISOString() }, ctx.admin)
+          last = Math.max(last, k)
+          placed += 1
+        }
+        from = last + 1
       }
-      // A player in both events cannot be called to a kata bout and a kumite bout at once.
-      const kataBout = bouts.find((m) => /kata/i.test(m.divisionKey) && [m.akaPlayerId, m.aoPlayerId].some((id) => ctx.byEvent.both.includes(id)))
+      // Even by hand, a player in both events cannot be put on a kata bout and a kumite bout at once.
+      const kataBout = bouts.find((m) => isKata(m) && [m.akaPlayerId, m.aoPlayerId].some((id) => ctx.byEvent.both.includes(id)))
       if (kataBout) {
         const shared = [kataBout.akaPlayerId, kataBout.aoPlayerId].find((id) => ctx.byEvent.both.includes(id))
-        const kumiteBout = bouts.find((m) => /kumite/i.test(m.divisionKey) && [m.akaPlayerId, m.aoPlayerId].includes(shared))
-        const later = await call('GET', `/matches/${kataBout.id}`, undefined, ctx.admin).catch(() => null)
-        const at = later?.match?.scheduledAt
-        const refused = await call('PATCH', `/matches/${kumiteBout.id}`, { scheduledAt: at, mat: (kataBout.mat % mats) + 1 }, ctx.admin).then(() => null, (err) => err)
+        const kumiteBout = bouts.find((m) => !isKata(m) && [m.akaPlayerId, m.aoPlayerId].includes(shared))
+        const { match: timed } = await call('GET', `/matches/${kataBout.id}`, undefined, ctx.admin)
+        const refused = await call('PATCH', `/matches/${kumiteBout.id}`, { scheduledAt: timed.scheduledAt, mat: (kataBout.mat % mats) + 1 }, ctx.admin).then(() => null, (err) => err)
         must(refused?.status === 409 && refused.payload?.details?.clashes?.some((c) => c.otherEvent), 'a player was booked in kata and kumite at the same time')
-        return `${placed} bouts timed; a kata/kumite double booking was refused`
+        return `${placed} bouts timed in two sessions; a kata/kumite double booking was refused`
       }
-      return `${placed} bouts timed`
+      return `${placed} bouts timed in two sessions`
     })
 
     await step('Issue passes and check athletes in at the door', async () => {
@@ -265,7 +273,6 @@ export async function runMockTournament({
       return scored
     }
 
-    const isKata = (m) => /kata/i.test(m.divisionKey || '')
     // Kata bouts are decided by the judges' flags, not on the kumite console.
     const flags = async (bouts) => {
       for (const m of bouts) {
@@ -274,51 +281,93 @@ export async function runMockTournament({
       }
       return bouts.length
     }
-
-    await step('Score every pool bout live, mats in parallel', async () => {
-      const { matches } = await call('GET', `${T}/matches`, undefined, ctx.admin)
-      const pool = matches.filter((m) => m.redId && m.blueId && m.stage !== 'knockout')
-      const kumite = await fight(pool.filter((m) => !isKata(m)))
-      const kata = await flags(pool.filter(isKata))
-      return `${kumite} kumite bouts scored live${kata ? `, ${kata} kata bouts by flags` : ''}`
-    })
-
-    await step('Final stages: brackets fought to the end', async () => {
+    const openBouts = async (stage) => (await call('GET', `${T}/matches`, undefined, ctx.admin)).matches
+      .filter((m) => m.redId && m.blueId && !['completed', 'cancelled'].includes(m.status) && (stage === 'pool' ? m.stage !== 'knockout' : m.stage === 'knockout'))
+    /** Brackets for the event's categories whose pools are done, then every knockout round. */
+    const finalStages = async (event, decide) => {
       let brackets = 0
       const { results } = await call('GET', `${T}/results`, undefined, ctx.admin)
-      for (const d of results.filter((r) => r.canGenerateBracket)) {
+      for (const d of results.filter((r) => r.event === event && r.canGenerateBracket)) {
         await call('POST', `${T}/brackets/generate`, { divisionKey: d.key }, ctx.admin)
         brackets += 1
       }
       // Rounds open as earlier ones finish.
       let fought = 0
       for (let round = 0; round < 6; round += 1) {
-        const { matches } = await call('GET', `${T}/matches`, undefined, ctx.admin)
-        const open = matches.filter((m) => m.stage === 'knockout' && m.redId && m.blueId && !['completed', 'cancelled'].includes(m.status))
+        const open = (await openBouts('knockout')).filter((m) => isKata(m) === (event === 'kata'))
         if (!open.length) break
-        fought += await fight(open.filter((m) => !isKata(m))) + await flags(open.filter(isKata))
+        fought += await decide(open)
       }
-      return `${brackets} brackets, ${fought} knockout bouts`
+      return { brackets, fought }
+    }
+
+    await step('Kata session: kumite waits its turn', async () => {
+      const { tournament } = await call('GET', `/public/tournaments/${ctx.slug}`)
+      must(tournament.runningEvent === 'kata', `the kata session should run first, not ${tournament.runningEvent}`)
+      // A kumite bout cannot be called, or started on the console, during the kata session.
+      const [kumiteBout] = (await openBouts('pool')).filter((m) => !isKata(m))
+      const refused = await call('POST', `${T}/matches/${kumiteBout.id}/call`, {}, ctx.admin).then(() => null, (err) => err)
+      must(refused?.payload?.error === 'event_not_running', 'a kumite bout was called during the kata session')
+      const socket = connect(base, { auth: { token: ctx.admin }, transports: ['websocket'], reconnection: false })
+      await new Promise((resolve, reject) => { socket.on('connect', resolve); socket.on('connect_error', reject) })
+      await new Promise((resolve) => socket.timeout(8000).emit('match:join', { matchId: kumiteBout.id, control: true }, resolve))
+      const started = await new Promise((resolve) => socket.timeout(8000).emit('match:cmd', { matchId: kumiteBout.id, cmd: 'CLOCK_START', clientEventId: `${kumiteBout.id}-early` }, (err, reply) => resolve(err ? { error: 'timeout' } : reply)))
+      socket.close()
+      must(started?.error === 'event_not_running', 'a kumite bout started on the console during the kata session')
     })
 
-    if (kataMode !== 'bouts') await step('Kata panel: rounds scored by the judges up to the final', async () => {
-      const { divisions } = await call('GET', `${T}/kata/divisions`, undefined, ctx.admin)
-      must(divisions.length, 'no kata categories on the judges\' panel')
-      let rounds = 0
-      for (const d of divisions) {
-        for (let guard = 0; guard < 5; guard += 1) {
-          const { round } = await call('POST', `${T}/kata/rounds`, { divisionKey: d.key, seed: 7, start: true }, ctx.admin)
-          for (const [i, playerId] of round.performerIds.entries()) {
-            for (let seat = 1; seat <= round.judges; seat += 1) {
-              await call('POST', `${T}/kata/rounds/${round.id}/scores`, { playerId, seat, score: Math.round((7 + i * 0.3 + seat * 0.1) * 10) / 10 }, ctx.admin)
+    if (kataMode === 'bouts') {
+      await step('Kata session: bouts decided by flags, brackets to the final', async () => {
+        const pool = await flags((await openBouts('pool')).filter(isKata))
+        const { brackets, fought } = await finalStages('kata', flags)
+        return `${pool} pool bouts, ${brackets} brackets, ${fought} knockout bouts`
+      })
+    } else {
+      await step('Kata session: rounds scored by the judges up to the final', async () => {
+        const { divisions } = await call('GET', `${T}/kata/divisions`, undefined, ctx.admin)
+        must(divisions.length, 'no kata categories on the judges\' panel')
+        let rounds = 0
+        for (const d of divisions) {
+          for (let guard = 0; guard < 5; guard += 1) {
+            const { round } = await call('POST', `${T}/kata/rounds`, { divisionKey: d.key, seed: 7, start: true }, ctx.admin)
+            // The kata session cannot end while a round is open.
+            if (!rounds) {
+              const early = await call('POST', `${T}/running-event`, { event: 'kumite' }, ctx.admin).then(() => null, (err) => err)
+              must(early?.payload?.error === 'event_in_progress', 'switched to kumite with a kata round still open')
             }
+            for (const [i, playerId] of round.performerIds.entries()) {
+              for (let seat = 1; seat <= round.judges; seat += 1) {
+                await call('POST', `${T}/kata/rounds/${round.id}/scores`, { playerId, seat, score: Math.round((7 + i * 0.3 + seat * 0.1) * 10) / 10 }, ctx.admin)
+              }
+            }
+            await call('POST', `${T}/kata/rounds/${round.id}/complete`, {}, ctx.admin)
+            rounds += 1
+            if (round.name === 'Final') break
           }
-          await call('POST', `${T}/kata/rounds/${round.id}/complete`, {}, ctx.admin)
-          rounds += 1
-          if (round.name === 'Final') break
         }
-      }
-      return `${rounds} rounds in ${divisions.length} categories`
+        return `${rounds} rounds in ${divisions.length} categories`
+      })
+    }
+
+    await step('Switch the mats to the kumite session', async () => {
+      const switched = await call('POST', `${T}/running-event`, { event: 'kumite' }, ctx.admin)
+      must(switched.event === 'kumite' && switched.from === 'kata', 'the session did not switch')
+      const { tournament } = await call('GET', `/public/tournaments/${ctx.slug}`)
+      must(tournament.runningEvent === 'kumite', 'the public page does not show kumite running')
+    })
+
+    await step('Kumite session: every pool bout scored live, mats in parallel', async () => {
+      const pool = (await openBouts('pool')).filter((m) => !isKata(m))
+      // While a kumite bout is called, the mats cannot go back to kata.
+      await call('POST', `${T}/matches/${pool[0].id}/call`, {}, ctx.admin)
+      const back = await call('POST', `${T}/running-event`, { event: 'kata' }, ctx.admin).then(() => null, (err) => err)
+      must(back?.payload?.error === 'event_in_progress', 'switched back to kata with a kumite bout called')
+      return `${await fight(pool)} bouts scored`
+    })
+
+    await step('Kumite final stages: brackets fought to the end', async () => {
+      const { brackets, fought } = await finalStages('kumite', fight)
+      return `${brackets} brackets, ${fought} knockout bouts`
     })
 
     await step('Verify, publish and lock results', async () => {

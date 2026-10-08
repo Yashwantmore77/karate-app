@@ -12,6 +12,7 @@
 
 import { performance } from 'node:perf_hooks'
 import { io as connect } from 'socket.io-client'
+import { runningEvent, parseDivisionKey } from '@kumite/shared/tms.js'
 
 const args = process.argv.slice(2)
 const opt = (name, fallback) => {
@@ -62,6 +63,8 @@ export async function runLoadTest({ url = null, email = 'admin@kata.local', pass
   if (!tournament) throw new Error('No tournament to test against')
   const queue = (await api(`/tournaments/${tournament.id}/matches`, {}, token)).matches
     .filter((m) => m.redId && m.blueId && !['completed', 'cancelled'].includes(m.status))
+    // Only the event on the mats now can be scored (Kata and Kumite take turns).
+    .filter((m) => !m.divisionKey || parseDivisionKey(m.divisionKey).event === runningEvent(tournament))
   const bouts = queue.slice(0, mats)
   if (!bouts.length) throw new Error('No open bouts to score')
 

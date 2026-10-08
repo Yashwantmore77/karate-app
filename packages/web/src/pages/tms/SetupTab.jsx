@@ -5,7 +5,7 @@ import {
 } from '@mui/material'
 import { ArrowUpward, ArrowDownward, Delete, Add, ContentCopy, Tune } from '@mui/icons-material'
 import { formFields, FIELD_TYPES } from '@kumite/shared/registration.js'
-import { settingsOf, POOL_SYSTEMS, KATA_METHODS, registrationReadiness } from '@kumite/shared/tms.js'
+import { settingsOf, POOL_SYSTEMS, KATA_METHODS, registrationReadiness, tournamentEvents } from '@kumite/shared/tms.js'
 import { DEFAULT_TIME_ZONE } from '@kumite/shared/timezone.js'
 import AdvancedSettings, { advancedPayload } from '../../components/tms/AdvancedSettings'
 import FieldPropertiesDialog from '../../components/tms/FieldPropertiesDialog'
@@ -105,7 +105,7 @@ export default function SetupTab({ tournament, reload, action }) {
     out.fees = Object.fromEntries(Object.entries(settings.fees).map(([k, v]) => [k, Number(v) || 0]))
     out.points = Object.fromEntries(Object.entries(settings.points).map(([k, v]) => [k, Number(v)]))
     for (const [k] of KATA_SETTINGS) out[k] = Number(settings[k])
-    for (const k of ['poolMode', 'poolSystem', 'kataMode', 'kataMethod']) out[k] = settings[k]
+    for (const k of ['poolMode', 'poolSystem', 'kataMode', 'kataMethod', 'firstEvent']) out[k] = settings[k]
     out.ruleset = String(settings.ruleset || 'WKF')
     out.officialsSeeAssignedOnly = !!settings.officialsSeeAssignedOnly
     Object.assign(out, advancedPayload(settings))
@@ -247,6 +247,15 @@ export default function SetupTab({ tournament, reload, action }) {
               {POOL_SYSTEMS.map((m) => <MenuItem key={m} value={m}>{POOL_SYSTEM_LABEL[m] || m}</MenuItem>)}
             </TextField>
           </Grid>
+          {tournamentEvents(tournament).length === 2 && (
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              {/* Kata and Kumite take turns on the mats; this one goes first. */}
+              <TextField select fullWidth label="Event on the mats first" helperText="Kata and Kumite run one at a time; switch sessions at the top of the page" value={settings.firstEvent || 'kata'} onChange={(e) => setSettings({ ...settings, firstEvent: e.target.value })}>
+                <MenuItem value="kata">Kata, then Kumite</MenuItem>
+                <MenuItem value="kumite">Kumite, then Kata</MenuItem>
+              </TextField>
+            </Grid>
+          )}
           <Grid size={{ xs: 12, sm: 6, md: 4 }}>
             <TextField select fullWidth label="Kata is decided by" value={settings.kataMode} onChange={(e) => setSettings({ ...settings, kataMode: e.target.value })}>
               <MenuItem value="panel">A judging panel scoring each performance</MenuItem>

@@ -14,6 +14,7 @@ import { can, roleIn, PERMISSION as P } from '@kumite/shared/permissions.js'
 import { matchLifecycle, EXCEPTIONAL_RESULTS } from '@kumite/shared/lifecycle.js'
 import { forbidden } from '../lib/errors.js'
 import { categoryGuards, staffOnly } from '../auth/categoryAccess.js'
+import { runningEvent, eventOfCategory } from '@kumite/shared/tms.js'
 
 // Used when a tournament predates the setting, so an older record still gets a
 // sensible panel size instead of no limit at all.
@@ -428,6 +429,12 @@ export function matchRoutes(stores, tms = null) {
     // PRD v1 §13: only the transitions the match lifecycle allows.
     const from = existing.status || 'scheduled'
     if (patch.status && patch.status !== from && !correcting && !matchLifecycle.can(from, patch.status)) throw conflict('invalid_transition', { from, to: patch.status })
+    // Kata and Kumite take turns: a bout of the event not on the mats cannot be started.
+    if (['called', 'ready', 'open', 'live'].includes(patch.status) && patch.status !== from && category?.divisionKey) {
+      const tournament = await tournaments.get(category.tournamentId)
+      const event = eventOfCategory(category)
+      if (tournament && event !== runningEvent(tournament)) throw conflict('event_not_running', { event, running: runningEvent(tournament) })
+    }
     // An exceptional ending carries its finish reason (PRD v1 §13).
     const resultType = patch.result?.type
     if (resultType && EXCEPTIONAL_RESULTS.includes(resultType) && resultType !== 'CANCELLED' && !patch.result.finishReason && !correctionReason && !patch.result.method) throw badRequest('finish_reason_required')

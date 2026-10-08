@@ -121,6 +121,7 @@ const TOURNAMENT_SETTINGS = {
   poolSystem: { type: 'enum', values: POOL_SYSTEMS },
   ruleset: { type: 'string', max: 60 },
   kataMode: { type: 'enum', values: ['panel', 'bouts'] },
+  firstEvent: { type: 'enum', values: ['kata', 'kumite'] },
   kataJudges: { type: 'integer', min: 3, max: 7 },
   kataMethod: { type: 'enum', values: KATA_METHODS },
   kataQualifiers: { type: 'integer', min: 1, max: 64 },
@@ -486,6 +487,12 @@ export function tmsRoutes(tms, stores) {
     res.json({ match: await tms.markAttendance(withMeta(req), tid(req), req.params.id, side, present ?? null) })
   })
 
+  // Kata and Kumite take turns on the mats: switch the session.
+  router.post('/:tid/running-event', requirePermission(P.MATCH_CALL), async (req, res) => {
+    const event = req.body?.event
+    if (!['kata', 'kumite'].includes(event)) return res.status(400).json({ error: 'invalid_event' })
+    res.json(await tms.setRunningEvent(withMeta(req), tid(req), event))
+  })
   router.post('/:tid/matches/:id/call', requirePermission(P.MATCH_CALL), async (req, res) => {
     const { mat } = validate(req.body || {}, { mat: { type: 'integer', min: 1, max: 20, nullable: true } })
     res.json({ match: await tms.callMatch(withMeta(req), tid(req), req.params.id, { mat }) })

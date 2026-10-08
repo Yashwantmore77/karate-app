@@ -582,6 +582,14 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     }
     const done = []
 
+    // Kata and Kumite take turns. The kata session ran first: the men's kata
+    // to the final. The women's round 1 is set up for a later kata session.
+    const kataKey = key('Seniors Male', 'kata')
+    if (kataKey) await b.kata(t, kataKey)
+    await tms.createKataRound(admin, t.id, key('Seniors Female', 'kata'), { seed: 2026 })
+    // Kumite is on the mats now.
+    await tms.setRunningEvent(admin, t.id, 'kumite')
+
     // Single entries: one awarded the gold, one "no competition".
     await tms.decideSingleEntry(admin, t.id, key('-60 KG'), 'award')
     await tms.decideSingleEntry(admin, t.id, key('-50 KG'), 'no_competition')
@@ -646,12 +654,6 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     const withdrawn = big.slice(17).flatMap((m) => [m.akaPlayerId, m.aoPlayerId]).find((id) => id && !busy.has(id))
     if (withdrawn) await tms.withdrawPlayer(admin, t.id, withdrawn, 'Injured in an earlier bout; doctor advised no further bouts')
 
-    // Kata: the men's category in its final, half the performers scored.
-    const kataKey = key('Seniors Male', 'kata')
-    if (kataKey) await b.kata(t, kataKey, { leaveOpen: true, partial: 2 })
-    // The women's kata: round 1 set up, not started yet.
-    await tms.createKataRound(admin, t.id, key('Seniors Female', 'kata'), { seed: 2026 })
-
     await b.schedule(t) // knockout bouts created as winners went through
     await tms.generatePasses(admin, t.id, { kinds: ['player', 'coach'] })
     const passes = await tms.listPasses(t.id)
@@ -665,7 +667,8 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
       'Single entries: one awarded gold, one "no competition"',
       'Category results: provisional (with medals set by hand), verified, published, locked',
       '17 players in pools of 9 + 8; knockout category with the first round fought',
-      'Kata: men\'s final open with only some performers scored; women\'s round 1 set up, not started',
+      'Kata and Kumite take turns: the kata session ran first (men\'s kata to the final); Kumite is on the mats now',
+      'Women\'s kata round 1 set up, waiting for the next kata session',
       'Passes printed; about 70% checked in',
     ])
   }

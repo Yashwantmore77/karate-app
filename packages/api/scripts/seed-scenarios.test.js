@@ -68,6 +68,9 @@ describe('test tournament scenarios', () => {
     const results = count(await tms.results(by['State Championship']), (d) => d.resultStatus)
     expect(Object.keys(results)).toEqual(expect.arrayContaining(['PROVISIONAL', 'VERIFIED', 'PUBLISHED', 'LOCKED']))
     expect((await players('State Championship')).some((p) => p.registrationStatus === 'WITHDRAWN')).toBe(true)
+    // Kata and Kumite take turns: the kata session is over, kumite is on the mats.
+    expect((await stores.tournaments.get(by['State Championship'])).activeEvent).toBe('kumite')
+    expect((await stores.kataRounds.list({ tournamentId: by['State Championship'] })).some((r) => r.status === 'open')).toBe(false)
 
     // Closed: results locked and certificates issued.
     for (const title of ['Diwali Karate Cup', 'Winter Open 2025']) {

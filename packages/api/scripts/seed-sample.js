@@ -228,6 +228,8 @@ export async function seedSample(stores, { reset = false, log = console.log } = 
       if (round.name === 'Final') break
     }
   }
+  // The kata session is over; kumite is on the mats now.
+  await tms.setRunningEvent(admin, tid, 'kumite')
   await tms.publishResults(admin, tid, true)
   const { certificates } = await tms.generateCertificates(admin, tid)
 

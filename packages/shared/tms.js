@@ -60,6 +60,8 @@ export const DEFAULT_SETTINGS = {
   ruleset: 'WKF',
   // PRD point 19: kata is judged by a panel, not fought as bouts.
   kataMode: 'panel',
+  // A Kata + Kumite tournament runs one event at a time; this one first.
+  firstEvent: 'kata',
   kataJudges: 5,
   kataMethod: 'drop_high_low_average',
   kataQualifiers: 8,
@@ -288,6 +290,21 @@ export function tournamentEvents(t) {
   if (t?.type === 'kumite') return ['kumite']
   return ['kata', 'kumite']
 }
+
+/**
+ * The event on the mats now. A tournament may hold Kata and Kumite, but only
+ * one runs at a time: the organiser switches from one session to the other.
+ */
+export function runningEvent(t) {
+  const events = tournamentEvents(t)
+  if (events.length === 1) return events[0]
+  if (events.includes(t?.activeEvent)) return t.activeEvent
+  const first = t?.settings?.firstEvent
+  return events.includes(first) ? first : events[0]
+}
+
+/** The event of a bout, from its category's division key (null for a legacy category). */
+export const eventOfCategory = (category) => (category?.divisionKey ? parseDivisionKey(category.divisionKey).event : null)
 
 /**
  * What is wrong with a team's details, field by field ({} when nothing is),
@@ -1875,10 +1892,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * Officials move a bout along; finishing goes through the result.
    */
   async function setMatchStatus(actor, tournamentId, matchId, to, reason = null) {
-    await writableTournament(tournamentId)
-    const { match } = await findBridgedMatch(tournamentId, matchId)
+    const tournament = await writableTournament(tournamentId)
+    const { match, category } = await findBridgedMatch(tournamentId, matchId)
     const from = match.status || 'scheduled'
     if (from === to) return match
+    if (['called', 'ready', 'open', 'live'].includes(to)) assertEventRunning(tournament, eventOfCategory(category))
     if (['completed', 'cancelled'].includes(to)) throw rule('use_result_entry')
     if (!matchLifecycle.can(from, to)) throw rule('invalid_transition', { from, to })
     if (from === 'completed' && !reason) throw invalid('reason_required')
@@ -1962,7 +1980,47 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const category = match.categoryId ? await stores.categories.get(match.categoryId) : null
     const tournament = category?.tournamentId ? await stores.tournaments.get(category.tournamentId) : null
     if ([T.COMPLETED, T.ARCHIVED].includes(lifecycleOf(tournament))) return 'tournament_closed'
+    // Kata and Kumite take turns: a bout of the other event waits for its session.
+    const event = eventOfCategory(category)
+    if (tournament && event && event !== runningEvent(tournament)) return 'event_not_running'
     return null
+  }
+
+  /** Refuses to start anything of an event whose session is not on. */
+  const assertEventRunning = (tournament, event) => {
+    const running = runningEvent(tournament)
+    if (event && event !== running) throw rule('event_not_running', { event, running })
+  }
+
+  /** What of `event` is under way: bouts called or being fought, kata rounds open. */
+  async function inProgress(tournamentId, event) {
+    const IN_PROGRESS = ['called', 'ready', 'open', 'live', 'paused']
+    let bouts = 0
+    for (const c of await stores.categories.list({ tournamentId })) {
+      if (eventOfCategory(c) !== event) continue
+      bouts += (await stores.matches.list({ categoryId: c.id })).filter((m) => !boutOutcome(m) && IN_PROGRESS.includes(m.status)).length
+    }
+    const rounds = event === EVENTS.KATA ? (await stores.kataRounds.list({ tournamentId })).filter((r) => r.status === 'open').length : 0
+    return { bouts, rounds }
+  }
+
+  /**
+   * Switches the mats from one event's session to the other's. Refused while
+   * the running event still has bouts called or under way, or a kata round
+   * open, so nothing is left half-done on the mats.
+   */
+  async function setRunningEvent(actor, tournamentId, event) {
+    const tournament = await writableTournament(tournamentId)
+    const events = tournamentEvents(tournament)
+    if (!events.includes(event)) throw invalid('event_not_in_tournament')
+    const from = runningEvent(tournament)
+    if (from === event) return { event, from }
+    const busy = await inProgress(tournamentId, from)
+    if (busy.bouts || busy.rounds) throw rule('event_in_progress', { event: from, ...busy })
+    await stores.tournaments.update(tournamentId, { activeEvent: event })
+    await record(actor, { tournamentId, action: A.EVENT_SWITCHED, entity: 'tournament', entityId: tournamentId, before: { running: from }, after: { running: event } })
+    await notify(tournamentId, 'team', 'event_switched', `${event === EVENTS.KATA ? 'Kata' : 'Kumite'} starts now.`)
+    return { event, from }
   }
 
   async function recordBlockedCommand(actor, matchId, cmd, why) {
@@ -1978,9 +2036,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * and the mat's referee see it called, and the call is recorded.
    */
   async function callMatch(actor, tournamentId, matchId, { mat = null } = {}) {
-    await writableTournament(tournamentId)
+    const tournament = await writableTournament(tournamentId)
     const { match, category } = await findBridgedMatch(tournamentId, matchId)
     if (boutOutcome(match) || match.status === 'cancelled') throw rule('match_finished')
+    assertEventRunning(tournament, eventOfCategory(category))
     const patch = { calledAt: iso(), calledBy: actor?.uid || null, calls: (match.calls || 0) + 1 }
     if (mat != null) patch.mat = mat
     if ((match.status || 'scheduled') === 'scheduled') patch.status = 'called'
@@ -2122,6 +2181,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const division = (await divisions(tournamentId)).find((d) => d.key === key && isPanelKata(d, cfg.settings))
     if (!division) throw missing('division_not_found')
     const ds = divisionSettingsFor(cfg, division)
+    // A round can be set up any time; it starts only in the kata session.
+    if (start) assertEventRunning(cfg.tournament, EVENTS.KATA)
     const existing = await kataRoundsOf(tournamentId, key)
     const last = existing[existing.length - 1]
     if (last && last.status !== 'completed') throw rule('round_open')
@@ -2178,9 +2239,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   /** PRD v1 §14 step 4: the round starts; judges can score from now. */
   async function startKataRound(actor, tournamentId, roundId) {
-    await writableTournament(tournamentId)
+    const tournament = await writableTournament(tournamentId)
     const round = await inTournament('kataRounds', tournamentId, roundId)
     if (round.status !== 'pending') throw rule('round_not_pending')
+    assertEventRunning(tournament, EVENTS.KATA)
     const after = await stores.kataRounds.update(roundId, { status: 'open', openedAt: iso() })
     await record(actor, { tournamentId, action: A.KATA_ROUND_STARTED, entity: 'kata_round', entityId: roundId, after: { round: round.name } })
     return after
@@ -3120,6 +3182,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (paymentsEnabled()) out.fees = s.fees
     out.publicCertificates = !!s.publicCertificates
     out.registrationOpen = lifecycleOf(t) === T.REGISTRATION_OPEN && registrationWindow(t).open
+    // Which event is on the mats now (Kata and Kumite take turns).
+    out.runningEvent = runningEvent(t)
     return out
   }
 
@@ -3320,7 +3384,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, drawImpact, setQualifiers, decideSingleEntry,
     // matches and results
-    generateMatches, listMatches, correctResult, swapCorners, callMatch, overrideMedals, recordLiveEvent, liveEvents,
+    generateMatches, listMatches, correctResult, swapCorners, callMatch, setRunningEvent, inProgress, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket, arrangeBracket, listBrackets,

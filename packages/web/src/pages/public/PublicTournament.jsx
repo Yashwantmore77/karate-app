@@ -140,6 +140,8 @@ export default function PublicTournament() {
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
           <StatusBadge status={t.lifecycleStatus} />
           {live.length > 0 && <Chip color="error" size="small" label={`● ${live.length} live`} />}
+          {/* Kata and Kumite take turns on the mats. */}
+          {!['kata', 'kumite'].includes(t.type) && ['READY', 'LIVE'].includes(t.lifecycleStatus) && t.runningEvent && <Chip color="secondary" size="small" label={`On the mats: ${t.runningEvent === 'kata' ? 'Kata' : 'Kumite'}`} />}
           <Button size="small" component={RouterLink} to="/tournaments">All tournaments</Button>
           <Button size="small" component={RouterLink} to={`/live?t=${encodeURIComponent(t.slug || t.id)}`}>Live board</Button>
         </Stack>

@@ -16,6 +16,13 @@ export function describeError(err) {
     const who = details.clashes.map((c) => (c.role === 'mat' ? `mat ${c.mat} is taken` : c.otherEvent ? `the player has a bout in their other event${c.mat ? ` (mat ${c.mat})` : ''}` : `the ${c.role || 'person'} is already on another bout${c.mat ? ` (mat ${c.mat})` : ''}`))
     return `Time clash: ${[...new Set(who)].join('; ')}${details.clashes[0]?.scheduledAt ? ` at ${new Date(details.clashes[0].scheduledAt).toLocaleString()}` : ''}. Pick another time or mat.`
   }
+  // Kata and Kumite take turns on the mats.
+  const EVENT_NAME = { kata: 'Kata', kumite: 'Kumite' }
+  if (code === 'event_not_running' && details?.event) return `${EVENT_NAME[details.event]} is not on the mats now: ${EVENT_NAME[details.running]} is. Switch the session to ${EVENT_NAME[details.event]} first.`
+  if (code === 'event_in_progress' && details?.event) {
+    const left = [details.bouts && `${details.bouts} bout${details.bouts === 1 ? '' : 's'} called or under way`, details.rounds && `${details.rounds} kata round${details.rounds === 1 ? '' : 's'} open`].filter(Boolean).join(' and ')
+    return `${EVENT_NAME[details.event]} still has ${left}. Finish ${details.bouts + details.rounds === 1 ? 'it' : 'them'} before switching.`
+  }
   if (code === 'overlapping_age_group' && details?.with) return details.preset
     ? `${details.preset} overlaps your age group "${details.with}". Delete or change "${details.with}" first, then load the set.`
     : `These ages overlap the age group "${details.with}" for the same gender. Change the ages, or switch on "Allow overlap" if that is intended.`
@@ -87,6 +94,9 @@ const ERROR_TEXT = {
   no_pools: 'Generate pools first.',
   forbidden: 'You do not have permission to do that.',
   schedule_conflict: 'Someone on this bout is already booked at that time.',
+  event_not_running: 'That event is not on the mats now. Switch the session first.',
+  event_in_progress: 'Finish what is under way before switching the session.',
+  event_not_in_tournament: 'This tournament does not hold that event.',
   referee_also_judge: 'The referee cannot also sit on the judging panel.',
   too_many_judges: 'More judges than this tournament seats on a panel.',
   invalid_judgeIds: 'Only judge accounts can sit on the panel.',

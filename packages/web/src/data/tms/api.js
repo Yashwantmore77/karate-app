@@ -95,6 +95,8 @@ export const tms = {
   matches: async (tid, filter) => (await get(`${T(tid)}/matches${qs(filter)}`)).matches,
   generateMatches: (tid, opts = {}) => send('POST', `${T(tid)}/matches/generate`, opts),
   swapCorners: async (tid, mid, reason) => (await send('POST', `${T(tid)}/matches/${mid}/swap-corners`, { reason: reason || null })).match,
+  // Kata and Kumite take turns: switch the session on the mats.
+  setRunningEvent: (tid, event) => send('POST', `${T(tid)}/running-event`, { event }),
   callMatch: async (tid, mid, mat) => (await send('POST', `${T(tid)}/matches/${mid}/call`, { mat: mat ?? null })).match,
   matchEvents: async (tid, mid) => (await get(`${T(tid)}/matches/${mid}/events`)).events,
   overrideMedals: (tid, divisionKey, medals, reason) => send('POST', `${T(tid)}/results/medals/override`, { divisionKey, medals, reason }),

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Stack, Paper, Typography, Button, Box, Chip, Alert, Grid, TextField, MenuItem } from '@mui/material'
 import { Campaign } from '@mui/icons-material'
 import { boutOutcome } from '@kumite/shared/results.js'
-import { settingsOf } from '@kumite/shared/tms.js'
+import { settingsOf, runningEvent, parseDivisionKey } from '@kumite/shared/tms.js'
+import EventSession, { hasSessions } from '../../components/tms/EventSession'
 import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import { MatchSides } from './MatchesTab'
@@ -22,7 +23,7 @@ const ago = (iso) => {
  * next ones, with a button to call them to the mat; the hall's live board
  * shows what has been called. Results are read out from the finished list.
  */
-export default function CallTab({ tournament, version, action, role }) {
+export default function CallTab({ tournament, version, action, role, reload }) {
   const tid = tournament.id
   const mats = settingsOf(tournament).mats
   // PRD v1 §4: the announcer marks who reported when a bout is called.
@@ -35,12 +36,18 @@ export default function CallTab({ tournament, version, action, role }) {
   useEffect(() => { load() }, [tid, version])
   useEffect(() => watchPublicChanges(load), [tid])
 
-  const byMat = useMemo(() => {
-    const pending = (matches || []).filter((m) => !boutOutcome(m) && m.status !== 'cancelled' && m.redId && m.blueId).sort((a, b) => number(a) - number(b))
-    return Array.from({ length: mats }, (_, i) => i + 1).map((mat) => ({
-      mat, rows: pending.filter((m) => Number(m.mat || 1) === mat).slice(0, UPCOMING),
-    }))
-  }, [matches, mats])
+  // Kata and Kumite take turns: only the event on the mats now is called.
+  const running = runningEvent(tournament)
+  const sessions = hasSessions(tournament)
+  const eventOf = (m) => (m.divisionKey ? parseDivisionKey(m.divisionKey).event : null)
+  const { byMat, waiting } = useMemo(() => {
+    const open = (matches || []).filter((m) => !boutOutcome(m) && m.status !== 'cancelled' && m.redId && m.blueId).sort((a, b) => number(a) - number(b))
+    const pending = sessions ? open.filter((m) => !eventOf(m) || eventOf(m) === running) : open
+    return {
+      byMat: Array.from({ length: mats }, (_, i) => i + 1).map((mat) => ({ mat, rows: pending.filter((m) => Number(m.mat || 1) === mat).slice(0, UPCOMING) })),
+      waiting: open.length - pending.length,
+    }
+  }, [matches, mats, running, sessions])
   const finished = useMemo(() => (matches || []).filter((m) => boutOutcome(m)).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))).slice(0, 8), [matches])
 
   const call = (m) => action.run(() => tms.callMatch(tid, m.id, moveTo[m.id] ? Number(moveTo[m.id]) : null), `${m.matchNumber} called to mat ${moveTo[m.id] || m.mat || 1}`).then(load)
@@ -50,6 +57,12 @@ export default function CallTab({ tournament, version, action, role }) {
 
   return (
     <Stack spacing={2}>
+      {sessions && (
+        <Paper sx={{ p: 1.5 }}>
+          <EventSession tournament={tournament} role={role} action={action} reload={reload} />
+          {waiting > 0 && <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{waiting} {running === 'kata' ? 'Kumite' : 'Kata'} bout{waiting === 1 ? '' : 's'} waiting for {running === 'kata' ? 'the Kumite' : 'the Kata'} session.</Typography>}
+        </Paper>
+      )}
       <Grid container spacing={2}>
         {byMat.map(({ mat, rows }) => (
           <Grid key={mat} size={{ xs: 12, md: 6 }}>
