@@ -37,6 +37,7 @@ import { hashSecret, verifySecret, randomToken } from './secret.js'
 import { checkFile, base64Size, safeFileName, FILE_PURPOSES } from './files.js'
 import { paginate, pageOptions } from './paging.js'
 import { normalizeKataScore, kataFinal, rankKata, componentScore } from './kata.js'
+import { createKeyedLock } from './lock.js'
 
 const R = REGISTRATION_STATUS
 const T = TOURNAMENT_STATUS
@@ -145,6 +146,10 @@ export const parseDivisionKey = (key) => {
 }
 
 const pad = (n, width = 3) => String(n).padStart(width, '0')
+// A bout waiting to be called: not fought, not cancelled, not on a mat now.
+const upNext = (m) => !boutOutcome(m) && m.status !== 'cancelled' && !['live', 'open', 'paused'].includes(m.status)
+// Whether a bout's corners are other than these (nobody: null or missing alike).
+const cornersDiffer = (bout, aka, ao) => (bout.redId ?? null) !== (aka ?? null) || (bout.blueId ?? null) !== (ao ?? null)
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''))
 const LOCKED_PLAYER_FIELDS = ['dob', 'gender', 'weight', 'events', 'teamId']
 
@@ -383,6 +388,10 @@ export function registrationReadiness(t) {
 export function createTms(stores, { now = () => new Date(), onNotify = null } = {}) {
   const audit = createAuditLog(stores.auditLog)
   const iso = () => now().toISOString()
+  // Numbers are "the highest so far, plus one": requests that hand one out
+  // take turns per tournament (lock.js), or two at the same moment get the
+  // same number, and two results confirmed at once both create the final.
+  const withLock = createKeyedLock()
 
   // --- helpers --------------------------------------------------------------
 
@@ -910,12 +919,14 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       doc = termsAccepted === true ? { ...fields, termsAcceptedAt: iso() } : fields
       if (!doc.name) throw invalid('name_required')
       assertTeamContact(doc)
-      const existing = await stores.teams.list({ tournamentId })
-      // PRD v1 §7: team names normalised for duplicate detection.
-      if (existing.some((t) => normalizeName(t.name) === normalizeName(doc.name))) throw rule('team_exists')
-      // A unique team reference number (PRD v1 §7).
-      const max = existing.reduce((m, t) => Math.max(m, Number(String(t.teamNumber || '').replace(/\D/g, '')) || 0), 0)
-      const row = await stores.teams.insert({ active: true, ...doc, teamNumber: `T-${pad(max + 1)}`, tournamentId })
+      const row = await withLock(`teams:${tournamentId}`, async () => {
+        const existing = await stores.teams.list({ tournamentId })
+        // PRD v1 §7: team names normalised for duplicate detection.
+        if (existing.some((t) => normalizeName(t.name) === normalizeName(doc.name))) throw rule('team_exists')
+        // A unique team reference number (PRD v1 §7).
+        const max = existing.reduce((m, t) => Math.max(m, Number(String(t.teamNumber || '').replace(/\D/g, '')) || 0), 0)
+        return stores.teams.insert({ active: true, ...doc, teamNumber: `T-${pad(max + 1)}`, tournamentId })
+      })
       await record(actor, { tournamentId, action: A.TEAM_CHANGED, entity: 'team', entityId: row.id, after: row })
       // The coach named when registering is the team's first member.
       if (String(doc.coachName || '').trim().length >= 2) {
@@ -1120,8 +1131,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return { rows, total, page, pageSize }
   }
 
-  async function nextPlayerNumber(tournamentId) {
-    const rows = await stores.players.list({ tournamentId })
+  const nextPlayerNumber = (rows) => {
     const max = rows.reduce((m, p) => Math.max(m, Number(String(p.playerNumber || '').replace(/\D/g, '')) || 0), 0)
     return `P-${pad(max + 1, 4)}`
   }
@@ -1142,29 +1152,33 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const { player, errors } = validatePlayer(filled, fields, { weightPrecision: cfg.settings.weightPrecision })
     if (errors.length) throw invalid('invalid_player', { errors })
     assertEventsOffered(player, tournament)
-    const existing = await stores.players.list({ tournamentId })
-    // PRD v1 §21/§28: a possible duplicate is a warning to review and
-    // confirm, never a silent merge.
-    const dupes = possibleDuplicates(player, existing)
-    if (dupes.length && !cfg.settings.allowDuplicatePlayers && !confirmDuplicate) {
-      throw rule('possible_duplicate', { matches: dupes.map((d) => ({ id: d.id, name: d.name, dob: d.dob, club: d.club, playerNumber: d.playerNumber, teamId: d.teamId })) })
-    }
-    assertAgeEligible(actor, player, cfg)
+    // One entry at a time per tournament: the duplicate check and the player
+    // number both need the entry made a moment ago by another coach.
+    const { row, dupes } = await withLock(`players:${tournamentId}`, async () => {
+      const existing = await stores.players.list({ tournamentId })
+      // PRD v1 §21/§28: a possible duplicate is a warning to review and
+      // confirm, never a silent merge.
+      const dupes = possibleDuplicates(player, existing)
+      if (dupes.length && !cfg.settings.allowDuplicatePlayers && !confirmDuplicate) {
+        throw rule('possible_duplicate', { matches: dupes.map((d) => ({ id: d.id, name: d.name, dob: d.dob, club: d.club, playerNumber: d.playerNumber, teamId: d.teamId })) })
+      }
+      assertAgeEligible(actor, player, cfg)
 
-    const doc = {
-      ...player,
-      teamId,
-      tournamentId,
-      playerNumber: await nextPlayerNumber(tournamentId),
-      seed: input.seed ?? null,
-      registrationStatus: status || (isCoach(actor) ? R.SUBMITTED : R.PENDING_VERIFICATION),
-      // The system is free while payments are off (features.js): no fee, no payment record.
-      payment: paymentsEnabled() ? { amount: feeFor(player, cfg.settings), status: 'PENDING' } : null,
-      weighIn: player.events?.includes('kumite') ? { registeredWeight: player.weight ?? null, status: 'PENDING' } : null,
-    }
-    if (dupes.length) doc.duplicateOf = dupes.map((d) => d.id)
-    Object.assign(doc, categorizeFields(doc, cfg))
-    const row = await stores.players.insert(doc)
+      const doc = {
+        ...player,
+        teamId,
+        tournamentId,
+        playerNumber: nextPlayerNumber(existing),
+        seed: input.seed ?? null,
+        registrationStatus: status || (isCoach(actor) ? R.SUBMITTED : R.PENDING_VERIFICATION),
+        // The system is free while payments are off (features.js): no fee, no payment record.
+        payment: paymentsEnabled() ? { amount: feeFor(player, cfg.settings), status: 'PENDING' } : null,
+        weighIn: player.events?.includes('kumite') ? { registeredWeight: player.weight ?? null, status: 'PENDING' } : null,
+      }
+      if (dupes.length) doc.duplicateOf = dupes.map((d) => d.id)
+      Object.assign(doc, categorizeFields(doc, cfg))
+      return { row: await stores.players.insert(doc), dupes }
+    })
     await record(actor, { tournamentId, action: A.PLAYER_CREATED, entity: 'player', entityId: row.id, after: { name: row.name, teamId } })
     if (dupes.length) {
       await record(actor, { tournamentId, action: A.DUPLICATE_CONFIRMED, entity: 'player', entityId: row.id, after: { duplicateOf: dupes.map((d) => d.playerNumber || d.id) }, reason: 'Possible duplicate confirmed at entry' })
@@ -1800,7 +1814,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return max + 1
   }
 
-  async function generateMatches(actor, tournamentId, { divisionKey: only = null } = {}) {
+  // Bouts and match numbers are written one request at a time per tournament.
+  const boutsTurn = (tournamentId, fn) => withLock(`bouts:${tournamentId}`, fn)
+
+  // Pressing "Generate matches" twice waits for the first, then finds its bouts.
+  const generateMatches = (actor, tournamentId, options = {}) => boutsTurn(tournamentId, () => generateMatchesNow(actor, tournamentId, options))
+
+  async function generateMatchesNow(actor, tournamentId, { divisionKey: only = null } = {}) {
     const cfg = await config(tournamentId, { write: true })
     const { tournament, settings } = cfg
     if (!tournament.drawLocked) throw rule('draw_not_locked')
@@ -1838,7 +1858,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
           })
           await stores.pools.update(pool.id, { categoryId: category.id })
           const before = (await stores.matches.list({ categoryId: category.id })).length
-          await syncBracket(tournamentId, division.key)
+          await fillBracket(tournamentId, division.key)
           created += (await stores.matches.list({ categoryId: category.id })).length - before
           number = await nextMatchNumber(tournamentId)
           continue
@@ -2454,6 +2474,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * master pool, chosen by top-N, a points threshold or the admin.
    */
   async function generateBracket(actor, tournamentId, key) {
+    const made = await boutsTurn(tournamentId, () => generateBracketNow(actor, tournamentId, key))
+    return made.masterPool ? made : bracketView(tournamentId, key)
+  }
+
+  async function generateBracketNow(actor, tournamentId, key) {
     const cfg = await config(tournamentId, { write: true })
     const division = (await divisions(tournamentId)).find((d) => d.key === key)
     const ds = division ? divisionSettingsFor(cfg, division) : cfg.settings
@@ -2495,15 +2520,32 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       entries: seeds.map((x) => ({ id: competitorOfPlayer.get(x.id), playerId: x.id, pool: x.pool, place: x.place })),
     })
     await record(actor, { tournamentId, action: A.BRACKET_GENERATED, entity: 'tournament', entityId: tournamentId, after: { divisionKey: key, qualifiers: seeds.length, qualification: mode, thirdPlace: !!cfg.settings.thirdPlaceMatch } })
-    await syncBracket(tournamentId, key)
-    return bracketView(tournamentId, key)
+    await fillBracket(tournamentId, key)
+    return {}
   }
 
   /**
    * Section 36: the bracket fills itself. Bouts are created as soon as both
    * corners are known, and a later round's corners follow earlier results.
+   * Most calls (every look at a bracket) find nothing to change and need no
+   * turn; one that would change something waits for its turn and looks again,
+   * so two results confirmed at once create the next bout once.
    */
   async function syncBracket(tournamentId, key) {
+    const seen = await fillBracket(tournamentId, key, { write: false })
+    if (seen !== CHANGES) return seen
+    return boutsTurn(tournamentId, () => fillBracket(tournamentId, key))
+  }
+
+  // What fillBracket says, looking only, when the bracket needs writing.
+  const CHANGES = Symbol('changes')
+
+  /**
+   * syncBracket's work: the bracket's slots, writing new and changed bouts.
+   * The caller holds the tournament's bouts turn; with `write: false` nothing
+   * is written and CHANGES comes back when something would be.
+   */
+  async function fillBracket(tournamentId, key, { write = true } = {}) {
     const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
     if (!bracket) return null
     const skeleton = buildBracket(bracket.entries, bracket.layout || null)
@@ -2532,11 +2574,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       const existing = stored.get(slot.key)
       const isBye = slot.round === 1 && (!aka || !ao)
       if (existing) {
-        if (!boutOutcome(existing) && (existing.redId !== aka || existing.blueId !== ao)) {
+        if (!boutOutcome(existing) && cornersDiffer(existing, aka, ao)) {
+          if (!write) return CHANGES
           await stores.matches.update(existing.id, { redId: aka, blueId: ao })
         }
         merged.set(slot.key, { ...existing, ...slot, aka: boutOutcome(existing) ? existing.redId : aka, ao: boutOutcome(existing) ? existing.blueId : ao, status: existing.status, winner: existing.winner })
       } else if (!isBye && aka && ao) {
+        if (!write) return CHANGES
         if (number == null) number = await nextMatchNumber(tournamentId)
         const row = await stores.matches.insert({
           categoryId: bracket.categoryId, tournamentId, stage: 'knockout', round: slot.round, roundName: slot.name,
@@ -2565,9 +2609,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         const slot = { key: key3, round: top, slot: 2, name: 'Third Place', thirdPlace: true }
         const existing = stored.get(key3)
         if (existing) {
-          if (!boutOutcome(existing) && (existing.redId !== aka || existing.blueId !== ao)) await stores.matches.update(existing.id, { redId: aka, blueId: ao })
+          if (!boutOutcome(existing) && cornersDiffer(existing, aka, ao)) {
+            if (!write) return CHANGES
+            await stores.matches.update(existing.id, { redId: aka, blueId: ao })
+          }
           merged.set(key3, { ...existing, ...slot, aka: boutOutcome(existing) ? existing.redId : aka, ao: boutOutcome(existing) ? existing.blueId : ao, status: existing.status, winner: existing.winner })
         } else if (aka && ao) {
+          if (!write) return CHANGES
           if (number == null) number = await nextMatchNumber(tournamentId)
           const row = await stores.matches.insert({
             categoryId: bracket.categoryId, tournamentId, stage: 'knockout', round: top, roundName: 'Third Place', thirdPlace: true,
@@ -2591,6 +2639,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * ones go with them).
    */
   async function arrangeBracket(actor, tournamentId, key, layout) {
+    await boutsTurn(tournamentId, () => arrangeBracketNow(actor, tournamentId, key, layout))
+    return bracketView(tournamentId, key)
+  }
+
+  async function arrangeBracketNow(actor, tournamentId, key, layout) {
     const tournament = await writableTournament(tournamentId)
     const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
     if (!bracket) throw missing('bracket_not_found')
@@ -2609,7 +2662,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     await stores.brackets.update(bracket.id, { layout: layout.map((id) => id || null) })
     const names = new Map((await stores.competitors.list({ categoryId: bracket.categoryId })).map((c) => [c.id, c.name]))
     await record(actor, { tournamentId, action: A.BRACKET_ARRANGED, entity: 'division', entityId: key, after: { firstRound: Array.from({ length: size / 2 }, (_, i) => `${names.get(layout[i * 2]) || 'bye'} v ${names.get(layout[i * 2 + 1]) || 'bye'}`) } })
-    return bracketView(tournamentId, key)
+    await fillBracket(tournamentId, key)
   }
 
   /** Every bracket in the tournament, for choosing one on the bracket screen. */
@@ -3283,7 +3336,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       })).sort(byName),
       pools: poolRows.map((p) => ({ id: p.id, divisionKey: p.divisionKey, label: p.label, name: p.name, players: p.playerIds.map((id) => ({ id, name: names.get(id) || '?' })) })),
       matches: matchRows.map((m) => ({
-        id: m.id, matchNumber: m.matchNumber, mat: m.mat, scheduledAt: m.scheduledAt || null, category: m.categoryName, divisionKey: m.divisionKey,
+        id: m.id, matchNumber: m.matchNumber, mat: m.mat, scheduledAt: m.scheduledAt || null, category: m.categoryName, divisionKey: m.divisionKey, event: eventOfCategory(m),
         pool: m.poolName, round: m.round, stage: m.stage, roundName: m.roundName || null, status: m.status, resultType: m.resultType,
         aka: m.akaName, ao: m.aoName, winner: m.winner || null, akaScore: m.avgRed ?? null, aoScore: m.avgBlue ?? null, calledAt: m.calledAt || null,
       })),
@@ -3419,6 +3472,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   }
 
   async function dashboard(tournamentId) {
+    const tournament = await tournamentOf(tournamentId)
     const players = await stores.players.list({ tournamentId })
     const teamRows = await stores.teams.list({ tournamentId })
     const pools = await stores.pools.list({ tournamentId })
@@ -3457,7 +3511,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       gold: medals.filter((m) => m.medal === 'gold').length,
       silver: medals.filter((m) => m.medal === 'silver').length,
       bronze: medals.filter((m) => m.medal === 'bronze').length,
-      nextMatches: matches.filter((m) => !boutOutcome(m)).slice(0, 8),
+      // What is called next: the event on the mats (Kata and Kumite take turns), still to be fought.
+      nextMatches: matches.filter((m) => upNext(m) && (eventOfCategory(m) || runningEvent(tournament)) === runningEvent(tournament)).slice(0, 8),
       currentMatches: matches.filter((m) => ['live', 'open'].includes(m.status)),
       // The problems and to-dos shown at the top of every tab.
       attention: await attention(tournamentId, { players, ageGroups, weightCategories, pools, kataRounds }),

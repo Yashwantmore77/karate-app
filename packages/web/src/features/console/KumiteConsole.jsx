@@ -221,28 +221,32 @@ export default function KumiteConsole({
 
   const renderPenaltyRow = (side, category) => {
     const level = view.match.penalties[side][category]
+    // On a narrow panel (a tablet) the boxes go under their label together,
+    // never one by one past the panel's edge, where H was cut off.
     return (
-      <Stack direction="row" spacing={1} key={category} sx={{ alignItems: 'center' }}>
-        <Typography variant="caption" sx={{ width: 72, color: WKF.onPanel, fontWeight: 700 }}>
+      <Box key={category} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, width: '100%' }}>
+        <Typography variant="caption" sx={{ minWidth: 72, textAlign: 'left', color: WKF.onPanel, fontWeight: 700 }}>
           {penaltyCategories.length === 1 ? 'Penalties' : CATEGORY_LABELS[category]}
         </Typography>
-        {ladder.map((step, idx) => (
-          <FormControlLabel
-            key={step}
-            sx={{ mr: 0.5 }}
-            control={
-              <Checkbox
-                size="small"
-                checked={level >= idx + 1}
-                disabled={disabled}
-                onChange={() => send('PENALTY', { side, category, level: idx + 1 })}
-                sx={panelCheckboxSx}
-              />
-            }
-            label={<Typography variant="caption" sx={{ color: WKF.onPanel, fontWeight: 700 }}>{step}</Typography>}
-          />
-        ))}
-      </Stack>
+        <Box sx={{ display: 'flex', flexWrap: 'nowrap' }}>
+          {ladder.map((step, idx) => (
+            <FormControlLabel
+              key={step}
+              sx={{ ml: -0.75, mr: 0.75 }}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={level >= idx + 1}
+                  disabled={disabled}
+                  onChange={() => send('PENALTY', { side, category, level: idx + 1 })}
+                  sx={{ ...panelCheckboxSx, p: 0.75 }}
+                />
+              }
+              label={<Typography variant="caption" sx={{ color: WKF.onPanel, fontWeight: 700 }}>{step}</Typography>}
+            />
+          ))}
+        </Box>
+      </Box>
     )
   }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createTms, TMS_COLLECTIONS, registrationReadiness, runningEvent, registrationPath } from './tms.js'
+import { createTms, TMS_COLLECTIONS, registrationReadiness, runningEvent, registrationPath, parseDivisionKey } from './tms.js'
 import { memoryStores } from './memoryStore.js'
 import { evaluateOutcome, DEFAULT_RULES } from './rules.js'
 import { applyCommand, initialMatchState, rulesFrom } from './commands.js'
@@ -555,6 +555,39 @@ describe('Kata and Kumite take turns', () => {
     await expect(tms.setRunningEvent(admin, t.id, 'kata')).rejects.toMatchObject({ code: 'event_in_progress', details: { event: 'kumite', bouts: 1 } })
     const audit = await stores.auditLog.list({ tournamentId: t.id })
     expect(audit.some((a) => a.action === 'tournament.event_switched')).toBe(true)
+  })
+
+  it('lists as next only the bouts of the event on the mats, still to be fought', async () => {
+    const { tms, t, add, stores } = await world({ settings: { kataMode: 'bouts', requireWeighInForDraw: false } })
+    await add(3, { fields: { events: ['kata', 'kumite'] } })
+    await tms.categorize(admin, t.id)
+    await tms.setEntriesLock(admin, t.id, true)
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    const eventOf = (m) => parseDivisionKey(m.divisionKey).event
+    const bouts = await tms.listMatches(t.id)
+    const of = (event) => bouts.filter((m) => eventOf(m) === event).map((m) => m.id).sort()
+    expect(of('kata')).toHaveLength(3)
+    expect(of('kumite')).toHaveLength(3)
+    const next = async () => (await tms.dashboard(t.id)).nextMatches.map((m) => m.id).sort()
+
+    // Kata first: the kumite bouts are not next, however low their numbers.
+    expect(await next()).toEqual(of('kata'))
+    await tms.setRunningEvent(admin, t.id, 'kumite')
+    expect(await next()).toEqual(of('kumite'))
+    // A bout fought, cancelled or on the mat now is not next either.
+    const [fought, cancelled, onMat] = of('kumite')
+    await tms.correctResult(admin, t.id, fought, { winner: 'red', avgRed: 2, avgBlue: 0 })
+    await tms.correctResult(admin, t.id, cancelled, { resultType: 'CANCELLED' }, 'Mat closed')
+    await stores.matches.update(onMat, { status: 'live' })
+    expect(await next()).toEqual([])
+
+    // The public pages can tell the two apart.
+    await stores.tournaments.update(t.id, { lifecycleStatus: 'LIVE' })
+    const view = await tms.publicView(t.id)
+    expect(view.tournament.runningEvent).toBe('kumite')
+    expect(view.matches.map((m) => m.event).sort()).toEqual(['kata', 'kata', 'kata', 'kumite', 'kumite', 'kumite'])
   })
 
   it('starts with the event chosen in the settings; a single-event tournament is always on its event', async () => {

@@ -11,6 +11,7 @@ import { PageLoader } from '../../components/Loader'
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
 const NEXT_PER_MAT = 3
+const EVENT_NAME = { kata: 'Kata', kumite: 'Kumite' }
 const ROTATE_MS = 12_000
 const number = (m) => Number(String(m.matchNumber).replace(/\D/g, '')) || 0
 
@@ -78,7 +79,11 @@ function Board({ slug }) {
 
   if (!data) return <PageLoader label="Loading live board…" />
 
-  const pending = data.matches.filter((m) => !['completed', 'cancelled'].includes(m.status) && m.aka && m.ao).sort((a, b) => number(a) - number(b))
+  // Only the event on the mats now (Kata and Kumite take turns): the other's bouts are not next.
+  const running = data.tournament.runningEvent
+  const waiting = data.matches.filter((m) => !['completed', 'cancelled'].includes(m.status) && m.aka && m.ao)
+  const pending = waiting.filter((m) => !running || !m.event || m.event === running).sort((a, b) => number(a) - number(b))
+  const later = waiting.find((m) => running && m.event && m.event !== running)
   const mats = [...new Set(pending.map((m) => m.mat || 1))].sort((a, b) => a - b)
   const recent = data.matches.filter((m) => m.status === 'completed').slice(-6).reverse()
   const scoreboardOpen = live && live.status === 'open'
@@ -94,7 +99,7 @@ function Board({ slug }) {
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 7 }}>
           <Grid container spacing={2}>
-            {!mats.length && <Grid size={{ xs: 12 }}><Paper sx={{ p: 3 }}><Typography color="text.secondary">No bouts waiting.</Typography></Paper></Grid>}
+            {!mats.length && <Grid size={{ xs: 12 }}><Paper sx={{ p: 3 }}><Typography color="text.secondary">{later ? `${EVENT_NAME[running]} is on the mats now. The ${EVENT_NAME[later.event]} bouts come after it.` : 'No bouts waiting.'}</Typography></Paper></Grid>}
             {mats.map((mat) => {
               const queue = pending.filter((m) => (m.mat || 1) === mat)
               const now = queue.find((m) => ['live', 'open', 'paused'].includes(m.status)) || null

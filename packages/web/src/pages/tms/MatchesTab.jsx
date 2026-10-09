@@ -16,6 +16,7 @@ import DataTable from '../../components/tms/DataTable'
 import StatusBadge from '../../components/tms/StatusBadge'
 import { useLoading } from '../../components/Loader'
 import InfoTip from '../../components/help/InfoTip'
+import { isoToLocalInput, localInputToIso } from '../../utils/scheduleTime'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
@@ -148,7 +149,7 @@ export default function MatchesTab({ tournament, version, action }) {
           { key: 'actions', label: '', sortable: false, render: (m) => (
             <Stack direction="row">
               <IconButton size="small" aria-label="Open scoring console" disabled={!m.redId || !m.blueId} onClick={() => navigate(`/admin/match/${m.id}`)}><SportsMma fontSize="small" /></IconButton>
-              <IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, categoryId: m.categoryId, number: m.matchNumber, mat: m.mat || 1, scheduledAt: m.scheduledAt ? m.scheduledAt.slice(0, 16) : '', refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton>
+              <IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, categoryId: m.categoryId, number: m.matchNumber, mat: m.mat || 1, scheduledAt: isoToLocalInput(m.scheduledAt), refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton>
               {/* PRD point 15: swap AKA and AO before the bout. */}
               <IconButton size="small" aria-label="Swap AKA and AO" disabled={!!boutOutcome(m) || ON_MAT.includes(m.status) || (!m.redId && !m.blueId)}
                 onClick={() => action.run(() => tms.swapCorners(tid, m.id), `${m.matchNumber}: corners swapped`).then(load)}><SwapHoriz fontSize="small" /></IconButton>
@@ -216,8 +217,8 @@ export default function MatchesTab({ tournament, version, action }) {
             setScheduleError(null)
             try {
               // Through the match API, which gives the bout its slot and refuses to
-              // book anyone into two bouts at once.
-              await matchStore.update(s.categoryId, s.id, { mat: s.mat, scheduledAt: s.scheduledAt ? new Date(s.scheduledAt).toISOString() : null, refereeId: s.refereeId || null, judgeIds: s.judgeIds || [] })
+              // book anyone into two bouts at once. The time field is the local clock.
+              await matchStore.update(s.categoryId, s.id, { mat: s.mat, scheduledAt: localInputToIso(s.scheduledAt), refereeId: s.refereeId || null, judgeIds: s.judgeIds || [] })
               setSchedule(null)
               action.notify({ severity: 'success', text: 'Match scheduled' })
               load()

@@ -10,6 +10,15 @@ import { useExportAudit } from './exportAudit'
 
 const text = (v) => (v == null ? '' : String(v)).toLowerCase()
 
+/**
+ * Whether a row holds the search text: in a column's value, or in its field
+ * as stored, so "M-001" finds the bout whose column sorts by the number 1.
+ */
+export const rowMatches = (columns, r, q) => columns.some((c) => {
+  const raw = r[c.key]
+  return text(c.value ? c.value(r) : raw).includes(q) || (!!c.value && raw != null && typeof raw !== 'object' && text(raw).includes(q))
+})
+
 /** What a column puts in an export: its own export value, its sort value, or the raw field. */
 const exportCell = (c, r) => {
   const v = c.exportValue ? c.exportValue(r) : c.value ? c.value(r) : r[c.key]
@@ -74,7 +83,7 @@ export default function DataTable({
   const filtered = useMemo(() => {
     if (server) return rows
     const q = query.trim().toLowerCase()
-    let out = q ? rows.filter((r) => columns.some((c) => text(c.value ? c.value(r) : r[c.key]).includes(q))) : rows
+    let out = q ? rows.filter((r) => rowMatches(columns, r, q)) : rows
     for (const f of filters) if (picked[f.key]) out = out.filter((r) => filterValue(f, r) === picked[f.key])
     if (sort.key) {
       const col = columns.find((c) => c.key === sort.key)
