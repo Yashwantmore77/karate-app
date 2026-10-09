@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Stack, Paper, Typography, Button, Alert, Grid, Box, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  MenuItem, List, ListItem, ListItemText, IconButton, Tooltip, Chip,
+  MenuItem, List, ListItem, ListItemText, IconButton, Chip,
 } from '@mui/material'
 import { SwapHoriz, Shuffle, Lock, Print } from '@mui/icons-material'
 import { settingsOf } from '@kumite/shared/tms.js'
@@ -54,7 +54,7 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
     setDrawDialog(null)
     const out = await action.run(() => tms.generatePools(tid, { divisionKey: divisionKey || null, method, poolSize: Number(poolSize) || null, confirm: !!impact?.regenerates }),
       (r) => `${r.pools.length} pools drawn`)
-    if (out) setOutcome({ excluded: out.excluded || [], singles: out.singles || [] })
+    if (out) setOutcome({ excluded: out.excluded || [], singles: out.singles || [], uncategorized: out.uncategorized || [] })
     await reload()
     load()
   }
@@ -102,9 +102,10 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
         {!locked && <Alert severity="info" sx={{ mb: 2 }}>Lock entries on the Dashboard before drawing pools (section 21).</Alert>}
         {drawLocked && <Alert severity="success" sx={{ mb: 2 }} icon={<Lock />}>The draw is locked. Unlock it on the Dashboard (with a reason) to change pools.</Alert>}
         {settings.requireWeighInForDraw && <Alert severity="info" sx={{ mb: 2 }}>Only kumite players with a verified weigh-in enter the draw (Settings → Entries and weigh-in).</Alert>}
-        {outcome && (outcome.excluded.length > 0 || outcome.singles.length > 0) && (
+        {outcome && (outcome.excluded.length > 0 || outcome.singles.length > 0 || outcome.uncategorized.length > 0) && (
           <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setOutcome(null)}>
             {outcome.excluded.length > 0 && <Box>Left out (no verified weigh-in): {outcome.excluded.map((x) => `${x.name} (${x.division})`).join(', ')}</Box>}
+            {outcome.uncategorized.length > 0 && <Box>Left out (no category): {outcome.uncategorized.map((x) => `${x.name} (${x.event === 'kata' ? 'Kata' : 'Kumite'})`).join(', ')}</Box>}
             {outcome.singles.length > 0 && <Box>Only one player, so no pool: {outcome.singles.map((x) => x.label).join(', ')}. Decide each on the Results tab.</Box>}
           </Alert>
         )}
@@ -152,7 +153,7 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
                   <List dense>
                     {pool.playerIds.map((id) => (
                       <ListItem key={id} disableGutters secondaryAction={!drawLocked && (
-                        <Tooltip title="Move to another pool"><IconButton edge="end" size="small" onClick={() => setMoving({ playerId: id, fromPoolId: pool.id, divisionKey: d.key, toPoolId: '' })}><SwapHoriz fontSize="small" /></IconButton></Tooltip>
+                        <IconButton aria-label="Move to another pool" edge="end" size="small" onClick={() => setMoving({ playerId: id, fromPoolId: pool.id, divisionKey: d.key, toPoolId: '' })}><SwapHoriz fontSize="small" /></IconButton>
                       )}>
                         <ListItemText primary={nameOf(id)} secondary={teamOf(id)} />
                       </ListItem>

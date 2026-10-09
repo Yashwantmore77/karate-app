@@ -42,12 +42,12 @@ export default function AdminDashboard({ profile }) {
   const manage = (t, tab) => navigate(`/admin/tournament/${t.id}/manage${tab ? `?tab=${tab}` : ''}`)
 
   const actions = [
-    { label: 'New tournament', icon: <Add />, to: '/admin?create=1', primary: true },
-    { label: 'Accounts', icon: <People />, to: '/admin/accounts' },
-    ...(profile?.role === 'super_admin' ? [{ label: 'Organisations', icon: <Business />, to: '/admin/organizations' }] : []),
-    { label: 'Live board', icon: <LiveTv />, to: '/live' },
-    { label: 'Public site', icon: <Public />, to: '/tournaments' },
-    { label: 'Sign-ins', icon: <Login />, to: '/admin/sign-ins' },
+    { label: 'New tournament', icon: <Add />, to: '/admin?create=1', primary: true, tip: 'Creates a new tournament; fill in the rest on its Settings tab.' },
+    { label: 'Accounts', icon: <People />, to: '/admin/accounts', tip: 'Staff accounts: referees, judges, officers and organisers.' },
+    ...(profile?.role === 'super_admin' ? [{ label: 'Organisations', icon: <Business />, to: '/admin/organizations', tip: 'Associations that run their own tournaments and staff.' }] : []),
+    { label: 'Live board', icon: <LiveTv />, to: '/live', tip: 'Every mat: the bout on it and what comes next.' },
+    { label: 'Public site', icon: <Public />, to: '/tournaments', tip: 'The public website: draws, live bouts and results.' },
+    { label: 'Sign-ins', icon: <Login />, to: '/admin/sign-ins', tip: 'Who signed in, when and from where.' },
   ]
 
   return (
@@ -56,7 +56,7 @@ export default function AdminDashboard({ profile }) {
 
       <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: 'wrap', gap: 1 }}>
         {actions.map((a) => (
-          <Button key={a.label} variant={a.primary ? 'contained' : 'outlined'} startIcon={a.icon} onClick={() => navigate(a.to)} sx={{ ml: '0 !important' }}>{a.label}</Button>
+          <Button key={a.label} data-tip={a.tip} variant={a.primary ? 'contained' : 'outlined'} startIcon={a.icon} onClick={() => navigate(a.to)} sx={{ ml: '0 !important' }}>{a.label}</Button>
         ))}
       </Stack>
 
@@ -96,8 +96,8 @@ export default function AdminDashboard({ profile }) {
                   </TableCell>
                   <TableCell><StatusBadge status={status(t)} /></TableCell>
                   <TableCell align="right">{d?.players ?? '—'}</TableCell>
-                  <TableCell align="right">{d?.pendingVerification ? <Button size="small" color="warning" onClick={() => manage(t, 'registrations')}>{d.pendingVerification}</Button> : 0}</TableCell>
-                  <TableCell align="right">{d?.pendingWeighIn ? <Button size="small" onClick={() => manage(t, 'weighin')}>{d.pendingWeighIn}</Button> : 0}</TableCell>
+                  <TableCell align="right">{d?.pendingVerification ? <Button size="small" color="warning" data-tip="Registrations waiting for approval: opens Registrations" onClick={() => manage(t, 'registrations')}>{d.pendingVerification}</Button> : 0}</TableCell>
+                  <TableCell align="right">{d?.pendingWeighIn ? <Button size="small" data-tip="Kumite players without a passed weigh-in: opens Weigh-in" onClick={() => manage(t, 'weighin')}>{d.pendingWeighIn}</Button> : 0}</TableCell>
                   <TableCell align="right">{d ? `${d.completedMatches}/${d.matches}` : '—'}</TableCell>
                   <TableCell align="right">{d?.liveMatches || 0}</TableCell>
                   <TableCell align="right">{d ? d.gold + d.silver + d.bronze : '—'}</TableCell>

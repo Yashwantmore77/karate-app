@@ -26,6 +26,7 @@ import { ConnectionProvider } from './state/ConnectionContext'
 import AppStage from './components/AppStage'
 import AppNav from './components/AppNav'
 import { GlobalProgress, PageLoader } from './components/Loader'
+import ActionTips from './components/help/ActionTips'
 import { AO_LIGHT, AKA_LIGHT, CYAN, INK, GLASS, TEXT } from './theme/tokens'
 
 const theme = createTheme({
@@ -190,6 +191,8 @@ function AppShell() {
               navigation instead of each page drawing its own. */}
           <AppNav user={user} profile={profile} />
           <GlobalProgress />
+          {/* What every button does, on hover: one place for all of them. */}
+          <ActionTips />
           <Routes>
             <Route path="/login" element={<Login />} />
 

@@ -32,23 +32,23 @@ import WorkflowGuide from '../../components/help/WorkflowGuide'
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
 // only when the signed-in role holds its permission (section 3).
 export const TABS = [
-  { key: 'overview', label: 'Dashboard', perm: P.REGISTRATION_VIEW, Component: OverviewTab },
-  { key: 'setup', label: 'Settings', perm: P.TOURNAMENT_MANAGE, Component: SetupTab },
-  { key: 'categories', label: 'Categories', perm: P.CATEGORY_CONFIGURE, Component: CategoriesTab },
-  { key: 'registrations', label: 'Registrations', perm: P.REGISTRATION_VIEW, Component: RegistrationsTab },
-  { key: 'weighin', label: 'Weigh-in', perm: P.WEIGHIN_RECORD, Component: WeighInTab, event: 'kumite' },
-  { key: 'draw', label: 'Draw / Pools', perm: P.POOL_MANAGE, Component: DrawTab },
-  { key: 'matches', label: 'Matches', perm: P.MATCH_GENERATE, Component: MatchesTab },
+  { key: 'overview', label: 'Dashboard', perm: P.REGISTRATION_VIEW, Component: OverviewTab, tip: 'The tournament\'s status and locks, numbers at a glance, and moving it to the next stage.' },
+  { key: 'setup', label: 'Settings', perm: P.TOURNAMENT_MANAGE, Component: SetupTab, tip: 'Details, dates, competition rules, the registration form and the coach link.' },
+  { key: 'categories', label: 'Categories', perm: P.CATEGORY_CONFIGURE, Component: CategoriesTab, tip: 'Age groups and, for Kumite, the weight classes inside them.' },
+  { key: 'registrations', label: 'Registrations', perm: P.REGISTRATION_VIEW, Component: RegistrationsTab, tip: 'Teams and players: check, approve, and fix categories.' },
+  { key: 'weighin', label: 'Weigh-in', perm: P.WEIGHIN_RECORD, Component: WeighInTab, event: 'kumite', tip: 'Record each kumite player\'s weight on the day.' },
+  { key: 'draw', label: 'Draw / Pools', perm: P.POOL_MANAGE, Component: DrawTab, tip: 'Put players in categories, draw the pools, lock the draw and create the bouts.' },
+  { key: 'matches', label: 'Matches', perm: P.MATCH_GENERATE, Component: MatchesTab, tip: 'Every bout: time, mat, officials, status and result.' },
   // The draw sheet on screen: arrange the first round, drag winners forward.
-  { key: 'bracket', label: 'Bracket', perm: [P.POOL_MANAGE, P.RESULT_MANAGE], Component: BracketTab },
-  { key: 'kata', label: 'Kata panel', perm: P.MATCH_GENERATE, Component: KataTab, event: 'kata' },
-  { key: 'call', label: 'Call matches', perm: P.MATCH_CALL, Component: CallTab },
+  { key: 'bracket', label: 'Bracket', perm: [P.POOL_MANAGE, P.RESULT_MANAGE], Component: BracketTab, tip: 'The knockout draw sheet on screen: arrange the first round, drag winners forward, print it.' },
+  { key: 'kata', label: 'Kata panel', perm: P.MATCH_GENERATE, Component: KataTab, event: 'kata', tip: 'Kata judged by a panel: open rounds, seat the judges, collect the scores.' },
+  { key: 'call', label: 'Call matches', perm: P.MATCH_CALL, Component: CallTab, tip: 'For the announcer: call the next bout to each mat and mark who reported.' },
   // Passes and QR check-in: the door (registration, weigh-in) and the mat.
-  { key: 'checkin', label: 'Check-in & passes', perm: [P.ATTENDANCE_MARK, P.WEIGHIN_RECORD, P.CERTIFICATE_GENERATE], Component: CheckinTab },
-  { key: 'results', label: 'Results', perm: P.RESULT_MANAGE, Component: ResultsTab },
-  { key: 'certificates', label: 'Certificates', perm: P.CERTIFICATE_GENERATE, Component: CertificatesTab },
-  { key: 'reports', label: 'Reports', perm: P.REPORT_EXPORT, Component: ReportsTab },
-  { key: 'audit', label: 'Audit log', perm: P.AUDIT_VIEW, Component: AuditTab },
+  { key: 'checkin', label: 'Check-in & passes', perm: [P.ATTENDANCE_MARK, P.WEIGHIN_RECORD, P.CERTIFICATE_GENERATE], Component: CheckinTab, tip: 'Accreditation passes with QR codes, and checking people in by scanning them.' },
+  { key: 'results', label: 'Results', perm: P.RESULT_MANAGE, Component: ResultsTab, tip: 'Standings and medals for each category: verify, publish and lock them.' },
+  { key: 'certificates', label: 'Certificates', perm: P.CERTIFICATE_GENERATE, Component: CertificatesTab, tip: 'Medal, participation and special-award certificates, to print or download.' },
+  { key: 'reports', label: 'Reports', perm: P.REPORT_EXPORT, Component: ReportsTab, tip: 'Lists and reports to download or print (entries, results, medals, clubs).' },
+  { key: 'audit', label: 'Audit log', perm: P.AUDIT_VIEW, Component: AuditTab, tip: 'Every change made in this tournament: who, when, what and why.' },
 ]
 
 /** The events a tournament holds (the same rule the server applies to entries). */
@@ -110,7 +110,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
           </Stack>
         </Toolbar>
         <Tabs value={current?.key || false} onChange={(_e, key) => setParams({ tab: key })} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ px: 1 }}>
-          {tabs.map((t) => <Tab key={t.key} value={t.key} label={t.label} />)}
+          {tabs.map((t) => <Tab key={t.key} value={t.key} label={t.label} data-tip={t.tip} />)}
         </Tabs>
       </PageBar>
       <Container maxWidth="xl" sx={{ py: 3 }}>

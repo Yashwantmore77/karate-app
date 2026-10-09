@@ -29,6 +29,11 @@ export const tableRows = (columns, rows) => {
  * The one table every list in the PRD screens uses: search, sort, paging,
  * an empty state, and horizontal scroll instead of a squashed phone layout.
  */
+// A row's actions stay in view when a wide table scrolls sideways: the
+// "actions" column is pinned to the right edge, over what scrolls beneath it.
+const PINNED = { position: 'sticky', right: 0, zIndex: 1, bgcolor: 'rgb(21,25,30)', boxShadow: '-10px 0 10px -10px rgba(0,0,0,0.8)' }
+const stickyOf = (c) => (c.key === 'actions' ? PINNED : undefined)
+
 export default function DataTable({
   columns, rows, rowKey = (r) => r.id, searchable = true, searchPlaceholder = 'Search', empty = 'Nothing here yet.',
   pageSize = 25, dense = true, toolbar = null, onRowClick = null,
@@ -146,7 +151,7 @@ export default function DataTable({
           <TableHead>
             <TableRow>
               {columns.map((c) => (
-                <TableCell key={c.key} align={c.align} sx={{ whiteSpace: 'nowrap', ...(c.width ? { width: c.width } : {}) }}>
+                <TableCell key={c.key} align={c.align} sx={{ whiteSpace: 'nowrap', ...(c.width ? { width: c.width } : {}), ...stickyOf(c) }}>
                   {c.sortable === false ? c.label : (
                     <TableSortLabel active={sort.key === c.key} direction={sort.key === c.key ? sort.dir : 'asc'}
                       onClick={() => {
@@ -165,7 +170,7 @@ export default function DataTable({
             {shown.map((r) => (
               <TableRow key={rowKey(r)} hover onClick={onRowClick ? () => onRowClick(r) : undefined} sx={onRowClick ? { cursor: 'pointer' } : undefined}>
                 {columns.map((c) => (
-                  <TableCell key={c.key} align={c.align}>{c.render ? c.render(r) : (r[c.key] ?? '—')}</TableCell>
+                  <TableCell key={c.key} align={c.align} sx={stickyOf(c)}>{c.render ? c.render(r) : (r[c.key] ?? '—')}</TableCell>
                 ))}
               </TableRow>
             ))}

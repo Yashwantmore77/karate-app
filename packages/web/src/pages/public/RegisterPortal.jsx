@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
 import {
   Container, Paper, Typography, TextField, Button, Stack, Alert, Grid, Box, Dialog, DialogTitle, DialogContent,
-  DialogActions, IconButton, Tooltip, ToggleButtonGroup, ToggleButton, List, ListItem, ListItemText,
-  FormControlLabel, Checkbox,
+  DialogActions, IconButton, ToggleButtonGroup, ToggleButton, List, ListItem, ListItemText, FormControlLabel, Checkbox,
 } from '@mui/material'
 import { Add, Edit, Delete } from '@mui/icons-material'
 import { tms, describeError } from '../../data/tms'
@@ -246,8 +245,8 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
             { key: 'weighIn', label: 'Weigh-in', value: (p) => p.weighIn?.status, render: (p) => (p.weighIn ? <StatusBadge status={p.weighIn.status} /> : 'n/a') },
             { key: 'actions', label: '', sortable: false, render: (p) => canWrite && (
               <Stack direction="row">
-                <Tooltip title="Edit"><IconButton size="small" onClick={() => { setErrors([]); setEdit({ ...p }) }}><Edit fontSize="small" /></IconButton></Tooltip>
-                <Tooltip title="Remove"><IconButton size="small" onClick={() => setRemoving(p)}><Delete fontSize="small" /></IconButton></Tooltip>
+                <IconButton aria-label="Edit" size="small" onClick={() => { setErrors([]); setEdit({ ...p }) }}><Edit fontSize="small" /></IconButton>
+                <IconButton aria-label="Remove" size="small" onClick={() => setRemoving(p)}><Delete fontSize="small" /></IconButton>
               </Stack>
             ) },
           ]} />

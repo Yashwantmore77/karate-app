@@ -422,7 +422,7 @@ export function tmsRoutes(tms, stores) {
       confirm: { type: 'boolean' },
     })
     const pools = await tms.generatePools(withMeta(req), tid(req), body)
-    res.status(201).json({ pools: [...pools], excluded: pools.excluded || [], singles: pools.singles || [] })
+    res.status(201).json({ pools: [...pools], excluded: pools.excluded || [], singles: pools.singles || [], uncategorized: pools.uncategorized || [] })
   })
   // PRD v1 §28: what a redraw would throw away, before it happens.
   router.get('/:tid/draw/impact', requirePermission(P.POOL_MANAGE), async (req, res) => {

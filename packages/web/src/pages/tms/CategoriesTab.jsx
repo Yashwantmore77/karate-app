@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Paper, Typography, Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid,
-  Switch, FormControlLabel, IconButton, Alert, Box,
+  Switch, FormControlLabel, IconButton, Alert, AlertTitle, Box,
 } from '@mui/material'
 import { Add, Edit, Delete, Tune, PlaylistAdd } from '@mui/icons-material'
 import { settingsOf, tournamentEvents, POOL_SYSTEMS, KATA_METHODS } from '@kumite/shared/tms.js'
 import { POOL_MODES } from '@kumite/shared/pools.js'
+import { weightCoverage } from '@kumite/shared/categories.js'
 import { KATA_METHOD_LABEL } from '@kumite/shared/kata.js'
 import { tms, describeError } from '../../data/tms'
 import { CATEGORY_PRESETS, weightClasses } from '@kumite/shared/presets.js'
@@ -58,7 +59,7 @@ export default function CategoriesTab({ tournament, version, action }) {
     if (ok) { setRules(null); load() }
   }
   const rulesButton = (kind, row) => (
-    <IconButton size="small" aria-label="Category rules" title="Category rules (pool size, duration, rounds)" onClick={() => setRules({ kind, row, settings: { ...(row.settings || {}) } })}><Tune fontSize="small" /></IconButton>
+    <IconButton size="small" aria-label="Category rules" onClick={() => setRules({ kind, row, settings: { ...(row.settings || {}) } })}><Tune fontSize="small" /></IconButton>
   )
 
   const { loading, refreshing, wrap } = useLoading()
@@ -107,6 +108,14 @@ export default function CategoriesTab({ tournament, version, action }) {
   }
 
   const groupName = (id) => groups.find((g) => g.id === id)?.name || '—'
+  // Weights an age group's classes leave without a class: gaps, and no open class at the top.
+  const uncovered = useMemo(() => (!hasKumite ? [] : groups.filter((g) => g.active !== false).map((g) => {
+    const cover = weightCoverage(weights.filter((w) => w.ageGroupId === g.id))
+    if (!cover) return { name: g.name, notes: [] } // no classes: this group may be for kata only
+    const notes = cover.gaps.map((gap) => (gap.from === 0 ? `nothing up to ${gap.to} kg` : `nothing between ${gap.from} and ${gap.to} kg`))
+    if (cover.top != null) notes.push(`nothing above ${cover.top} kg (add an open class such as +${cover.top} KG)`)
+    return { name: g.name, notes }
+  }).filter((c) => c.notes.length)), [groups, weights, hasKumite])
   const r = editing?.row || {}
   const set = (patch) => setEditing({ ...editing, row: { ...r, ...patch } })
 
@@ -147,6 +156,13 @@ export default function CategoriesTab({ tournament, version, action }) {
       {hasKumite && (
       <Box>
         <HelpTitle id="categories.weight" variant="h3" gutterBottom>Weight categories (Kumite)</HelpTitle>
+        {uncovered.length > 0 && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <AlertTitle>Some kumite weights have no class</AlertTitle>
+            {uncovered.map((c) => <Typography key={c.name} variant="body2"><b>{c.name}</b>: {c.notes.join('; ')}</Typography>)}
+            <Typography variant="body2" sx={{ mt: 1 }}>A player at one of those weights gets no category, and the draw leaves them out. "-40 KG" means up to 40 kg; "+40 KG" means above 40 kg.</Typography>
+          </Alert>
+        )}
         <DataTable
           rows={weights}
           loading={loading} refreshing={refreshing}

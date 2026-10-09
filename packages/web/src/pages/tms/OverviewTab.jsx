@@ -10,6 +10,7 @@ import { LockIcon } from './TournamentManager'
 import { PageLoader } from '../../components/Loader'
 import InfoTip, { HelpTitle } from '../../components/help/InfoTip'
 import { paymentsEnabled } from '@kumite/shared/features.js'
+import { explainAction } from '../../help/actions'
 
 const ORDER = Object.values(TOURNAMENT_STATUS)
 
@@ -71,7 +72,8 @@ export default function OverviewTab({ tournament, reload, version, action, role 
         {manage && (
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
             {tournamentLifecycle.next(status).map((to) => (
-              <Button key={to} size="large" variant={ORDER.indexOf(to) > ORDER.indexOf(status) ? 'contained' : 'outlined'} onClick={() => move(to)}>
+              <Button key={to} size="large" variant={ORDER.indexOf(to) > ORDER.indexOf(status) ? 'contained' : 'outlined'} onClick={() => move(to)}
+                data-tip={explainAction(`${ORDER.indexOf(to) > ORDER.indexOf(status) ? '→' : '←'} ${humanize(to)}`)?.tip}>
                 {ORDER.indexOf(to) > ORDER.indexOf(status) ? '→ ' : '← '}{humanize(to)}
               </Button>
             ))}

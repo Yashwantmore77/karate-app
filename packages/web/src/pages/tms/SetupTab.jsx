@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Paper, Typography, Grid, TextField, MenuItem, Button, Stack, Switch, FormControlLabel, IconButton, Table, TableHead,
-  TableRow, TableCell, TableBody, TableContainer, Checkbox, Alert, InputAdornment, Tooltip, Box, Autocomplete,
+  TableRow, TableCell, TableBody, TableContainer, Checkbox, Alert, InputAdornment, Box, Autocomplete,
 } from '@mui/material'
 import { ArrowUpward, ArrowDownward, Delete, Add, ContentCopy, Tune } from '@mui/icons-material'
 import { formFields, FIELD_TYPES } from '@kumite/shared/registration.js'
@@ -318,7 +318,7 @@ export default function SetupTab({ tournament, reload, action }) {
             <TextField fullWidth label="Link for coaches" value={linkUrl} slotProps={{
               input: {
                 readOnly: true,
-                endAdornment: <InputAdornment position="end"><Tooltip title="Copy"><IconButton aria-label="Copy link" onClick={() => navigator.clipboard?.writeText(linkUrl)}><ContentCopy /></IconButton></Tooltip></InputAdornment>,
+                endAdornment: <InputAdornment position="end"><IconButton aria-label="Copy link" onClick={() => navigator.clipboard?.writeText(linkUrl)}><ContentCopy /></IconButton></InputAdornment>,
               },
             }} />
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -379,9 +379,7 @@ export default function SetupTab({ tournament, reload, action }) {
                     </TextField>
                   </TableCell>
                   <TableCell>
-                    <Tooltip title="Properties: help, default, validation, show when…">
-                      <IconButton size="small" aria-label={`Properties of ${f.label}`} onClick={() => setEditing(i)}><Tune fontSize="small" /></IconButton>
-                    </Tooltip>
+                    <IconButton size="small" aria-label={`Properties of ${f.label}`} onClick={() => setEditing(i)}><Tune fontSize="small" /></IconButton>
                     {!f.system && <IconButton size="small" aria-label="Remove field" onClick={() => setFields((fs) => fs.filter((_, j) => j !== i))}><Delete fontSize="small" /></IconButton>}
                   </TableCell>
                 </TableRow>

@@ -279,6 +279,7 @@ export default function KumiteConsole({
             disabled={disabled}
             onClick={() => send('SCORE', { side, type: p.key })}
             aria-label={p.label}
+            data-tip={`Gives ${side === 'ao' ? 'Ao' : 'Aka'} a ${p.label}: ${points[p.key]} point${points[p.key] === 1 ? '' : 's'} in this tournament.`}
             sx={{ bgcolor: control, color: WKF.ink, fontWeight: 700, '&:hover': { bgcolor: control, filter: 'brightness(0.92)' } }}
           >
             {/* PRD point 16: the value this tournament gives the score. */}
@@ -411,10 +412,10 @@ export default function KumiteConsole({
               </Typography>
 
               <Stack direction="row" spacing={1} sx={{ mb: 1, justifyContent: 'center' }}>
-                <IconButton disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: 5_000 })}>
+                <IconButton aria-label="Add 5 seconds" disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: 5_000 })}>
                   <KeyboardArrowUp />
                 </IconButton>
-                <IconButton disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: -5_000 })}>
+                <IconButton aria-label="Take off 5 seconds" disabled={disabled || clockRunning} onClick={() => send('CLOCK_ADJUST', { deltaMs: -5_000 })}>
                   <KeyboardArrowDown />
                 </IconButton>
                 <Button
@@ -559,16 +560,17 @@ export default function KumiteConsole({
           </Typography>
           <Stack spacing={2}>
             {[
-              { cmd: 'KIKEN', label: 'Kiken (withdrawal)' },
-              { cmd: 'SHIKKAKU', label: 'Shikkaku (disqualification)' },
-              { cmd: 'HANTEI', label: 'Hantei (decision \u2014 names the winner)' },
-            ].map(({ cmd, label }) => (
+              { cmd: 'KIKEN', label: 'Kiken (withdrawal)', tip: (s, o) => `${s} withdraws: ${o} wins the bout.` },
+              { cmd: 'SHIKKAKU', label: 'Shikkaku (disqualification)', tip: (s, o) => `${s} is disqualified: ${o} wins the bout.` },
+              { cmd: 'HANTEI', label: 'Hantei (decision \u2014 names the winner)', tip: (s) => `The judges' decision goes to ${s}: ${s} wins the bout.` },
+            ].map(({ cmd, label, tip }) => (
               <Box key={cmd}>
                 <Typography variant="caption" sx={{ fontWeight: 700 }}>{label}</Typography>
                 <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
                   <Button
                     fullWidth variant="contained"
                     onClick={() => declare(cmd, 'ao')}
+                    data-tip={tip('Ao', 'Aka')}
                     sx={{ bgcolor: WKF.ao, color: WKF.onPanel, '&:hover': { bgcolor: WKF.ao, filter: 'brightness(1.15)' } }}
                   >
                     Ao
@@ -576,6 +578,7 @@ export default function KumiteConsole({
                   <Button
                     fullWidth variant="contained"
                     onClick={() => declare(cmd, 'aka')}
+                    data-tip={tip('Aka', 'Ao')}
                     sx={{ bgcolor: WKF.aka, color: WKF.onPanel, '&:hover': { bgcolor: WKF.aka, filter: 'brightness(1.15)' } }}
                   >
                     Aka

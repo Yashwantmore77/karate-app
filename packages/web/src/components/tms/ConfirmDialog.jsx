@@ -26,6 +26,8 @@ export default function ConfirmDialog({
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" color={danger ? 'error' : 'primary'} disabled={blocked}
+          data-tip={`Goes ahead with what this box describes${requireReason ? '; your reason is kept in the audit log' : ''}. Cancel closes it without changing anything.`}
+          data-tip-needs={requireReason ? `Type the ${reasonLabel.toLowerCase()} first.` : undefined}
           onClick={() => onConfirm(reason.trim() || null)}>
           {confirmLabel}
         </Button>

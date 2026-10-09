@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid, IconButton, Tooltip,
-  Typography, Box, ToggleButtonGroup, ToggleButton, Alert, Switch, FormControlLabel, Chip,
+  Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid, IconButton, Typography, Box,
+  ToggleButtonGroup, ToggleButton, Alert, Switch, FormControlLabel, Chip,
 } from '@mui/material'
 import { Add, Edit, Delete, Check, Close, Undo, Payments, Category, DirectionsWalk } from '@mui/icons-material'
 import { formFields } from '@kumite/shared/registration.js'
 import { REGISTRATION_STATUS } from '@kumite/shared/lifecycle.js'
-import { PAYMENT_STATUS, teamProblems } from '@kumite/shared/tms.js'
+import { PAYMENT_STATUS, teamProblems, missingCategories, registrationPath } from '@kumite/shared/tms.js'
+import UncategorizedAlert from '../../components/tms/UncategorizedAlert'
 import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
@@ -30,7 +31,7 @@ const blank = (fields) => ({ events: [], gender: '', ...Object.fromEntries(field
 const clean = (obj) => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== '' && v !== undefined))
 
 /** Sections 13, 15-18 and 40-41: teams, players, verification, payment, search and filters. */
-export default function RegistrationsTab({ tournament, version, action, role }) {
+export default function RegistrationsTab({ tournament, version, action, role, goTab }) {
   const tid = tournament.id
   const fields = useMemo(() => formFields(tournament), [tournament])
   const [view, setView] = useState('players')
@@ -56,22 +57,25 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
   const [dupeRows, setDupeRows] = useState([])
   const manage = can(role, P.REGISTRATION_MANAGE)
   const locked = !!tournament.entriesLocked
+  // Choosing a category by hand: before the lock, or after it with the override privilege.
+  const mayPlace = can(role, P.PLAYER_EDIT) && (!locked || can(role, P.CATEGORY_OVERRIDE)) && !tournament.drawLocked
+  // Every player (not just this page) taking part with no category: the draw would leave them out.
+  const [unplaced, setUnplaced] = useState([])
 
   const { loading, refreshing, wrap } = useLoading()
-  const load = () => wrap(Promise.all([
+  // Every player, for the district/state choices and the no-category warning.
+  const loadAll = () => tms.players.list(tid).then((all) => {
+    const distinct = (key) => [...new Set(all.map((p) => p[key]).filter(Boolean))].sort()
+    setPlaces({ district: distinct('district'), state: distinct('state') })
+    setUnplaced(all.flatMap((p) => missingCategories(p, tournament).map((m) => ({ ...m, playerId: p.id, name: p.name, player: p }))))
+  }).catch(() => {})
+  const load = () => { loadAll(); return wrap(Promise.all([
     tms.teams.list(tid), tms.players.page(tid, clean({ ...filter, q: pageQuery.q }), pageQuery), tms.ageGroups.list(tid), tms.weightCategories.list(tid),
     tms.teamMembers.list(tid).catch(() => []),
-  ]).then(([t, p, g, w, m]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w); setMembers(m) }))
+  ]).then(([t, p, g, w, m]) => { setTeams(t); setPaged(p); setGroups(g); setWeights(w); setMembers(m) })) }
   useEffect(() => { load() }, [tid, version, JSON.stringify(filter), JSON.stringify(pageQuery)])
   // A filter change starts again from the first page.
   useEffect(() => { setPageQuery((q) => ({ ...q, page: 0 })) }, [JSON.stringify(filter)])
-  // District and state choices come from the players registered so far.
-  useEffect(() => {
-    tms.players.list(tid).then((all) => {
-      const distinct = (key) => [...new Set(all.map((p) => p[key]).filter(Boolean))].sort()
-      setPlaces({ district: distinct('district'), state: distinct('state') })
-    }).catch(() => {})
-  }, [tid, version])
   // PRD v1 §21: players registered although they looked like someone already entered.
   useEffect(() => {
     if (view !== 'duplicates') return
@@ -89,12 +93,21 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
     return `${event === 'kata' ? 'Kata' : 'Kumite'}: ${g ? g.name : '?'}${event === 'kumite' ? ` ${w ? (w.label || w.name) : '?'}` : ''}${e.override ? ' (override)' : ''}`
   }).join(' · ')
 
+  /** Opens "Change category" on the given event, or on the first entry without a category. */
+  const placeCategory = (p, event = null) => {
+    const ev = event || missingCategories(p, tournament)[0]?.event || p.events?.[0] || 'kumite'
+    setOverride({ player: p, event: ev, ageGroupId: p.entries?.[ev]?.ageGroupId || '', weightCategoryId: p.entries?.[ev]?.weightCategoryId || '' })
+  }
+
   const regAction = (p, act) => {
-    const needsReason = act !== 'approve'
+    // Approving someone already rejected reverses that decision: say why.
+    const reversing = act === 'approve' && p.registrationStatus === 'REJECTED'
+    const needsReason = act !== 'approve' || reversing
     setConfirm({
       title: `${act === 'approve' ? 'Approve' : act === 'reject' ? 'Reject' : 'Request correction for'} ${p.name}?`,
+      message: reversing ? `${p.name} was rejected${p.rejectionReason ? ` (${p.rejectionReason})` : ''}. Approving reverses that; the reason is kept in the audit log.` : undefined,
       requireReason: needsReason,
-      reasonLabel: act === 'reject' ? 'Rejection reason' : 'What needs correcting',
+      reasonLabel: act === 'reject' ? 'Rejection reason' : reversing ? 'Why the rejection is reversed' : 'What needs correcting',
       danger: act === 'reject',
       run: (reason) => action.run(() => tms.registration(tid, p.id, act, reason), `${p.name}: ${act === 'approve' ? 'approved' : act === 'reject' ? 'rejected' : 'returned for correction'}`).then(load),
     })
@@ -178,6 +191,7 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
 
   return (
     <Stack spacing={2}>
+      {!tournament.drawLocked && <UncategorizedAlert rows={unplaced} goTab={goTab} onFix={mayPlace ? (r) => placeCategory(r.player, r.event) : null} />}
       <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
       <ToggleButtonGroup exclusive value={view} onChange={(_e, v) => v && setView(v)} size="small">
         <ToggleButton value="players">Players ({loading ? '…' : paged.total})</ToggleButton>
@@ -245,10 +259,10 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
               render: (p) => <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>{p.of.map((d) => <Chip key={d.id} size="small" label={`${d.name} · ${d.playerNumber} · ${teamName(d.teamId)}`} />)}</Stack> },
             { key: 'registrationStatus', label: 'Status', render: (p) => <StatusBadge status={p.registrationStatus} /> },
             { key: 'actions', label: '', sortable: false, render: (p) => manage && !locked && (
-              <Tooltip title="Delete the duplicate"><IconButton size="small" onClick={() => setConfirm({
+              <IconButton aria-label="Delete the duplicate" size="small" onClick={() => setConfirm({
                 title: `Delete ${p.name} (${p.playerNumber})?`, danger: true, confirmLabel: 'Delete',
                 run: () => action.run(() => tms.players.remove(tid, p.id), 'Duplicate deleted').then(() => setDupeRows((r) => r.filter((x) => x.id !== p.id))),
-              })}><Delete fontSize="small" /></IconButton></Tooltip>
+              })}><Delete fontSize="small" /></IconButton>
             ) },
           ]}
         />
@@ -283,6 +297,10 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
               <Box>
                 <Typography variant="body2">{entryLabel(p) || '—'}</Typography>
                 {p.categoryIssues?.length > 0 && <Typography variant="body2" color="warning.main">{p.categoryIssues[0].message}</Typography>}
+                {/* The fix sits next to the problem, not at the far end of the row. */}
+                {mayPlace && missingCategories(p, tournament).length > 0 && (
+                  <Button size="small" color="warning" variant="outlined" startIcon={<Category fontSize="small" />} sx={{ mt: 0.5 }} onClick={() => placeCategory(p)}>Fix category</Button>
+                )}
               </Box>
             ) },
             { key: 'registrationStatus', label: 'Status', render: (p) => (
@@ -303,36 +321,36 @@ export default function RegistrationsTab({ tournament, version, action, role }) 
             ) }]),
             { key: 'actions', label: '', sortable: false, render: (p) => (
               <Stack direction="row" sx={{ flexWrap: 'nowrap' }}>
-                {manage && ['SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus) && (
-                  <Tooltip title="Approve"><IconButton size="small" color="success" onClick={() => regAction(p, 'approve')}><Check fontSize="small" /></IconButton></Tooltip>
+                {manage && registrationPath(p.registrationStatus, 'approve') && (
+                  <IconButton aria-label="Approve" size="small" color="success" onClick={() => regAction(p, 'approve')}><Check fontSize="small" /></IconButton>
                 )}
-                {manage && !['REJECTED', 'DRAFT', 'COMPLETED', 'DRAW_ASSIGNED'].includes(p.registrationStatus) && (
-                  <Tooltip title="Reject"><IconButton size="small" color="error" onClick={() => regAction(p, 'reject')}><Close fontSize="small" /></IconButton></Tooltip>
+                {manage && registrationPath(p.registrationStatus, 'reject') && (
+                  <IconButton aria-label="Reject" size="small" color="error" onClick={() => regAction(p, 'reject')}><Close fontSize="small" /></IconButton>
                 )}
-                {manage && ['SUBMITTED', 'PENDING_VERIFICATION', 'REJECTED'].includes(p.registrationStatus) && (
-                  <Tooltip title="Request correction"><IconButton size="small" onClick={() => regAction(p, 'request_correction')}><Undo fontSize="small" /></IconButton></Tooltip>
+                {manage && registrationPath(p.registrationStatus, 'request_correction') && (
+                  <IconButton aria-label="Request correction" size="small" onClick={() => regAction(p, 'request_correction')}><Undo fontSize="small" /></IconButton>
                 )}
                 {can(role, P.PLAYER_EDIT) && (
-                  <Tooltip title="Edit"><IconButton size="small" onClick={() => { setPlayerErrors([]); setPlayerEdit({ ...p }) }}><Edit fontSize="small" /></IconButton></Tooltip>
+                  <IconButton aria-label="Edit" size="small" onClick={() => { setPlayerErrors([]); setPlayerEdit({ ...p }) }}><Edit fontSize="small" /></IconButton>
                 )}
-                {can(role, P.PLAYER_EDIT) && !locked && (
-                  <Tooltip title="Change category"><IconButton size="small" onClick={() => setOverride({ player: p, event: p.events?.[0] || 'kumite', ageGroupId: p.entries?.[p.events?.[0]]?.ageGroupId || '', weightCategoryId: p.entries?.[p.events?.[0]]?.weightCategoryId || '' })}><Category fontSize="small" /></IconButton></Tooltip>
+                {mayPlace && (
+                  <IconButton aria-label="Change category" size="small" onClick={() => placeCategory(p)}><Category fontSize="small" /></IconButton>
                 )}
                 {can(role, P.RESULT_MANAGE) && !['WITHDRAWN', 'REJECTED', 'DRAFT'].includes(p.registrationStatus) && (
-                  <Tooltip title="Withdraw (injury, no-show)"><IconButton size="small" onClick={() => setConfirm({
+                  <IconButton aria-label="Withdraw (injury, no-show)" size="small" onClick={() => setConfirm({
                     title: `Withdraw ${p.name}?`, danger: true, confirmLabel: 'Withdraw', requireReason: true, reasonLabel: 'Why (e.g. injured after the first bout)',
                     message: 'Bouts they still have are completed as walkovers for the opponent; finished results stay.',
                     run: (reason) => action.run(() => tms.withdrawPlayer(tid, p.id, reason), `${p.name} withdrawn`).then(load),
-                  })}><DirectionsWalk fontSize="small" /></IconButton></Tooltip>
+                  })}><DirectionsWalk fontSize="small" /></IconButton>
                 )}
                 {manage && paymentsEnabled() && (
-                  <Tooltip title="Payment"><IconButton size="small" onClick={() => setPayment({ player: p, status: p.payment?.status || 'PENDING', amount: p.payment?.amount ?? 0, method: p.payment?.method || '', transactionId: p.payment?.transactionId || '', date: p.payment?.date || '', receipt: p.payment?.receipt || '' })}><Payments fontSize="small" /></IconButton></Tooltip>
+                  <IconButton aria-label="Payment" size="small" onClick={() => setPayment({ player: p, status: p.payment?.status || 'PENDING', amount: p.payment?.amount ?? 0, method: p.payment?.method || '', transactionId: p.payment?.transactionId || '', date: p.payment?.date || '', receipt: p.payment?.receipt || '' })}><Payments fontSize="small" /></IconButton>
                 )}
                 {manage && !locked && (
-                  <Tooltip title="Delete"><IconButton size="small" onClick={() => setConfirm({
+                  <IconButton aria-label="Delete" size="small" onClick={() => setConfirm({
                     title: `Delete ${p.name}?`, danger: true, confirmLabel: 'Delete',
                     run: () => action.run(() => tms.players.remove(tid, p.id), 'Player deleted').then(load),
-                  })}><Delete fontSize="small" /></IconButton></Tooltip>
+                  })}><Delete fontSize="small" /></IconButton>
                 )}
               </Stack>
             ) },

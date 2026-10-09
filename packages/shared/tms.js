@@ -13,7 +13,7 @@
 import { calculateAge } from './age.js'
 import { paymentsEnabled } from './features.js'
 import { CATEGORY_PRESETS, weightClasses } from './presets.js'
-import { categorizePlayer, categoryLabel, EVENTS } from './categories.js'
+import { categorizePlayer, categoryLabel, EVENTS, weightCoverage } from './categories.js'
 import {
   TOURNAMENT_STATUS, REGISTRATION_STATUS, tournamentLifecycle, registrationLifecycle,
   assertTransition, InvalidTransition, isBackward, RESULT_TYPES as LIFECYCLE_RESULT_TYPES, EXCEPTIONAL_RESULTS, matchLifecycle,
@@ -289,6 +289,48 @@ export function tournamentEvents(t) {
   if (t?.type === 'kata') return ['kata']
   if (t?.type === 'kumite') return ['kumite']
   return ['kata', 'kumite']
+}
+
+/**
+ * The statuses a registration action walks through from `from`, or null
+ * when it cannot be done from there. The server and the screens use the
+ * same answer, so a button is only offered when it will work.
+ */
+export function registrationPath(from = R.DRAFT, action) {
+  let path
+  if (action === 'approve') {
+    // A rejection can be reversed (with a reason): back through verification.
+    path = [R.SUBMITTED, R.REJECTED].includes(from) ? [R.PENDING_VERIFICATION, R.APPROVED] : [R.APPROVED]
+  } else if (action === 'reject') {
+    path = from === R.SUBMITTED ? [R.PENDING_VERIFICATION, R.REJECTED] : [R.REJECTED]
+  } else if (action === 'request_correction') {
+    path = from === R.PENDING_VERIFICATION ? [R.REJECTED, R.DRAFT] : [R.DRAFT]
+  } else if (action === 'submit') {
+    path = from === R.DRAFT ? [R.SUBMITTED] : [R.PENDING_VERIFICATION]
+  } else if (Object.values(R).includes(action)) {
+    path = [action]
+  } else {
+    return null
+  }
+  let status = from
+  for (const step of path) {
+    if (!registrationLifecycle.can(status, step)) return null
+    status = step
+  }
+  return path
+}
+
+/**
+ * A player's entries that have no category, with why: the draw leaves these
+ * out. Only for players taking part (approved onwards, not rejected).
+ */
+export function missingCategories(player, tournament = null) {
+  if (!DRAW_ELIGIBLE.has(player?.registrationStatus)) return []
+  const held = tournament ? tournamentEvents(tournament) : ['kata', 'kumite']
+  return (player.events || []).filter((event) => held.includes(event) && !player.entries?.[event]?.divisionKey).map((event) => ({
+    event,
+    message: (player.categoryIssues || []).find((i) => i.event === event)?.message || 'No category yet: run categorisation',
+  }))
 }
 
 /**
@@ -1274,28 +1316,15 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     await writableTournament(tournamentId)
     const before = await inTournament('players', tournamentId, id)
     const from = before.registrationStatus || R.DRAFT
-    let path
-    if (action === 'approve') {
-      path = from === R.SUBMITTED ? [R.PENDING_VERIFICATION, R.APPROVED] : [R.APPROVED]
-    } else if (action === 'reject') {
-      if (!reason) throw invalid('rejection_reason_required')
-      path = from === R.SUBMITTED ? [R.PENDING_VERIFICATION, R.REJECTED] : [R.REJECTED]
-    } else if (action === 'request_correction') {
-      // Back to the coach as a draft, with the reason attached.
-      if (!reason) throw invalid('reason_required')
-      path = from === R.PENDING_VERIFICATION ? [R.REJECTED, R.DRAFT] : [R.DRAFT]
-    } else if (action === 'submit') {
-      path = from === R.DRAFT ? [R.SUBMITTED] : [R.PENDING_VERIFICATION]
-    } else if (Object.values(R).includes(action)) {
-      path = [action]
-    } else {
-      throw invalid('invalid_action')
-    }
-    let status = from
-    for (const step of path) {
-      if (!registrationLifecycle.can(status, step)) throw rule('invalid_transition', { from: status, to: step })
-      status = step
-    }
+    if (!['approve', 'reject', 'request_correction', 'submit', ...Object.values(R)].includes(action)) throw invalid('invalid_action')
+    if (action === 'reject' && !reason) throw invalid('rejection_reason_required')
+    // Back to the coach as a draft, with the reason attached.
+    if (action === 'request_correction' && !reason) throw invalid('reason_required')
+    // Reversing a rejection is recorded with why.
+    if (action === 'approve' && from === R.REJECTED && !reason) throw invalid('reason_required')
+    const path = registrationPath(from, action)
+    if (!path) throw rule('invalid_transition', { from, to: action === 'approve' ? R.APPROVED : action === 'reject' ? R.REJECTED : action === 'request_correction' ? R.DRAFT : action === 'submit' ? R.SUBMITTED : action })
+    const status = path[path.length - 1]
     const patch = { registrationStatus: status, rejectionReason: status === R.REJECTED || action === 'request_correction' ? reason : null }
     const after = await stores.players.update(id, patch)
     await record(actor, { tournamentId, action: A.REGISTRATION_STATUS_CHANGED, entity: 'player', entityId: id, before: { registrationStatus: from }, after: { registrationStatus: status }, reason })
@@ -1356,6 +1385,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // Moving a player is allowed only where the tournament permits it, and
     // never over an admin's explicit override (section 3.4).
     const mayMove = !previous.override && (stillFits || (suggestion.resolved && cfg.settings.weighInAutoMove))
+    // "Passed" means the player fits a weight class. With none covering the
+    // weight (and none they are already in), there is nothing to pass into.
+    if (status === 'PASSED' && !suggestion.weightCategory && !previous.weightCategoryId) {
+      throw rule('no_weight_category', { ageGroup: suggestion.ageGroup?.name || null, weight })
+    }
     let result = status
     let entries = before.entries
     if (!result) {
@@ -1493,7 +1527,12 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       ageGroupId, weightCategoryId: event === EVENTS.KATA ? null : weightCategoryId, override: true, resolved,
       divisionKey: resolved ? divisionKey(event, ageGroupId, weightCategoryId, groupDivision(before, cfg)) : null,
     }
-    const after = await stores.players.update(id, { entries })
+    const patch = { entries }
+    // Every entry placed: the player moves on, as categorisation would move them.
+    if (DRAW_ELIGIBLE.has(before.registrationStatus) && (before.events || []).every((ev) => entries[ev]?.divisionKey)) {
+      patch.registrationStatus = advanceRegistration(before, R.CATEGORY_CONFIRMED)
+    }
+    const after = await stores.players.update(id, patch)
     await record(actor, { tournamentId, action: A.PLAYER_CATEGORY_OVERRIDDEN, entity: 'player', entityId: id, before: { [event]: { ageGroupId: previous.ageGroupId, weightCategoryId: previous.weightCategoryId } }, after: { [event]: { ageGroupId, weightCategoryId } }, reason })
     return after
   }
@@ -1657,13 +1696,25 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         }
       }
     }
-    await record(actor, { tournamentId, action: A.POOLS_GENERATED, entity: 'tournament', entityId: tournamentId, after: { divisions: targets.map((d) => d.key), method: drawMethod, poolSize: size, drawSeed, excludedUnweighed: excluded.length, singleEntries: singles.length }, reason: impact.regenerates ? 'Regenerated after confirmation' : null })
+    // Players with no category are in no division, so nothing above saw them.
+    const uncategorized = only ? [] : await uncategorizedPlayers(tournamentId)
+    await record(actor, { tournamentId, action: A.POOLS_GENERATED, entity: 'tournament', entityId: tournamentId, after: { divisions: targets.map((d) => d.key), method: drawMethod, poolSize: size, drawSeed, excludedUnweighed: excluded.length, singleEntries: singles.length, uncategorized: uncategorized.length }, reason: impact.regenerates ? 'Regenerated after confirmation' : null })
     if ([T.VERIFICATION, T.WEIGH_IN, T.ENTRIES_LOCKED].includes(lifecycleOf(tournament))) {
       await stores.tournaments.update(tournamentId, { lifecycleStatus: T.DRAW_GENERATED })
       await record(actor, { tournamentId, action: A.TOURNAMENT_STATUS_CHANGED, entity: 'tournament', entityId: tournamentId, before: { lifecycleStatus: lifecycleOf(tournament) }, after: { lifecycleStatus: T.DRAW_GENERATED }, reason: 'Pools generated' })
     }
     // The drawn pools, with what stayed out of the draw and why.
-    return Object.assign(created, { excluded, singles })
+    return Object.assign(created, { excluded, singles, uncategorized })
+  }
+
+  /** Players taking part whose entries (some or all) have no category: the draw leaves those out. */
+  async function uncategorizedPlayers(tournamentId) {
+    const tournament = await tournamentOf(tournamentId)
+    const out = []
+    for (const p of await stores.players.list({ tournamentId })) {
+      for (const miss of missingCategories(p, tournament)) out.push({ playerId: p.id, name: p.name, ...miss })
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name))
   }
 
   /** Section 23, manual assignment: always logged, never once the draw is locked. */
@@ -3256,6 +3307,117 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   // --- dashboard and notifications -----------------------------------------
 
+  /**
+   * What needs the organiser's attention now, in plain words, each with the
+   * tab that fixes it: first what would leave players out or stop the next
+   * step, then what is still to do. Shown at the top of every tournament tab,
+   * so whoever is operating sees the actual problem, not only the next step.
+   * Items: { id, level: 'error' | 'warning' | 'info', title, detail, tab, action, items? }
+   */
+  async function attention(tournamentId, known = {}) {
+    const t = known.tournament || await tournamentOf(tournamentId)
+    const status = lifecycleOf(t)
+    if ([T.COMPLETED, T.ARCHIVED].includes(status)) return []
+    const order = Object.values(T)
+    const reached = (s) => order.indexOf(status) >= order.indexOf(s)
+    const s = settingsOf(t)
+    const events = tournamentEvents(t)
+    const players = known.players || await stores.players.list({ tournamentId })
+    const groups = (known.ageGroups || await stores.ageGroups.list({ tournamentId })).filter((g) => g.active !== false)
+    const classes = known.weightCategories || await stores.weightCategories.list({ tournamentId })
+    const pools = known.pools || await stores.pools.list({ tournamentId })
+    const taking = players.filter((p) => DRAW_ELIGIBLE.has(p.registrationStatus))
+    const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+    const out = []
+
+    // Before registration can open.
+    const missingDetails = registrationReadiness(t)
+    if (status === T.DRAFT && missingDetails.length) {
+      out.push({ id: 'details', level: 'error', title: 'Registration cannot open yet: details are missing', detail: `Fill in ${missingDetails.map((m) => m.message || m.field).join(', ')}.`, tab: 'setup', action: 'Fill in the details' })
+    }
+    if (!groups.length) {
+      out.push({ id: 'no_age_groups', level: 'error', title: 'No age groups yet', detail: `Players cannot be placed in any category until age groups${events.includes('kumite') ? ' (and their weight classes, for Kumite)' : ''} are set up.`, tab: 'categories', action: 'Set up categories' })
+    }
+    // Weights an age group leaves without a class: whoever weighs that cannot be placed.
+    if (events.includes('kumite') && !t.drawLocked) {
+      const holes = groups.map((g) => {
+        const cover = weightCoverage(classes.filter((w) => w.ageGroupId === g.id))
+        if (!cover) return null
+        const notes = cover.gaps.map((gap) => (gap.from === 0 ? `nothing up to ${gap.to} kg` : `nothing between ${gap.from} and ${gap.to} kg`))
+        if (cover.top != null) notes.push(`nothing above ${cover.top} kg`)
+        return notes.length ? `${g.name}: ${notes.join('; ')}` : null
+      }).filter(Boolean)
+      if (holes.length) {
+        out.push({ id: 'weight_gaps', level: 'warning', title: 'Some kumite weights have no weight class', detail: 'A player at one of these weights gets no category and is left out of the draw. Add the missing class (for example "+40 KG" for everyone above 40 kg).', items: holes, tab: 'categories', action: 'Fix the weight classes' })
+      }
+    }
+
+    // Registration.
+    if (status === T.REGISTRATION_OPEN) {
+      const link = (await stores.registrationLinks.list({ tournamentId }))[0]
+      if (!link) {
+        out.push({ id: 'no_link', level: 'warning', title: 'Coaches cannot register: there is no registration link', detail: 'Generate the link in Settings and send it to the coaches.', tab: 'setup', action: 'Generate the link' })
+      } else if (link.active === false) {
+        out.push({ id: 'link_off', level: 'warning', title: 'The registration link is switched off', detail: 'Coaches who open it are told registration is closed. Switch it on in Settings.', tab: 'setup', action: 'Open the link settings' })
+      }
+      const win = registrationWindow(t)
+      if (win.reason === 'registration_not_yet_open') {
+        out.push({ id: 'not_yet', level: 'info', title: 'Coaches cannot register yet', detail: `Registration opens on ${t.registrationStart}. Change the date in Settings to open it sooner.`, tab: 'setup', action: 'Check the dates' })
+      } else if (win.reason === 'registration_closed') {
+        out.push({ id: 'date_passed', level: 'info', title: 'The registration closing date has passed', detail: 'Coaches can no longer register. Move the tournament to "Registration closed" on the Dashboard, or change the date in Settings.', tab: 'overview', action: 'Move the tournament on' })
+      }
+    }
+    const waiting = players.filter((p) => [R.SUBMITTED, R.PENDING_VERIFICATION].includes(p.registrationStatus))
+    if (waiting.length && !t.entriesLocked) {
+      out.push({ id: 'approvals', level: 'warning', title: `${plural(waiting.length, 'registration')} waiting for approval`, detail: 'They are not in the draw until approved (or rejected).', items: waiting.map((p) => p.name), tab: 'registrations', action: 'Review registrations' })
+    }
+
+    // Categories: taking part, but in no category.
+    if (!t.drawLocked) {
+      const missing = await uncategorizedPlayers(tournamentId)
+      if (missing.length) {
+        const count = new Set(missing.map((m) => m.playerId)).size
+        out.push({ id: 'uncategorized', level: 'error', title: `${plural(count, 'player')} ${count === 1 ? 'has' : 'have'} no category: the draw would leave them out`, detail: 'Usually a weight class is missing. Add it in Categories, or choose their category with "Fix category" in Registrations.', items: missing.map((m) => `${m.name} (${m.event === 'kata' ? 'Kata' : 'Kumite'}): ${m.message}`), tab: 'registrations', action: 'Fix categories' })
+      }
+    }
+
+    // Weigh-in (Kumite), between the weigh-in stage and the lock.
+    if (events.includes('kumite') && reached(T.WEIGH_IN) && !t.entriesLocked) {
+      const kumite = taking.filter((p) => p.events?.includes('kumite') && !p.weighInException)
+      const notWeighed = kumite.filter((p) => !p.weighIn?.status || p.weighIn.status === 'PENDING')
+      const failed = kumite.filter((p) => ['FAILED', 'RECHECK_REQUIRED'].includes(p.weighIn?.status))
+      if (notWeighed.length && s.requireWeighInForDraw !== false) {
+        out.push({ id: 'not_weighed', level: 'warning', title: `${plural(notWeighed.length, 'kumite player')} not weighed in yet`, detail: 'Without a verified weigh-in they are left out of the kumite draw.', items: notWeighed.map((p) => p.name), tab: 'weighin', action: 'Record weigh-ins' })
+      }
+      if (failed.length) {
+        out.push({ id: 'weigh_in_failed', level: 'warning', title: `${plural(failed.length, 'player')} failed weigh-in or need${failed.length === 1 ? 's' : ''} a recheck`, detail: 'Weigh them again, move them to the class they now fit, or withdraw them. Until then they are left out of the kumite draw.', items: failed.map((p) => `${p.name} (${p.weighIn.actualWeight} kg, ${p.weighIn.status === 'FAILED' ? 'failed' : 'recheck'})`), tab: 'weighin', action: 'Open weigh-in' })
+      }
+    }
+
+    // The draw: some categories drawn and others not; single entries to decide.
+    if (t.entriesLocked) {
+      const all = (known.divisions || await divisions(tournamentId))
+      const drawable = all.filter((d) => !isPanelKata(d, s))
+      if (pools.length && !t.drawLocked) {
+        const undrawn = drawable.filter((d) => d.count >= 2 && !d.pools)
+        if (undrawn.length) out.push({ id: 'undrawn', level: 'warning', title: `${plural(undrawn.length, 'category', 'categories')} not drawn yet`, detail: 'Draw them before locking the draw, or their players have no bouts.', items: undrawn.map((d) => d.label), tab: 'draw', action: 'Draw the pools' })
+      }
+      if (pools.length) {
+        const decided = new Set((await stores.medalOverrides.list({ tournamentId })).map((m) => m.divisionKey))
+        const singles = all.filter((d) => d.singleEntry && !decided.has(d.key))
+        if (singles.length) out.push({ id: 'single_entries', level: 'warning', title: `${plural(singles.length, 'category', 'categories')} with only one player`, detail: 'Decide each one on the Results tab: award the medal, or record "no competition".', items: singles.map((d) => d.label), tab: 'results', action: 'Decide single entries' })
+      }
+      // Kata on the judges' panel, once the kata session is on.
+      if (status === T.LIVE && events.includes('kata') && s.kataMode === 'panel' && runningEvent(t) === 'kata') {
+        const rounds = new Set((known.kataRounds || await stores.kataRounds.list({ tournamentId })).map((r) => r.divisionKey))
+        const idle = all.filter((d) => isPanelKata(d, s) && d.count >= 2 && !rounds.has(d.key))
+        if (idle.length) out.push({ id: 'kata_waiting', level: 'info', title: `${plural(idle.length, 'kata category', 'kata categories')} not started`, detail: 'Open round 1 on the Kata panel when the judges are ready.', items: idle.map((d) => d.label), tab: 'kata', action: 'Open the Kata panel' })
+      }
+    }
+    const rank = { error: 0, warning: 1, info: 2 }
+    return out.sort((a, b) => rank[a.level] - rank[b.level])
+  }
+
   async function dashboard(tournamentId) {
     const players = await stores.players.list({ tournamentId })
     const teamRows = await stores.teams.list({ tournamentId })
@@ -3285,6 +3447,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       pendingVerification: count((p) => [R.SUBMITTED, R.PENDING_VERIFICATION].includes(p.registrationStatus)),
       pendingPayment: paymentsEnabled() ? count((p) => DRAW_ELIGIBLE.has(p.registrationStatus) && (p.payment?.status || 'PENDING') !== 'PAID') : 0,
       pendingWeighIn: count((p) => p.events?.includes('kumite') && DRAW_ELIGIBLE.has(p.registrationStatus) && (p.weighIn?.status || 'PENDING') !== 'PASSED'),
+      // Taking part but with an entry in no category: the draw would leave them out.
+      uncategorized: await uncategorizedPlayers(tournamentId),
       pools: pools.length,
       matches: matches.length,
       completedMatches: matches.filter((m) => boutOutcome(m)).length,
@@ -3295,6 +3459,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       bronze: medals.filter((m) => m.medal === 'bronze').length,
       nextMatches: matches.filter((m) => !boutOutcome(m)).slice(0, 8),
       currentMatches: matches.filter((m) => ['live', 'open'].includes(m.status)),
+      // The problems and to-dos shown at the top of every tab.
+      attention: await attention(tournamentId, { players, ageGroups, weightCategories, pools, kataRounds }),
     }
   }
 
@@ -3384,7 +3550,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, drawImpact, setQualifiers, decideSingleEntry,
     // matches and results
-    generateMatches, listMatches, correctResult, swapCorners, callMatch, setRunningEvent, inProgress, overrideMedals, recordLiveEvent, liveEvents,
+    generateMatches, listMatches, correctResult, uncategorizedPlayers, attention, swapCorners, callMatch, setRunningEvent, inProgress, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket, arrangeBracket, listBrackets,
