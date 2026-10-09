@@ -223,6 +223,9 @@ export function createApp() {
         room.restored = true
         const saved = await tms.loadLiveState(matchId).catch(() => null)
         if (saved && room.seq === 0) room.restore(saved)
+        // A fresh bout's scoreboard goes to the mat it is scheduled on, not to
+        // mat 1 until someone remembers to change it.
+        else if (room.seq === 0 && Number.isInteger(Number(match?.mat)) && Number(match.mat) >= 1) room.state = { ...room.state, fieldNumber: String(match.mat) }
       }
       socket.join(matchId)
       // Anyone signed in may watch; control goes only to an admin of this

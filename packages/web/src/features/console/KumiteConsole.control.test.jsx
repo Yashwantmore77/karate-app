@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { initialMatchState } from '@kumite/shared/commands.js'
 
@@ -79,5 +79,74 @@ describe('KumiteConsole mat control', () => {
     renderConsole({ mode: 'observe' })
 
     expect(screen.queryByRole('button', { name: /take over/i })).not.toBeInTheDocument()
+  })
+})
+
+// The mat decides which screens show the bout. It starts on the mat the bout
+// is scheduled on; showing it on another mat is asked about first.
+describe('the mat this console scores', () => {
+  const holding = (fieldNumber) => channel.useMatchChannel.mockReturnValue([
+    { ...initialMatchState(), fieldNumber },
+    send,
+    { holdsControl: true, controllerId: 'me', contested: false, lastError: null, takeover },
+  ])
+  const choose = async (user, name) => {
+    await user.click(screen.getByRole('combobox', { name: 'Mat' }))
+    await user.click(await screen.findByRole('option', { name }))
+  }
+  const matSends = () => send.mock.calls.filter(([cmd]) => cmd === 'FIELD_NUMBER')
+
+  it('shows the scheduled mat and offers only the mats the tournament has', async () => {
+    const user = userEvent.setup()
+    holding('3')
+    renderConsole({ scheduledMat: 3, matCount: 4 })
+    expect(screen.getByRole('combobox', { name: 'Mat' })).toHaveTextContent('Mat 3')
+    expect(screen.getByText('Scheduled on Mat 3: its screens show this bout.')).toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Mat' }))
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Mat 1', 'Mat 2', 'Mat 3', 'Mat 4'])
+  })
+
+  it('asks before showing the bout on another mat, naming both', async () => {
+    const user = userEvent.setup()
+    holding('3')
+    renderConsole({ scheduledMat: 3, matCount: 4 })
+    await choose(user, 'Mat 1')
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('Show this bout on Mat 1 instead of Mat 3?')
+    expect(dialog).toHaveTextContent("Mat 1's screens would show it, and Mat 3's screens would show nothing.")
+    expect(matSends()).toEqual([])
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(matSends()).toEqual([['FIELD_NUMBER', { value: '1' }]])
+  })
+
+  it('leaves it where it was when that is cancelled', async () => {
+    const user = userEvent.setup()
+    holding('3')
+    renderConsole({ scheduledMat: 3, matCount: 4 })
+    await choose(user, 'Mat 2')
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+    await waitForElementToBeRemoved(() => screen.queryByRole('dialog'))
+    expect(matSends()).toEqual([])
+    expect(screen.getByRole('combobox', { name: 'Mat' })).toHaveTextContent('Mat 3')
+  })
+
+  it('offers the scheduled mat back when the console is on another one', async () => {
+    const user = userEvent.setup()
+    holding('1') // e.g. the bout was moved to Mat 3 after this console opened it
+    renderConsole({ scheduledMat: 3, matCount: 4 })
+    expect(screen.getByText('Scheduled on Mat 3')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Use Mat 3' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(matSends()).toEqual([['FIELD_NUMBER', { value: '3' }]])
+  })
+
+  it('changes straight away for a bout not scheduled on any mat', async () => {
+    const user = userEvent.setup()
+    holding('1')
+    renderConsole({ matCount: 2 })
+    expect(screen.getByText('Not scheduled on a mat: choose the one you are scoring.')).toBeInTheDocument()
+    await choose(user, 'Mat 2')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(matSends()).toEqual([['FIELD_NUMBER', { value: '2' }]])
   })
 })

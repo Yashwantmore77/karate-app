@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { io as connect } from 'socket.io-client'
 import { createApp } from './index.js'
+import { initialMatchState } from '@kumite/shared/commands.js'
 
 // A venue on event day: every device on the hall Wi-Fi (scoring tablets,
 // hall screens, spectators' phones) reaches the server from one address, and
@@ -74,6 +75,26 @@ describe('event day on the hall Wi-Fi', () => {
     expect(await mat2).toMatchObject({ mat: 2, status: 'open', akaName: 'Aarav Patil', akaScore: 3, aoScore: 1 })
     // The hall screen follows the bout that just opened.
     expect(await hall).toMatchObject({ status: 'open', akaScore: 3, fieldNumber: '2' })
+  })
+})
+
+describe("the scoring console's mat", () => {
+  beforeEach(() => { sockets = [] })
+  afterEach(async () => {
+    sockets.forEach((s) => s.disconnect())
+    await new Promise((resolve) => app.http.close(resolve))
+  })
+
+  it('starts on the mat the bout is scheduled on, and a resumed bout keeps its own', async () => {
+    await start() // m1 has no mat
+    await app.stores.matches.insert({ id: 'm3', status: 'scheduled', mat: 3, refereeId: null, judgeIds: [] })
+    await app.stores.matches.insert({ id: 'm4', status: 'scheduled', mat: 2, refereeId: null, judgeIds: [] })
+    // m4 was being scored on mat 4 when the server restarted.
+    await app.tms.saveLiveState('m4', { seq: 7, state: { ...initialMatchState(), fieldNumber: '4' }, history: [] })
+    const referee = await socket('', await tokenFor('referee@kata.local'))
+    expect((await emit(referee, 'match:join', { matchId: 'm3', control: true })).state.fieldNumber).toBe('3')
+    expect((await emit(referee, 'match:join', { matchId: 'm1', control: true })).state.fieldNumber).toBe('1')
+    expect((await emit(referee, 'match:join', { matchId: 'm4', control: true })).state.fieldNumber).toBe('4')
   })
 })
 

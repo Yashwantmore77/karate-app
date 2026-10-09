@@ -100,6 +100,8 @@ export default function RefereeMatchControl() {
         onFinalize={updateMatchRecord}
         rules={matchRules(tournament, match, category)}
         displayInfo={displayInfo}
+        scheduledMat={match.mat ?? null}
+        matCount={category?.divisionKey && tournament ? settingsOf(tournament).mats : null}
       />
     </Box>
   )

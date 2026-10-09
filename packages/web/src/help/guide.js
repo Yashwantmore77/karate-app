@@ -460,7 +460,7 @@ export const HELP = {
   'console': {
     title: 'Scoring console',
     text: 'Score the bout: points, penalties, Senshu, the clock. Undo reverses the last action. At the end, confirm the result to save it.',
-    tips: ['If the connection drops, keep scoring — actions are sent when it returns.', 'Only one device controls a mat at a time; others can take over.'],
+    tips: ['If the connection drops, keep scoring — actions are sent when it returns.', 'Only one device controls a mat at a time; others can take over.', 'Mat decides which screens show this bout: that mat\'s screen, "Mat N" on the hall screen, and the live board. It starts on the mat the bout is scheduled on.'],
   },
   'judge.matches': { title: 'Your matches', text: 'The Kumite bouts you judge. Open one to score from your seat.' },
   'judge.kata': { title: 'Kata scoring', text: 'When a round is open, enter your score for each performer. Your score is locked once sent.' },
