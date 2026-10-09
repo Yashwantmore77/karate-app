@@ -42,6 +42,7 @@ export default function JudgeMatchView({ profile }) {
         tournamentExpired={!!tournament && isExpired(tournament.date)}
         onBack={() => navigate('/judge')}
         onFinalize={() => {}}
+        scheduledMat={match.mat ?? null}
       />
     </Box>
   )

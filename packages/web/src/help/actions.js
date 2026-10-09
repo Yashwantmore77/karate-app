@@ -228,7 +228,6 @@ export const ACTIONS = {
   '60 seconds': 'Sets the clock to 60 seconds.',
   'Start extra time': 'Starts extra time after a tie at full time.',
   'Start golden score': 'Starts golden score: the first score wins.',
-  Set: 'Sets the mat (field) number shown on the hall scoreboard.',
   'Start scoreboard': 'Shows this bout on the hall scoreboard.',
   'Close scoreboard': 'Stops showing this bout on the hall scoreboard.',
   Decision: 'Ends the bout another way: withdrawal (kiken), disqualification (shikkaku) or the judges\' decision (hantei).',

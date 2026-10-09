@@ -8,6 +8,17 @@ const bearer = (header) => {
   return value.startsWith('Bearer ') ? value.slice(7) : null
 }
 
+/**
+ * Who is calling, for counting requests: the signed-in session when the
+ * request carries a valid token, else the address it came from. A whole venue
+ * shares one address (the hall Wi-Fi), so counting officials by address lets
+ * a few busy screens lock every one of them out.
+ */
+export function callerKey(req) {
+  const claims = verifyToken(bearer(req.headers.authorization))
+  return claims ? `session:${claims.sid || claims.uid}` : `address:${req.ip || 'unknown'}`
+}
+
 /** HTTP: rejects anything without a valid token, and attaches req.user. */
 export function requireAuth(req, _res, next) {
   const claims = verifyToken(bearer(req.headers.authorization))

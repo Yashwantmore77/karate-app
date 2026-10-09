@@ -44,6 +44,13 @@ const matOf = (req) => {
   return Number.isInteger(n) && n >= 1 && n <= MAX_MAT ? n : null
 }
 const docId = (mat) => (mat ? `mat-${mat}` : LIVE_ID)
+/** The mat a display document belongs to ("mat-2" → 2), or null for the hall's. */
+export const matOfDoc = (id) => {
+  const n = Number(/^mat-(\d+)$/.exec(String(id))?.[1])
+  return Number.isInteger(n) && n >= 1 && n <= MAX_MAT ? n : null
+}
+/** What one mat's screen shows: its own row, with its announcement or else the hall's. */
+export const matScreen = (row, hall, mat) => ({ ...(row || { status: 'closed' }), mat, message: row?.message || hall?.message || null })
 
 export function displayRoutes(stores) {
   const router = Router()
@@ -65,9 +72,7 @@ export function displayRoutes(stores) {
     const mat = matOf(req)
     const hall = await display.get(LIVE_ID)
     if (!mat) return res.json({ display: hall ?? null })
-    const row = await display.get(docId(mat))
-    // A mat screen shows its own announcement, or else the hall's.
-    res.json({ display: { ...(row || { status: 'closed' }), mat, message: row?.message || hall?.message || null } })
+    res.json({ display: matScreen(await display.get(docId(mat)), hall, mat) })
   })
 
   // Publishing stays with whoever is running the mat, or the scoreboard

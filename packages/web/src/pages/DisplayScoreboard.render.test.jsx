@@ -45,6 +45,8 @@ describe('DisplayScoreboard', () => {
     expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByText('1:30')).toBeInTheDocument()
     expect(screen.getByText('SENSHU')).toBeInTheDocument()
+    // Which mat the score is from, in the word the rest of the app uses.
+    expect(screen.getByText('Mat 1')).toBeInTheDocument()
   })
 
   it('goes back to idle when the scoreboard is closed', async () => {

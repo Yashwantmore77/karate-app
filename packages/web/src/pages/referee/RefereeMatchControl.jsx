@@ -7,7 +7,7 @@ import { matches as matchStore } from '../../data/domain'
 import { useMatchRecord } from '../../hooks/useMatchRecord'
 import { isExpired } from '../../utils/dateUtils'
 import KumiteConsole from '../../features/console/KumiteConsole'
-import { settingsOf } from '@kumite/shared/tms.js'
+import { settingsOf, parseDivisionKey } from '@kumite/shared/tms.js'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { tms } from '../../data/tms'
 import { PageLoader } from '../../components/Loader'
@@ -37,7 +37,9 @@ export async function hallInfo(tournamentId, match) {
   const queue = await tms.matches(tournamentId, match.mat ? { mat: String(match.mat) } : {}).catch(() => [])
   const current = queue.find((m) => m.id === match.id)
   if (!current) return null
-  const pending = queue.filter((m) => m.id !== match.id && !boutOutcome(m) && m.status !== 'cancelled' && m.redId && m.blueId)
+  // The next bout of the same event: Kata and Kumite take turns on the mats.
+  const event = (m) => (m.divisionKey ? parseDivisionKey(m.divisionKey).event : null)
+  const pending = queue.filter((m) => m.id !== match.id && !boutOutcome(m) && m.status !== 'cancelled' && m.redId && m.blueId && event(m) === event(current))
   const number = (m) => Number(String(m.matchNumber).replace(/\D/g, ''))
   const next = pending.find((m) => number(m) > number(current)) || pending[0]
   const round = (m) => (m.stage === 'knockout' ? m.roundName : `Pool ${m.poolName}`)
@@ -98,6 +100,8 @@ export default function RefereeMatchControl() {
         onFinalize={updateMatchRecord}
         rules={matchRules(tournament, match, category)}
         displayInfo={displayInfo}
+        scheduledMat={match.mat ?? null}
+        matCount={category?.divisionKey && tournament ? settingsOf(tournament).mats : null}
       />
     </Box>
   )

@@ -384,5 +384,6 @@ See `api/lib/store.js` and `TMS_COLLECTIONS`.
   - the existing admin, referee, judge and officer accounts
 - **Backup**: `cd packages/api && npm run backup -- backups/day1.json`. Restore with `npm run restore -- backups/day1.json [--replace]`.
 - **SMS / WhatsApp**: set `SMS_WEBHOOK_URL` and/or `WHATSAPP_WEBHOOK_URL`. The server POSTs `{ channel, to, text }`.
-- **API rate limit**: `API_RATE_LIMIT` requests per minute per address (default 1200).
+- **API rate limit**: `API_RATE_LIMIT` requests per minute per signed-in session, or per address for a caller with none (default 1200). Reading the public pages and hall scoreboards has its own allowance, `PUBLIC_RATE_LIMIT` per address (default 6000): a venue's screens and phones share one address.
+- **Backups leave out second-factor secrets**: an account restored into a new database sets up two-step sign-in again (the restore says how many).
 - **Certificate QR codes** link to `APP_URL/verify/:id`; set `APP_URL` in production.

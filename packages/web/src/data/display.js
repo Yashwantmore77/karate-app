@@ -23,6 +23,9 @@ export const displayRepo = {
    * channel is down, every ten seconds while it is up. Poll failures are
    * swallowed on purpose — a scoreboard that stops asking after one dropped
    * request is worse than one that shows the last score a moment longer.
+   *
+   * The server pushes each row whole (the hall's, and each mat's as its
+   * screen shows it), so a score change costs no screen a request.
    */
   subscribe: (cb, { mat = null } = {}) => {
     let stopped = false
@@ -35,17 +38,26 @@ export const displayRepo = {
         // Keep asking.
       }
     }
-    // The pushed row is the hall screen's; a mat screen re-reads its own.
-    const pushed = (row) => { if (!stopped) (mat ? tick() : cb(row)) }
-    const changed = () => { if (!stopped && mat) tick() }
-    sock?.on('display:update', pushed)
-    sock?.on('display:changed', changed)
+    // A mat screen shows the hall's announcement when the mat has none of its
+    // own. The hall's row moves with every score, so the screen asks again
+    // only when that announcement changes.
+    let hallMessage // not known until the first push
+    const hallRow = (row) => {
+      if (stopped) return
+      if (!mat) return cb(row)
+      const message = row?.message || null
+      if (hallMessage !== undefined && message !== hallMessage) tick()
+      hallMessage = message
+    }
+    const matRow = ({ mat: which, display } = {}) => { if (!stopped && mat && Number(which) === Number(mat)) cb(display) }
+    sock?.on('display:update', hallRow)
+    sock?.on('display:mat', matRow)
     tick()
     let last = Date.now()
     const id = setInterval(() => {
       const every = sock?.connected ? DISPLAY_SAFETY_POLL_MS : DISPLAY_POLL_MS
       if (Date.now() - last >= every) { last = Date.now(); tick() }
     }, DISPLAY_POLL_MS)
-    return () => { stopped = true; clearInterval(id); sock?.off('display:update', pushed); sock?.off('display:changed', changed) }
+    return () => { stopped = true; clearInterval(id); sock?.off('display:update', hallRow); sock?.off('display:mat', matRow) }
   },
 }

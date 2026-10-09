@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Container, Paper, Typography, Button, Alert, Stack, TextField, Box, List, ListItem, ListItemText, Chip } from '@mui/material'
-import { request } from '../../data/http'
+import { request, HttpError } from '../../data/http'
 import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 import { PageLoader } from '../../components/Loader'
 
@@ -11,12 +11,24 @@ export default function MyAccount() {
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState(null)
   const [sessions, setSessions] = useState(null)
+  const [sessionMsg, setSessionMsg] = useState(null)
 
   const load = () => request('/auth/account').then((r) => setAccount(r.account)).catch(() => setAccount(null))
   const loadSessions = () => request('/auth/sessions').then((r) => setSessions(r.sessions)).catch(() => setSessions([]))
   useEffect(() => { load(); loadSessions() }, [])
-  const endSession = (sid) => request(`/auth/sessions/${sid}`, { method: 'DELETE' }).then(loadSessions).catch(() => {})
-  const endOthers = () => request('/auth/sessions/revoke-others', { method: 'POST', body: {} }).then(loadSessions).catch(() => {})
+  // Ending a session says whether it worked: a device left signed in by a
+  // failure nobody saw is the one that should have been signed out.
+  const whyNot = (err) => (err instanceof HttpError
+    ? (err.code === 'session_not_found' ? 'it had already ended.' : `the server refused (${err.code || err.status}).`)
+    : 'there is no connection to the server. Try again when it is back.')
+  const endSession = (sid) => request(`/auth/sessions/${sid}`, { method: 'DELETE' })
+    .then(() => setSessionMsg({ severity: 'success', text: 'That device is signed out.' }))
+    .catch((err) => setSessionMsg({ severity: 'error', text: `That device was not signed out: ${whyNot(err)}` }))
+    .finally(loadSessions)
+  const endOthers = () => request('/auth/sessions/revoke-others', { method: 'POST', body: {} })
+    .then((r) => setSessionMsg({ severity: 'success', text: `Signed out on ${r?.revoked ?? 0} other device${r?.revoked === 1 ? '' : 's'}.` }))
+    .catch((err) => setSessionMsg({ severity: 'error', text: `The other devices were not signed out: ${whyNot(err)}` }))
+    .finally(loadSessions)
 
   if (!account) return <PageLoader label="Loading your account…" />
 
@@ -67,6 +79,7 @@ export default function MyAccount() {
 
         {/* PRD v1 §26: where this account is signed in, and ending those sessions. */}
         <Typography variant="h3" gutterBottom sx={{ mt: 4 }}>Where you are signed in</Typography>
+        {sessionMsg && <Alert severity={sessionMsg.severity} sx={{ mb: 2 }} onClose={() => setSessionMsg(null)}>{sessionMsg.text}</Alert>}
         <List dense>
           {!sessions && <PageLoader label="Loading sessions…" minHeight={80} />}
           {(sessions || []).map((x) => (

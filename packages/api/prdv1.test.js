@@ -157,6 +157,21 @@ describe('system audit and backup (PRD v1 §22-23)', () => {
     expect(await target.tournaments.count({})).toBe(1)
     await expect(restoreBackup(target, { format: 'other' })).rejects.toMatchObject({ code: 'invalid_backup' })
   })
+
+  it('leaves second-factor secrets out of a backup (password hashes stay hashes)', async () => {
+    const accounts = async () => [
+      { uid: 'u1', email: 'admin@kata.local', role: 'admin', passwordHash: 'scrypt$abc', twoFactorSecret: 'JBSWY3DPEHPK3PXP', pendingTwoFactorSecret: 'KRSXG5CTMVRXEZLU' },
+      { uid: 'u2', email: 'judge1@kata.local', role: 'judge', passwordHash: 'scrypt$def' },
+    ]
+    const backup = await createBackup(createStores(), { accounts })
+    const file = JSON.stringify(backup)
+    expect(file).not.toContain('JBSWY3DPEHPK3PXP')
+    expect(file).not.toContain('KRSXG5CTMVRXEZLU')
+    expect(backup.users).toEqual([
+      { uid: 'u1', email: 'admin@kata.local', role: 'admin', passwordHash: 'scrypt$abc', twoFactorLeftOut: true },
+      { uid: 'u2', email: 'judge1@kata.local', role: 'judge', passwordHash: 'scrypt$def' },
+    ])
+  })
 })
 
 describe('scoreboard operator (PRD v1 §4)', () => {

@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url'
 import express from 'express'
 import { Server } from 'socket.io'
 import { MatchRoom, serverNow } from './matchRoom.js'
-import { socketAuth, setTournamentLookup } from './auth/middleware.js'
+import { socketAuth, setTournamentLookup, callerKey } from './auth/middleware.js'
 import { createStores } from './lib/store.js'
 import { withChangeEvents } from './lib/changes.js'
 import { security } from './middleware/security.js'
@@ -15,7 +15,7 @@ import { tournamentRoutes } from './routes/tournaments.js'
 import { categoryRoutes } from './routes/categories.js'
 import { competitorRoutes } from './routes/competitors.js'
 import { matchRoutes } from './routes/matches.js'
-import { displayRoutes } from './routes/display.js'
+import { displayRoutes, matOfDoc, matScreen } from './routes/display.js'
 import { tmsRoutes } from './routes/tms.js'
 import { publicRoutes, publicViewCache } from './routes/public.js'
 import { matchAuthority } from './auth/matchAccess.js'
@@ -68,23 +68,36 @@ export function createApp() {
   const startedAt = Date.now()
   app.get('/health', (_req, res) => res.json({ ok: true, now: serverNow(), storage: isMongoConfigured() ? 'mongodb' : 'memory', uptimeSec: Math.round((Date.now() - startedAt) / 1000) }))
 
-  // PRD v1 §22 rate limiting for the whole API (logins have their own, tighter one).
-  app.use(API_BASE, rateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT) || 1200, code: 'too_many_requests' }))
+  // PRD v1 §22 rate limiting for the whole API (logins have their own, tighter
+  // one), counted per signed-in session, or per address for everyone else.
+  // Hall screens and spectators' phones have no session and share the venue's
+  // address: reading the public pages and scoreboards has its own, larger
+  // allowance (those reads are served from a shared copy), so they neither
+  // run out among themselves nor take from the API's.
+  const apiLimit = rateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT) || 1200, code: 'too_many_requests', keyOf: callerKey })
+  const publicReadLimit = rateLimit({ windowMs: 60_000, max: Number(process.env.PUBLIC_RATE_LIMIT) || 6000, code: 'too_many_requests' })
+  const isPublicRead = (req) => req.method === 'GET' && /^\/(public|display)(\/|$)/.test(req.path)
+  app.use(API_BASE, (req, res, next) => (isPublicRead(req) ? publicReadLimit : apiLimit)(req, res, next))
   // PRD v1 §15/§25: a retried write with the same Idempotency-Key happens once.
   app.use(API_BASE, idempotency())
 
   // Built per instance and announced over the socket, so a device that is
   // already looking at a list finds out it changed without polling for it.
-  // Writes the public page never shows do not throw away its cached view:
-  // every live score command saves its state, and the audit log grows with it.
-  const PRIVATE_COLLECTIONS = new Set(['auditLog', 'registrationLinks', 'liveStates', 'matchEvents', 'apiKeys', 'display'])
+  // Writes no other screen shows are not announced, and do not throw away the
+  // public page's cached view: every live score command saves the bout's state
+  // and its event, one or two a second on every mat, and telling every screen
+  // in the hall to reload on each of them floods the venue's Wi-Fi.
+  const PRIVATE_COLLECTIONS = new Set(['auditLog', 'registrationLinks', 'liveStates', 'matchEvents', 'apiKeys'])
   let publicViews = null
-  const emitChange = (collection) => {
-    if (!PRIVATE_COLLECTIONS.has(collection)) publicViews?.invalidate()
+  const emitChange = (collection, { id = null } = {}) => {
+    // A scoreboard goes to the hall screens as it is, with nothing to re-read.
+    if (collection === 'display') return announceDisplay(id)
+    if (PRIVATE_COLLECTIONS.has(collection)) return
+    publicViews?.invalidate()
     io.emit('data:changed', { collection })
-    announcePublic(collection)
+    announcePublic()
   }
-  const stores = withChangeEvents(createStores(), (collection) => emitChange(collection))
+  const stores = withChangeEvents(createStores(), emitChange)
   setTournamentLookup((id) => stores.tournaments.get(id))
 
   // The PRD's tournament management, on the same stores as everything else.
@@ -148,19 +161,29 @@ export function createApp() {
   // page for each one would be a self-inflicted flood.
   const PUBLIC_DEBOUNCE_MS = 400
   let pendingPublic = null
-  function announcePublic(collection) {
-    if (collection === 'display') {
-      stores.display.get('live').then((row) => publicIo.emit('display:update', row ?? null)).catch(() => {})
-      // A screen for one mat re-reads its own document on this.
-      publicIo.emit('display:changed', { at: serverNow() })
-      return
-    }
-    if (['auditLog', 'registrationLinks'].includes(collection)) return
+  function announcePublic() {
     if (pendingPublic) return
     pendingPublic = setTimeout(() => {
       pendingPublic = null
       publicIo.emit('public:changed', { at: serverNow() })
     }, PUBLIC_DEBOUNCE_MS)
+  }
+
+  // The hall screen's row ("live"), or one mat's row as that mat's screen
+  // shows it: sent whole, so a score change reaches every screen without each
+  // of them asking for it again.
+  async function announceDisplay(id) {
+    try {
+      const mat = matOfDoc(id)
+      if (!mat) {
+        publicIo.emit('display:update', (await stores.display.get('live')) ?? null)
+        return
+      }
+      const [row, hall] = await Promise.all([stores.display.get(id), stores.display.get('live')])
+      publicIo.emit('display:mat', { mat, display: matScreen(row, hall, mat) })
+    } catch {
+      // The screens' own slow poll catches up.
+    }
   }
 
   const rooms = new Map()
@@ -200,6 +223,9 @@ export function createApp() {
         room.restored = true
         const saved = await tms.loadLiveState(matchId).catch(() => null)
         if (saved && room.seq === 0) room.restore(saved)
+        // A fresh bout's scoreboard goes to the mat it is scheduled on, not to
+        // mat 1 until someone remembers to change it.
+        else if (room.seq === 0 && Number.isInteger(Number(match?.mat)) && Number(match.mat) >= 1) room.state = { ...room.state, fieldNumber: String(match.mat) }
       }
       socket.join(matchId)
       // Anyone signed in may watch; control goes only to an admin of this

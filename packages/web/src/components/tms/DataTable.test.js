@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tableRows } from './DataTable'
+import { tableRows, rowMatches } from './DataTable'
 import { describeLiveEvent } from '../../pages/tms/MatchesTab'
 
 describe('list exports (PRD point 29)', () => {
@@ -13,6 +13,22 @@ describe('list exports (PRD point 29)', () => {
     ]
     const rows = [{ name: 'Asha', teamName: 'ABC', payment: { status: 'PAID' }, events: ['kata', 'kumite'] }]
     expect(tableRows(columns, rows)).toEqual([['Name', 'Team', 'Payment', 'Events'], ['Asha', 'ABC', 'PAID', 'kata, kumite']])
+  })
+})
+
+describe('list search', () => {
+  it('finds a row by what the screen shows, not only by the value it sorts by', () => {
+    const columns = [
+      { key: 'matchNumber', label: 'Match', value: (m) => Number(String(m.matchNumber).replace(/\D/g, '')) },
+      { key: 'payment', label: 'Payment', value: (r) => r.payment.status },
+    ]
+    const bout = { matchNumber: 'M-001', payment: { status: 'PAID' } }
+    expect(rowMatches(columns, bout, 'm-001')).toBe(true)
+    expect(rowMatches(columns, bout, '1')).toBe(true)
+    expect(rowMatches(columns, bout, 'paid')).toBe(true)
+    // A field that is an object is never searched as "[object Object]".
+    expect(rowMatches(columns, bout, 'object')).toBe(false)
+    expect(rowMatches(columns, bout, 'm-002')).toBe(false)
   })
 })
 

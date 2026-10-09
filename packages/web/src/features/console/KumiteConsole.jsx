@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Box, Container, Grid, Paper, Button, IconButton, Typography, Checkbox,
-  FormControlLabel, TextField, Divider, Stack, Alert,
+  FormControlLabel, TextField, Divider, Stack, Alert, MenuItem,
   Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material'
 import { KeyboardArrowUp, KeyboardArrowDown, Undo as UndoIcon, Gavel } from '@mui/icons-material'
@@ -39,7 +39,13 @@ const WKF = {
   scoreboardStart: '#D2FFD4',
   scoreboardClose: '#E47E7A',
   ink: '#000000',
+  // Small print on the white board: a warning, and a plain note.
+  warnInk: '#8A4B00',
+  mutedInk: '#555555',
 }
+
+// The most mats a hall screen can be given (packages/api/routes/display.js).
+const MAX_MATS = 20
 
 const utilityButtonSx = {
   bgcolor: WKF.utility,
@@ -71,17 +77,25 @@ const boardFieldSx = {
   '& .MuiInputBase-input': { color: WKF.ink },
 }
 
+// The mat picker on the white board: dark text and arrow, even when it is read-only.
+const matFieldSx = {
+  ...boardFieldSx,
+  '& .MuiSelect-icon': { color: 'rgba(0,0,0,0.54)' },
+  '& .MuiSelect-select.Mui-disabled': { color: 'rgba(0,0,0,0.45)', WebkitTextFillColor: 'rgba(0,0,0,0.45)' },
+}
+
 const panelCheckboxSx = {
   color: WKF.onPanel,
   '&.Mui-checked': { color: WKF.onPanel },
 }
 
 export default function KumiteConsole({
-  matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize, rules = null, displayInfo = null
+  matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize, rules = null, displayInfo = null,
+  // The mat the bout is scheduled on, and how many mats the tournament has.
+  scheduledMat = null, matCount = null,
 }) {
   const observing = mode === 'observe'
   const [state, send, mat] = useMatchChannel(matchId, { control: !observing })
-  const [fieldNumberDraft, setFieldNumberDraft] = useState('1')
   const [pendingAction, setPendingAction] = useState(null)
   const [decisionOpen, setDecisionOpen] = useState(false)
   const serverNow = useServerNow()
@@ -90,10 +104,6 @@ export default function KumiteConsole({
   const points = view.rules?.points || rules?.points || POINTS
   const mainClock = useMatchClock(view.clock)
   const koClock = useMatchClock(view.koActive ? view.koClock : null)
-
-  useEffect(() => {
-    if (state?.fieldNumber) setFieldNumberDraft(state.fieldNumber)
-  }, [state?.fieldNumber])
 
   // A bout from a configured tournament runs under that tournament's rules
   // (duration, point gap). The reducer ignores this once the bout has begun.
@@ -149,7 +159,29 @@ export default function KumiteConsole({
   const useDuration = (durationMs) => send('CLOCK_SET', { durationMs })
   const setMatchDuration = (minutes, seconds) => useDuration(parseDuration(minutes, seconds))
   const toggleKoTimer = () => send('KO_TIMER')
-  const commitFieldNumber = () => send('FIELD_NUMBER', { value: fieldNumberDraft })
+  // The mat this console scores decides which screens show the bout (that
+  // mat's own screen, the hall screen's "Mat N", the live board's card). It
+  // starts on the mat the bout is scheduled on; choosing another one is asked
+  // about, because that mat's screens would show this bout and its own none.
+  const ownMat = scheduledMat ? String(scheduledMat) : null
+  const shownMat = String(view.fieldNumber ?? '')
+  const matChoices = [...new Set([
+    ...Array.from({ length: Math.max(1, matCount || MAX_MATS) }, (_, i) => String(i + 1)),
+    ...[shownMat, ownMat].filter(Boolean),
+  ])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  const moveToMat = (value) => guarded(`Move this bout's scoreboard to Mat ${value}`, () => send('FIELD_NUMBER', { value }))()
+  const chooseMat = (value) => {
+    if (value === shownMat) return
+    if (ownMat && value !== ownMat) {
+      setPendingAction({
+        label: `Show this bout on Mat ${value} instead of Mat ${ownMat}`,
+        detail: `It is scheduled on Mat ${ownMat}. Mat ${value}'s screens would show it, and Mat ${ownMat}'s screens would show nothing.`,
+        run: () => send('FIELD_NUMBER', { value }),
+      })
+      return
+    }
+    moveToMat(value)
+  }
 
   const declare = (cmd, side) => {
     send(cmd, { side })
@@ -221,28 +253,32 @@ export default function KumiteConsole({
 
   const renderPenaltyRow = (side, category) => {
     const level = view.match.penalties[side][category]
+    // On a narrow panel (a tablet) the boxes go under their label together,
+    // never one by one past the panel's edge, where H was cut off.
     return (
-      <Stack direction="row" spacing={1} key={category} sx={{ alignItems: 'center' }}>
-        <Typography variant="caption" sx={{ width: 72, color: WKF.onPanel, fontWeight: 700 }}>
+      <Box key={category} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, width: '100%' }}>
+        <Typography variant="caption" sx={{ minWidth: 72, textAlign: 'left', color: WKF.onPanel, fontWeight: 700 }}>
           {penaltyCategories.length === 1 ? 'Penalties' : CATEGORY_LABELS[category]}
         </Typography>
-        {ladder.map((step, idx) => (
-          <FormControlLabel
-            key={step}
-            sx={{ mr: 0.5 }}
-            control={
-              <Checkbox
-                size="small"
-                checked={level >= idx + 1}
-                disabled={disabled}
-                onChange={() => send('PENALTY', { side, category, level: idx + 1 })}
-                sx={panelCheckboxSx}
-              />
-            }
-            label={<Typography variant="caption" sx={{ color: WKF.onPanel, fontWeight: 700 }}>{step}</Typography>}
-          />
-        ))}
-      </Stack>
+        <Box sx={{ display: 'flex', flexWrap: 'nowrap' }}>
+          {ladder.map((step, idx) => (
+            <FormControlLabel
+              key={step}
+              sx={{ ml: -0.75, mr: 0.75 }}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={level >= idx + 1}
+                  disabled={disabled}
+                  onChange={() => send('PENALTY', { side, category, level: idx + 1 })}
+                  sx={{ ...panelCheckboxSx, p: 0.75 }}
+                />
+              }
+              label={<Typography variant="caption" sx={{ color: WKF.onPanel, fontWeight: 700 }}>{step}</Typography>}
+            />
+          ))}
+        </Box>
+      </Box>
     )
   }
 
@@ -498,18 +534,30 @@ export default function KumiteConsole({
             </Paper>
 
             <Paper elevation={0} sx={{ ...boardPaperSx, p: 2 }}>
-              <Typography variant="caption" display="block" sx={{ mb: 1 }}>Field number</Typography>
-              <Stack direction="row" spacing={1}>
-                <TextField
-                  size="small"
-                  value={fieldNumberDraft}
-                  disabled={disabled}
-                  onChange={(e) => setFieldNumberDraft(e.target.value)}
-                  sx={boardFieldSx}
-                  inputProps={{ style: { textAlign: 'center' } }}
-                />
-                <Button variant="outlined" disabled={disabled} onClick={guarded('Change the field number', commitFieldNumber)} sx={utilityButtonSx}>Set</Button>
-              </Stack>
+              <Typography variant="caption" display="block" sx={{ mb: 1 }}>Mat</Typography>
+              <TextField
+                select
+                fullWidth
+                size="small"
+                value={shownMat}
+                disabled={disabled}
+                onChange={(e) => chooseMat(e.target.value)}
+                sx={matFieldSx}
+                slotProps={{ htmlInput: { 'aria-label': 'Mat' } }}
+              >
+                {matChoices.map((m) => <MenuItem key={m} value={m}>Mat {m}</MenuItem>)}
+              </TextField>
+              {ownMat && ownMat !== shownMat ? (
+                <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="caption" sx={{ '&&': { color: WKF.warnInk }, fontWeight: 700, textAlign: 'left' }}>Scheduled on Mat {ownMat}</Typography>
+                  <Button size="small" variant="outlined" disabled={disabled} onClick={() => moveToMat(ownMat)} sx={utilityButtonSx}
+                    data-tip={`Shows this bout on Mat ${ownMat}'s screens, the mat it is scheduled on.`}>Use Mat {ownMat}</Button>
+                </Stack>
+              ) : (
+                <Typography variant="caption" display="block" sx={{ mt: 1, '&&': { color: WKF.mutedInk }, textAlign: 'left' }}>
+                  {ownMat ? `Scheduled on Mat ${ownMat}: its screens show this bout.` : 'Not scheduled on a mat: choose the one you are scoring.'}
+                </Typography>
+              )}
             </Paper>
 
             <Paper elevation={0} sx={{ ...boardPaperSx, p: 2 }}>
@@ -604,6 +652,7 @@ export default function KumiteConsole({
           <Typography>
             {pendingAction?.label}{clockRunning ? ` while the clock is still running at ${mainClock.display}` : ''}?
           </Typography>
+          {pendingAction?.detail && <Typography color="text.secondary" sx={{ mt: 1 }}>{pendingAction.detail}</Typography>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPendingAction(null)}>Cancel</Button>

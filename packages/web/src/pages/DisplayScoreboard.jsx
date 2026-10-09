@@ -92,7 +92,7 @@ export default function DisplayScoreboard() {
           </Typography>
           {stale
             ? <Chip label="NOT LIVE" color="warning" sx={{ fontWeight: 700 }} />
-            : <Typography sx={{ color: '#666' }}>Field {live.fieldNumber}</Typography>}
+            : <Typography sx={{ color: '#666' }}>Mat {live.fieldNumber}</Typography>}
         </Box>
         {side(live.akaName, live.akaScore, WKF.aka, live.senshu === 'aka', live.akaClub)}
       </Stack>

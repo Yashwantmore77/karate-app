@@ -240,7 +240,7 @@ One component, two modes:
 
 Same layout, same clock, buttons inert in observe mode. That is how judges get an identical view without a second implementation that can drift.
 
-`ConfirmGuard` already exists and stays: while the clock runs, Reset time, Extra time, 60 seconds, KO Timer, the scoreboard toggle, field number and Close all require confirmation. Scoring and Stop never do.
+`ConfirmGuard` already exists and stays: while the clock runs, Reset time, Extra time, 60 seconds, KO Timer, the scoreboard toggle, the mat and Close all require confirmation. Scoring and Stop never do.
 
 ### Clock hooks
 
