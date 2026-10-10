@@ -2,6 +2,8 @@
 
 _Last updated 9 October 2026._
 
+New to the app? Start with the [operator handbook](../operator-handbook/README.md), which walks through every job click by click.
+
 A tournament runs in eight steps: set it up, build its categories, take registrations, weigh in, draw, schedule the bouts, run the competition day, and publish the results. This guide shows each screen, who uses it, and every rule the app checks along the way.
 
 ## Contents

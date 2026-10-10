@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 540" width="760" height="540" role="img" aria-labelledby="plan-title">
+<title id="plan-title">Six parts take a tournament from Draft to Completed</title>
+<style>
+  svg { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 13px; }
+  .bg { fill: #ffffff; }
+  .t1 { fill: #1f2328; }
+  .b { font-weight: 600; }
+  .t2 { fill: #59636e; font-size: 11.5px; }
+  .line { fill: none; stroke: #c4c1b7; stroke-width: 1.25; }
+  .tint { fill: #efeeea; }
+  .accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 2; }
+  .head { fill: #a19e94; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #0d1117; }
+    .t1 { fill: #e6edf3; }
+    .t2 { fill: #9198a1; }
+    .line { stroke: #4b535d; }
+    .tint { fill: #1c2128; }
+    .accent { fill: #12263f; stroke: #4493f8; }
+    .head { fill: #6e7681; }
+  }
+</style>
+<defs><marker id="plan-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
+<rect class="bg" width="760" height="540" rx="12"/>
+<text class="t1 b" x="24" y="34" style="font-size: 15px">Six parts take a tournament from Draft to Completed</text>
+<text class="t2" x="24" y="56">When to do each part, and the stage its Dashboard shows afterwards</text>
+<text class="t2 b" x="24" y="82">WHEN</text>
+<text class="t2 b" x="196" y="82">WHAT YOU DO</text>
+<text class="t2 b" x="548" y="82">STAGE AFTER</text>
+<g class="line">
+  <path d="M356 152V168" marker-end="url(#plan-arrow)"/>
+  <path d="M356 224V240" marker-end="url(#plan-arrow)"/>
+  <path d="M356 296V312" marker-end="url(#plan-arrow)"/>
+  <path d="M356 368V384" marker-end="url(#plan-arrow)"/>
+  <path d="M356 440V456" marker-end="url(#plan-arrow)"/>
+  <path d="M516 124H548" marker-end="url(#plan-arrow)"/>
+  <path d="M516 196H548" marker-end="url(#plan-arrow)"/>
+  <path d="M516 268H548" marker-end="url(#plan-arrow)"/>
+  <path d="M516 340H548" marker-end="url(#plan-arrow)"/>
+  <path d="M516 412H548" marker-end="url(#plan-arrow)"/>
+  <path d="M516 484H548" marker-end="url(#plan-arrow)"/>
+</g>
+<text class="t1" x="24" y="129">Weeks before</text>
+<rect class="line" x="196" y="96" width="320" height="56" rx="8"/>
+<text class="t1 b" x="212" y="118">Part 1 · Set up</text>
+<text class="t2" x="212" y="136">Jobs 1–4: create, details, categories, staff</text>
+<rect class="tint" x="548" y="96" width="188" height="56" rx="8"/>
+<rect class="line" x="548" y="96" width="188" height="56" rx="8"/>
+<text class="t1 b" x="642" y="129" text-anchor="middle">Draft</text>
+<text class="t1" x="24" y="201">Until the closing date</text>
+<rect class="line" x="196" y="168" width="320" height="56" rx="8"/>
+<text class="t1 b" x="212" y="190">Part 2 · Registration</text>
+<text class="t2" x="212" y="208">Jobs 5–8: open, send the link, approve, close</text>
+<rect class="tint" x="548" y="168" width="188" height="56" rx="8"/>
+<rect class="line" x="548" y="168" width="188" height="56" rx="8"/>
+<text class="t1 b" x="642" y="192" text-anchor="middle">Registration open</text>
+<text class="t2" x="642" y="209" text-anchor="middle">then Registration closed</text>
+<text class="t1" x="24" y="273">Weigh-in day</text>
+<rect class="line" x="196" y="240" width="320" height="56" rx="8"/>
+<text class="t1 b" x="212" y="262">Part 3 · Weigh-in, lock and draw</text>
+<text class="t2" x="212" y="280">Jobs 9–14: weigh, categorise, lock and draw</text>
+<rect class="tint" x="548" y="240" width="188" height="56" rx="8"/>
+<rect class="line" x="548" y="240" width="188" height="56" rx="8"/>
+<text class="t1 b" x="642" y="264" text-anchor="middle">Draw generated</text>
+<text class="t2" x="642" y="281" text-anchor="middle">after Entries locked</text>
+<text class="t1" x="24" y="345">The day before</text>
+<rect class="line" x="196" y="312" width="320" height="56" rx="8"/>
+<text class="t1 b" x="212" y="334">Part 4 · Prepare the day</text>
+<text class="t2" x="212" y="352">Jobs 15–17: times, officials, passes, devices</text>
+<rect class="tint" x="548" y="312" width="188" height="56" rx="8"/>
+<rect class="line" x="548" y="312" width="188" height="56" rx="8"/>
+<text class="t1 b" x="642" y="345" text-anchor="middle">Ready (optional)</text>
+<text class="t1 b" x="24" y="417">Event day</text>
+<rect class="accent" x="196" y="384" width="320" height="56" rx="8"/>
+<text class="t1 b" x="212" y="406">Part 5 · Competition day</text>
+<text class="t2" x="212" y="424">Jobs 18–21: go live, call, score, kata</text>
+<rect class="tint" x="548" y="384" width="188" height="56" rx="8"/>
+<rect class="line" x="548" y="384" width="188" height="56" rx="8"/>
+<text class="t1 b" x="642" y="417" text-anchor="middle">Live</text>
+<text class="t1" x="24" y="489">Event day and after</text>
+<rect class="line" x="196" y="456" width="320" height="56" rx="8"/>
+<text class="t1 b" x="212" y="478">Part 6 · Results and finishing</text>
+<text class="t2" x="212" y="496">Jobs 22–26: knockouts, publish, certificates</text>
+<rect class="tint" x="548" y="456" width="188" height="56" rx="8"/>
+<rect class="line" x="548" y="456" width="188" height="56" rx="8"/>
+<text class="t1 b" x="642" y="480" text-anchor="middle">Completed</text>
+<text class="t2" x="642" y="497" text-anchor="middle">then Archived</text>
+</svg>
