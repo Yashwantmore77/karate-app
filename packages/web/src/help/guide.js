@@ -216,6 +216,11 @@ export const ROLE_GUIDE = {
     'Everything an admin does, plus Organisations and Rulesets.',
     'Create a tournament in Tournaments, then open it (eye icon) to reach every step.',
   ],
+  tournament_owner: [
+    'My tournaments lists the events you have been given: open one (eye icon) to run it.',
+    'Inside a tournament you can do everything: details, categories, entries, weigh-in, draw, scoring, results, certificates and reports.',
+    'You will not see other people\'s tournaments, staff accounts, backups or rulesets. Ask the super admin for those.',
+  ],
   registration_officer: [
     'Choose the tournament, then go to Registrations.',
     'Check each player\'s details and documents, then approve or reject.',

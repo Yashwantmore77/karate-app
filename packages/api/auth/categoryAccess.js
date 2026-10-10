@@ -1,4 +1,5 @@
 import { mayAccessTournament } from './middleware.js'
+import { reachesOnlyAssigned } from '@kumite/shared/permissions.js'
 import { findUserRecord } from './users.js'
 import { forbidden, conflict, notFound } from '../lib/errors.js'
 import { TOURNAMENT_STATUS as T } from '@kumite/shared/lifecycle.js'
@@ -24,7 +25,9 @@ export function categoryGuards({ categories, tournaments }) {
     if (user.role === 'super_admin') return null
     const account = await findUserRecord(user.uid)
     if (!account) throw forbidden()
-    if (!account.organizationId && !account.tournamentIds?.length) return null
+    // An owner's reach is its assignment, so it is always listed out: "no
+    // organisation and no tournaments" must not fall through to "all of them".
+    if (!reachesOnlyAssigned(account.role) && !account.organizationId && !account.tournamentIds?.length) return null
     const ids = []
     for (const t of await tournaments.list()) if (mayAccessTournament(account, t.id, t)) ids.push(t.id)
     return ids

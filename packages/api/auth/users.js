@@ -9,7 +9,7 @@ const KEY_LEN = 64
 const COLLECTION = 'users'
 // PRD section 3. Coaches are not accounts: they arrive through a registration
 // link (see signCoachToken), and the public needs no sign-in at all.
-export const ROLES = ['admin', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer', 'announcer', 'scoreboard_operator', 'viewer']
+export const ROLES = ['admin', 'tournament_owner', 'referee', 'judge', 'super_admin', 'registration_officer', 'weighin_officer', 'announcer', 'scoreboard_operator', 'viewer']
 
 // Deliberately loose: the point is to catch a transposed field, not to arbitrate
 // what a valid address is. Anything stricter rejects real addresses.
@@ -42,7 +42,10 @@ function cleanTournamentRoles(value) {
   if (entries.length > 200) throw badRequest('invalid_tournamentRoles')
   const out = {}
   for (const [tid, role] of entries) {
-    if (!/^[A-Za-z0-9_-]{1,80}$/.test(tid) || !ROLES.includes(role) || role === 'super_admin') throw badRequest('invalid_tournamentRoles')
+    // A super admin is system-wide and an owner is an account-level role
+    // granted by assignment, so neither is handed out per tournament.
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(tid) || !ROLES.includes(role)
+      || ['super_admin', 'tournament_owner'].includes(role)) throw badRequest('invalid_tournamentRoles')
     out[tid] = role
   }
   return Object.keys(out).length ? out : null
@@ -85,6 +88,10 @@ const SEED = [
   { uid: 'weighin-uid', email: 'weighin@kata.local', role: 'weighin_officer', password: 'test123' },
   { uid: 'announcer-uid', email: 'announcer@kata.local', role: 'announcer', password: 'test123' },
   { uid: 'scoreboard-uid', email: 'scoreboard@kata.local', role: 'scoreboard_operator', password: 'test123' },
+  // PRD point 33 follow-up: an owner runs the events it is given and sees no
+  // other. Seeded with nothing assigned, so it starts out seeing none; the
+  // scenario seeder hands it one tournament.
+  { uid: 'owner-uid', email: 'owner@kata.local', role: 'tournament_owner', password: 'test123' },
   { uid: 'superadmin-uid', email: 'superadmin@kata.local', role: 'super_admin', password: 'test123' },
   { uid: 'viewer-uid', email: 'viewer@kata.local', role: 'viewer', password: 'test123' },
 ]
@@ -406,10 +413,13 @@ export async function listUsers({ q = '', page = 1, limit = 25, organizationId =
  * nothing about managing them. Admins are included because an admin may take
  * a mat.
  */
-export async function listAssignableOfficials() {
+export async function listAssignableOfficials({ organizationId = null } = {}) {
   const users = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
   return users
     .filter((user) => ROLES.includes(user.role))
+    // Inside an organisation the picker shows that organisation's people, the
+    // same scope the account roster uses (PRD point 33).
+    .filter((user) => !organizationId || (user.organizationId || null) === organizationId)
     .map(({ uid, email, role, seat }) => ({ uid, email, role, ...(seat === undefined ? {} : { seat }) }))
     .sort((a, b) => a.role.localeCompare(b.role) || String(a.email).localeCompare(String(b.email)))
 }

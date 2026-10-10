@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireAuth, requireTournamentAdmin } from '../auth/middleware.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { categoryGuards, staffOnly } from '../auth/categoryAccess.js'
@@ -45,7 +45,7 @@ export function competitorRoutes(stores) {
     res.json({ competitors: rows, ...pageMeta({ page, limit, total }) })
   })
 
-  nested.post('/:categoryId/competitors', requireRole('admin'), async (req, res) => {
+  nested.post('/:categoryId/competitors', requireTournamentAdmin(), async (req, res) => {
     const fields = body.forCreate(req.body)
     // Entrants of a drawn category come from registration and the draw.
     guard.assertNotDrawn(await guard.scope(req.user, req.params.categoryId, { write: 'structure' }))
@@ -57,14 +57,14 @@ export function competitorRoutes(stores) {
     res.json({ competitor: (await competitorScope(req)).competitor })
   })
 
-  flat.patch('/:id', requireRole('admin'), async (req, res) => {
+  flat.patch('/:id', requireTournamentAdmin(), async (req, res) => {
     const patch = body.forPatch(req.body)
     const found = await competitorScope(req, 'structure')
     guard.assertNotDrawn(found)
     res.json({ competitor: await competitors.update(req.params.id, patch) })
   })
 
-  flat.delete('/:id', requireRole('admin'), async (req, res) => {
+  flat.delete('/:id', requireTournamentAdmin(), async (req, res) => {
     guard.assertNotDrawn(await competitorScope(req, 'structure'))
     // Someone who has fought keeps their record: their bouts would point at nobody.
     const fought = (await stores.matches.list({ categoryId: (await competitors.get(req.params.id)).categoryId }))

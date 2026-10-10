@@ -4,6 +4,9 @@
 export const ROLE = {
   SUPER_ADMIN: 'super_admin',
   ADMIN: 'admin', // Tournament Admin
+  // Runs the tournaments handed to it and nothing else: everything inside an
+  // assigned event, no sight of any other event and no system-wide screen.
+  TOURNAMENT_OWNER: 'tournament_owner',
   REGISTRATION_OFFICER: 'registration_officer',
   WEIGHIN_OFFICER: 'weighin_officer',
   REFEREE: 'referee',
@@ -18,6 +21,7 @@ export const ROLE = {
 export const ROLE_LABEL = {
   super_admin: 'Super Admin',
   admin: 'Tournament Admin',
+  tournament_owner: 'Tournament Owner',
   registration_officer: 'Registration Officer',
   weighin_officer: 'Weigh-in Officer',
   referee: 'Referee',
@@ -76,6 +80,11 @@ export const ROLE_PERMISSIONS = {
   // Everything a tournament needs; backups and rulesets are system-wide and
   // stay with the super admin (PRD v1 §4).
   admin: ALL.filter((p) => ![P.BACKUP_MANAGE, P.RULESET_MANAGE].includes(p)),
+  // Everything an admin does inside a tournament, on the tournaments it was
+  // given. Accounts, backups and rulesets are system-wide and are not its
+  // business; which tournaments it reaches is decided by the assignment, not
+  // by this table (see mayAccessTournament).
+  tournament_owner: ALL.filter((p) => ![P.USER_MANAGE, P.BACKUP_MANAGE, P.RULESET_MANAGE].includes(p)),
   registration_officer: [P.REGISTRATION_VIEW, P.REGISTRATION_MANAGE, P.PLAYER_EDIT, P.PUBLIC_VIEW],
   weighin_officer: [P.REGISTRATION_VIEW, P.WEIGHIN_RECORD, P.PUBLIC_VIEW],
   referee: [P.MATCH_SCORE, P.PUBLIC_VIEW],
@@ -92,6 +101,23 @@ export const ROLE_PERMISSIONS = {
 export const TOURNAMENT_ADMIN_PERMISSIONS = TOURNAMENT_ADMIN
 
 export const can = (role, permission) => !!ROLE_PERMISSIONS[role]?.includes(permission)
+
+/**
+ * Roles whose reach is the list of tournaments they were given, and nothing
+ * more. Every other role treats an empty list as "no limit", which is how the
+ * app has always behaved; an owner with no tournaments reaches none.
+ */
+export const ASSIGNED_ONLY_ROLES = [ROLE.TOURNAMENT_OWNER]
+
+export const reachesOnlyAssigned = (role) => ASSIGNED_ONLY_ROLES.includes(role)
+
+/**
+ * Who may do an administrator's work inside a tournament. Whether that
+ * tournament is theirs is a separate question, answered by
+ * mayAccessTournament; this only says the role is allowed the action.
+ */
+export const actsAsTournamentAdmin = (role) =>
+  [ROLE.SUPER_ADMIN, ROLE.ADMIN, ROLE.TOURNAMENT_OWNER].includes(role)
 
 /** Roles an account can hold. Coaches and the public are not accounts. */
 export const ACCOUNT_ROLES = Object.values(ROLE).filter((r) => !['coach', 'public'].includes(r))

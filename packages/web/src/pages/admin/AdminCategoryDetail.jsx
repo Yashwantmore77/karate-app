@@ -23,7 +23,7 @@ const validationSchema = Yup.object({
   age: Yup.number().typeError('Age must be a number').positive('Age must be positive').integer('Age must be a whole number').required('Age required'),
 })
 
-export default function AdminCategoryDetail({ uid }) {
+export default function AdminCategoryDetail({ uid, basePath = '/admin' }) {
   const navigate = useNavigate()
   const { tournamentId, categoryId } = useParams()
   const [tournament, setTournament] = useState(null)
@@ -132,7 +132,7 @@ export default function AdminCategoryDetail({ uid }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
       <PageBar>
         <Toolbar>
-          <IconButton color="inherit" aria-label="Back" onClick={() => navigate(`/admin/tournament/${tournamentId}`)} sx={{ mr: 2 }}>
+          <IconButton color="inherit" aria-label="Back" onClick={() => navigate(`${basePath}/tournament/${tournamentId}`)} sx={{ mr: 2 }}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>

@@ -77,7 +77,7 @@ const STATUS_TIP = {
 }
 
 /** Sections 25-28 and 37: the match queue per mat, scheduling and Rule 6 corrections. */
-export default function MatchesTab({ tournament, version, action }) {
+export default function MatchesTab({ tournament, version, action, basePath = '/admin' }) {
   const navigate = useNavigate()
   const tid = tournament.id
   const settings = settingsOf(tournament)
@@ -148,7 +148,7 @@ export default function MatchesTab({ tournament, version, action }) {
           { key: 'status', label: 'Status', render: (m) => <StatusBadge status={m.resultType && m.resultType !== 'COMPLETED' ? m.resultType : m.status} /> },
           { key: 'actions', label: '', sortable: false, render: (m) => (
             <Stack direction="row">
-              <IconButton size="small" aria-label="Open scoring console" disabled={!m.redId || !m.blueId} onClick={() => navigate(`/admin/match/${m.id}`)}><SportsMma fontSize="small" /></IconButton>
+              <IconButton size="small" aria-label="Open scoring console" disabled={!m.redId || !m.blueId} onClick={() => navigate(`${basePath}/match/${m.id}`)}><SportsMma fontSize="small" /></IconButton>
               <IconButton size="small" aria-label="Schedule" onClick={() => setSchedule({ id: m.id, categoryId: m.categoryId, number: m.matchNumber, mat: m.mat || 1, scheduledAt: isoToLocalInput(m.scheduledAt), refereeId: m.refereeId || '', judgeIds: m.judgeIds || [] })}><Schedule fontSize="small" /></IconButton>
               {/* PRD point 15: swap AKA and AO before the bout. */}
               <IconButton size="small" aria-label="Swap AKA and AO" disabled={!!boutOutcome(m) || ON_MAT.includes(m.status) || (!m.redId && !m.blueId)}

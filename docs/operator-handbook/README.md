@@ -62,6 +62,7 @@ The app runs the whole tournament for you: entries, draw, bouts, scores, results
 | Person | What they do | Screen they use |
 | --- | --- | --- |
 | You, the **Tournament Admin** | Run everything and fix problems | Every tab of the tournament |
+| **Tournament Owner** | Runs the tournaments they were given, and sees no others | Every tab of their own tournaments |
 | **Registration Officer** | Checks and approves the entries | Registrations |
 | **Weigh-in Officer** | Weighs the Kumite players | Weigh-in |
 | **Announcer** | Calls the next bouts to each mat | Call matches |
@@ -234,7 +235,7 @@ Each official needs their own account. Make them before the event, so everyone c
 *1 Accounts, 2 New account*
 
 2. Type the person's **Email** (1) and a **Password** (2) of at least 8 characters.
-3. Choose the **Role** (3): Referee, Kata Judge, Announcer, Scoreboard Operator, Weigh-in Officer, Registration Officer, Tournament Admin or Viewer (read-only).
+3. Choose the **Role** (3): Referee, Kata Judge, Announcer, Scoreboard Operator, Weigh-in Officer, Registration Officer, Tournament Admin or Viewer (read-only). **Tournament Owner** is in the list only when a Super Admin is signed in; see "Hand a tournament to its owner" below.
 4. For a Kata Judge, type their **Seat** (4) on the panel: 1 for the first judge, 2 for the second, and so on.
 5. Click **Create account** (5).
 
@@ -245,6 +246,35 @@ Each official needs their own account. Make them before the event, so everyone c
 6. Give each person their email and password, and ask them to sign in once before the event day.
 
 **Done when** every official is in the Accounts list. You need at least one Referee per mat and one Kata Judge per seat (5 seats unless you changed the panel size).
+
+### Hand a tournament to its owner
+
+Someone who runs one event of their own — a club hosting its own cup, a district
+organiser — gets a **Tournament Owner** account. Inside the tournaments you give
+them they do everything you do: details, categories, entries, weigh-in, draw,
+bouts, results, certificates and reports. Outside them they see nothing at all:
+no other tournament, no staff accounts, no sign-in log, no backups.
+
+Making one takes two people, on purpose:
+
+1. **A Super Admin creates the account.** In Accounts, New account, with the
+   role **Tournament Owner**. A Tournament Admin does not get this choice; the
+   app answers "Only a super admin can create, change or remove a Tournament
+   Owner" if one tries.
+2. **You, the Tournament Admin, give them their tournaments.** Open the account
+   in Accounts, and tick them under **Tournaments this account may work**. You
+   can only tick tournaments your own organisation runs.
+
+A new owner with nothing ticked sees no tournaments at all — the list says
+"None yet" against their name. That is the point of the role: an owner reaches
+exactly what you ticked and nothing else.
+
+Their app is the same as yours, with less on it. The top bar shows **My
+tournaments**, Analytics, Live board and Public site; there is no Accounts, no
+System and no **New Tournament** button, and they cannot delete a tournament.
+If they need another one, tick it for them.
+
+**Done when** the owner signs in and sees their tournament, and only theirs.
 
 ## 5. Part 2 — Registration
 
@@ -715,6 +745,7 @@ First look at **Needs attention** at the top of the tab: it names the problem an
 | A player does not come to the mat | The announcer marks them **Absent**. The referee records the result with **Decision**, or you use **Enter result** and choose No-show |
 | A player is injured and cannot go on | On Registrations, click the walking figure to withdraw them. Their remaining bouts go to their opponents |
 | "You do not have permission to do that" | Your role cannot do it. Ask a Tournament Admin |
+| A Tournament Owner cannot see a tournament | It has not been ticked for them. A Tournament Admin ticks it in Accounts, under "Tournaments this account may work" |
 | "This session was signed out" | Your sign-in ended or was stopped from another device. Sign in again |
 
 For any other message, the full [User Guide](../user-guide/README.md) lists every message and what to do.
@@ -748,3 +779,4 @@ Section 1 explained event, category, pool, bout, mat, Aka and Ao. These are the 
 | Provisional, Verified, Published | A result worked out by the app, checked by you, and shown to the public |
 | Pass | An ID card with a photo and a QR code, scanned at the door or the mat |
 | Needs attention | The box at the top of each tab that lists what to fix next |
+| Tournament Owner | An account that runs the tournaments it was given, and sees no others. A Super Admin creates it; a Tournament Admin gives it its tournaments |

@@ -30,7 +30,7 @@ import { paymentsEnabled } from '@kumite/shared/features.js'
 import { seededRandom } from '@kumite/shared/pools.js'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { CATEGORY_PRESETS, weightClasses } from '@kumite/shared/presets.js'
-import { listAssignableOfficials, listCoachAccounts, deleteUser, createUser, findUserRecordByEmail } from '../auth/users.js'
+import { listAssignableOfficials, listCoachAccounts, deleteUser, createUser, updateUser, findUserRecordByEmail } from '../auth/users.js'
 import { DEFAULT_SLOT_MINUTES, endOfSlot } from '../lib/schedule.js'
 
 export const SCENARIO_PREFIX = 'test-'
@@ -659,6 +659,12 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
     const passes = await tms.listPasses(t.id)
     for (const p of passes.slice(0, Math.floor(passes.length * 0.7))) await tms.checkIn(admin, t.id, p.code)
 
+    // One tournament owner, holding this event and no other, so the role can
+    // be tried end to end: sign in as owner@kata.local and only this
+    // tournament is there.
+    const owner = await findUserRecordByEmail('owner@kata.local')
+    if (owner) await updateUser(owner.uid, { tournamentIds: [t.id] })
+
     note(t, 'State Championship', 'LIVE', [
       'Matches: scheduled, called, called twice, ready (both present), console open, live (with score events), paused, cancelled',
       'Results: points win, senshu, hantei (decision), 8-point gap, walkover, no-show, kiken, disqualification (shikkaku), manual override',
@@ -670,6 +676,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
       'Kata and Kumite take turns: the kata session ran first (men\'s kata to the final); Kumite is on the mats now',
       'Women\'s kata round 1 set up, waiting for the next kata session',
       'Passes printed; about 70% checked in',
+      'Tournament owner owner@kata.local holds this event only: it is the one tournament they can open',
     ])
   }
 

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, requireRole, tournamentAccess } from '../auth/middleware.js'
+import { requireAuth, requireTournamentAdmin, tournamentAccess } from '../auth/middleware.js'
 import { findUserRecord } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
@@ -50,7 +50,7 @@ export function categoryRoutes(stores) {
     res.json({ categories: rows, ...pageMeta({ page, limit, total }) })
   })
 
-  nested.post('/:tournamentId/categories', requireRole('admin'), async (req, res) => {
+  nested.post('/:tournamentId/categories', requireTournamentAdmin(), async (req, res) => {
     const fields = body.forCreate(req.body)
     const tournament = await loadOrFail(tournaments, req.params.tournamentId)
     if (tournament.lifecycleStatus === 'ARCHIVED') throw conflict('tournament_archived')
@@ -66,7 +66,7 @@ export function categoryRoutes(stores) {
     res.json({ category })
   })
 
-  flat.patch('/:id', requireRole('admin'), async (req, res) => {
+  flat.patch('/:id', requireTournamentAdmin(), async (req, res) => {
     const patch = body.forPatch(req.body)
     const found = await guard.scope(req.user, req.params.id, { write: 'structure' })
     guard.assertNotDrawn(found)
@@ -76,7 +76,7 @@ export function categoryRoutes(stores) {
     res.json({ category })
   })
 
-  flat.delete('/:id', requireRole('admin'), async (req, res) => {
+  flat.delete('/:id', requireTournamentAdmin(), async (req, res) => {
     const found = await guard.scope(req.user, req.params.id, { write: 'structure' })
     guard.assertNotDrawn(found)
     // Bouts with results are history: a category whose bouts were fought is not deleted.

@@ -1,4 +1,4 @@
-import { roleIn } from '@kumite/shared/permissions.js'
+import { roleIn, actsAsTournamentAdmin } from '@kumite/shared/permissions.js'
 import { mayAccessTournament } from './middleware.js'
 import { findUserRecord } from './users.js'
 
@@ -7,7 +7,7 @@ import { findUserRecord } from './users.js'
  * match"). Answers for the tournament the bout belongs to, with the role the
  * account holds there:
  *
- *  - a super admin, or an admin of that tournament, always;
+ *  - a super admin, or an admin or owner of that tournament, always;
  *  - a referee assigned to the bout, or to a bout nobody has been put on yet
  *    (panels are often set after the schedule, as the match lists assume);
  *  - nobody else, and nobody outside the tournament.
@@ -26,7 +26,8 @@ export async function matchAuthority(user, match, { categories, tournaments }) {
     if (!mayAccessTournament(account, tournamentId, tournament)) return { ok: false, error: 'tournament_forbidden', tournamentId }
   }
   const role = (tournamentId && roleIn(account, tournamentId)) || account.role
-  if (['admin', 'super_admin'].includes(role)) return { ok: true, role, tournamentId }
+  // An owner runs its own tournament, so it holds its bouts like an admin.
+  if (actsAsTournamentAdmin(role)) return { ok: true, role, tournamentId }
   if (role === 'referee') {
     return !match.refereeId || match.refereeId === user.uid
       ? { ok: true, role, tournamentId }

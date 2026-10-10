@@ -65,10 +65,17 @@ In the table, `<app>` is the address where your app is installed (for example `h
 
 An account has one role. An admin can also give it a different role inside one tournament, or limit it to some tournaments (Accounts page).
 
+For every role except Tournament Owner, an empty tournament list means all of
+them. For a Tournament Owner it means none: an owner reaches exactly the
+tournaments ticked for it. Only a Super Admin creates, changes or deletes an
+owner account; a Tournament Admin ticks its tournaments, inside its own
+organisation.
+
 | Role | Home screen | Tournament tabs and screens |
 | --- | --- | --- |
 | Super Admin | `/admin` | Everything, plus backups, rulesets and organisations |
 | Tournament Admin | `/admin` | Every tournament tab, accounts, sign-ins, analytics |
+| Tournament Owner | `/tournament_owner` | Every tournament tab, on its assigned tournaments only. No accounts, sign-ins, backups or rulesets, and it cannot create or delete a tournament |
 | Registration Officer | Choose a tournament | Dashboard, Registrations |
 | Weigh-in Officer | Choose a tournament | Dashboard, Registrations (read), Weigh-in, Check-in & passes |
 | Announcer | Choose a tournament | Call matches, Check-in & passes |
@@ -78,11 +85,15 @@ An account has one role. An admin can also give it a different role inside one t
 | Viewer (read-only) | Choose a tournament | Dashboard, Registrations, Reports |
 | Coach / Team Manager | The registration link | Their own team and players only |
 
-Only admins hold the sensitive privileges: correcting a finished score, overriding a result, redrawing pools, reopening a completed tournament, and overriding a closed weigh-in.
+Only admins hold the sensitive privileges: correcting a finished score, overriding a result, redrawing pools, reopening a completed tournament, and overriding a closed weigh-in. A Tournament Owner holds the same ones inside the tournaments it was given.
 
 ![Staff with one job pick a tournament first (here the Registration Officer).](images/staff-picker.webp)
 
 *Staff with one job pick a tournament first (here the Registration Officer).*
+
+![A Tournament Owner sees only the tournaments ticked for it, and no admin screens.](images/owner-tournaments.webp)
+
+*A Tournament Owner sees only the tournaments ticked for it, and no admin screens.*
 
 ### Help inside the app
 
@@ -897,7 +908,7 @@ The app checks every action on the server, so a rule cannot be skipped from any 
 | Registration link password | At most 10 tries per minute |
 | Two-step code | The current 6-digit code from the authenticator app |
 | Sign-in length | 12 hours; signing a device out ends its session at once |
-| Reach | An account limited to some tournaments, or to an organisation, cannot open others |
+| Reach | An account limited to some tournaments, or to an organisation, cannot open others. A Tournament Owner with no tournaments ticked reaches none at all |
 | Own role | Cannot be changed by yourself |
 | Uploads (photo, ID proof, logo) | PNG, JPEG or PDF, up to 2 MB; the file's content must match its type |
 | Request limits | 1,200 requests a minute per signed-in device; public pages and scoreboards 6,000 a minute per address |
@@ -1002,6 +1013,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | You do not have permission to do that. | Your role cannot do this; ask an admin |
 | An account with that email already exists. | Use the existing account or another email |
 | You cannot change your own role. Ask another administrator. | Another admin changes it |
+| Only a super admin can create, change or remove a Tournament Owner. | A Super Admin makes the account; a Tournament Admin then ticks its tournaments |
 
 ## 14. Karate terms on screen
 

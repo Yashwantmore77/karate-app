@@ -34,7 +34,16 @@ const validationSchema = Yup.object({
   type: Yup.string().oneOf(TOURNAMENT_TYPES.map(([v]) => v)).required('Tournament type required'),
 })
 
-export default function AdminTournamentList({ uid }) {
+/**
+ * The tournament list, shared by the administrator and the tournament owner.
+ *
+ * An owner may run the tournaments it was given but not add or remove one, so
+ * it gets the same table without those two actions. The server enforces the
+ * same split (POST and DELETE /tournaments stay behind the admin gate); this
+ * keeps a button from offering what the API would refuse.
+ */
+export default function AdminTournamentList({ uid, profile = null, basePath = '/admin' }) {
+  const mayAddOrRemove = profile?.role !== 'tournament_owner'
   const navigate = useNavigate()
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -130,8 +139,10 @@ export default function AdminTournamentList({ uid }) {
       <PageBar>
         <Toolbar>
           <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6">Admin Dashboard</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.9 }}>Manage tournaments</Typography>
+            <Typography variant="h6">{mayAddOrRemove ? 'Admin Dashboard' : 'My Tournaments'}</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.9 }}>
+              {mayAddOrRemove ? 'Manage tournaments' : 'The tournaments you have been given'}
+            </Typography>
           </Box>
         </Toolbar>
       </PageBar>
@@ -147,13 +158,15 @@ export default function AdminTournamentList({ uid }) {
               onChange={setSearch}
               placeholder="Search name or location"
             />
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={handleOpenCreate}
-            >
-              New Tournament
-            </Button>
+            {mayAddOrRemove && (
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={handleOpenCreate}
+              >
+                New Tournament
+              </Button>
+            )}
           </Box>
         </Box>
 
@@ -209,7 +222,7 @@ export default function AdminTournamentList({ uid }) {
                       <IconButton
                         size="small"
                         color="primary"
-                        onClick={() => navigate(`/admin/tournament/${t.id}/manage`)}
+                        onClick={() => navigate(`${basePath}/tournament/${t.id}/manage`)}
                         title="View"
                         sx={{ mr: 1 }}
                       >
@@ -224,14 +237,16 @@ export default function AdminTournamentList({ uid }) {
                       >
                         <Edit fontSize="small" />
                       </IconButton>
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => setDeleteConfirm(t.id)}
-                        title="Delete"
-                      >
-                        <Delete fontSize="small" />
-                      </IconButton>
+                      {mayAddOrRemove && (
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => setDeleteConfirm(t.id)}
+                          title="Delete"
+                        >
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
