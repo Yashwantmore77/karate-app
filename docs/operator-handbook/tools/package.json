@@ -1,0 +1,12 @@
+{
+  "name": "operator-handbook-tools",
+  "private": true,
+  "type": "module",
+  "description": "Builds docs/operator-handbook/Operator-Handbook.pdf and retakes the handbook's screenshots.",
+  "dependencies": {
+    "marked": "15.0.12",
+    "marked-gfm-heading-id": "4.1.1",
+    "pdf-lib": "1.17.1",
+    "playwright-core": "1.56.1"
+  }
+}

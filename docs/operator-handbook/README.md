@@ -2,6 +2,8 @@
 
 _Last updated 10 October 2026._
 
+**Download:** [Operator-Handbook.pdf](Operator-Handbook.pdf), to print or to send to the person running the tournament.
+
 ## Contents
 
 - [How to use this handbook](#how-to-use-this-handbook)
