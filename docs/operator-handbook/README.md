@@ -25,7 +25,7 @@ This handbook teaches you to run a karate tournament on the app, even if you hav
 - Every job is a list of numbered steps. Do step 1, then step 2, and so on.
 - Words in **bold** are the exact words you will see on a button, tab or box.
 - Each picture shows the screen you should see. A numbered marker shows where to click. The same number appears in brackets in the steps, like (1).
-- Each job ends with **Done when**: how you know it worked.
+- Most jobs end with **Done when**: how you know it worked.
 - Opening pages and tabs changes nothing, so you can look around freely.
 
 Not every job may be yours. If someone else sets up the tournament, start at Part 5 (competition day). Section 10 has checklists to print, and section 11 says what to do when something goes wrong. The full [User Guide](../user-guide/README.md) lists every rule and message, for when you need more detail.
