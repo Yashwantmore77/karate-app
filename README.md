@@ -8,6 +8,10 @@ devices; a public scoreboard shows the hall what is on.
 What it is meant to do, and what is out of scope, is in
 [KUMITE-PRD.md](KUMITE-PRD.md).
 
+How to run a tournament in the app, screen by screen, with screenshots, every
+validation rule and what each message means, is in the
+[user guide](docs/user-guide/README.md).
+
 ## How it fits together
 
 ```
