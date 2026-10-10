@@ -24,7 +24,7 @@ This handbook teaches you to run a karate tournament on the app, even if you hav
 
 - Every job is a list of numbered steps. Do step 1, then step 2, and so on.
 - Words in **bold** are the exact words you will see on a button, tab or box.
-- Each picture shows the screen you should see. A numbered marker shows where to click. The same number appears in brackets in the steps, like (1).
+- Each picture shows the screen you should see. A numbered marker shows where to click. The same number appears in brackets in the steps, like (1). The pictures come from a practice tournament, so the names and numbers on your screen will be different.
 - Most jobs end with **Done when**: how you know it worked.
 - Opening pages and tabs changes nothing, so you can look around freely.
 
