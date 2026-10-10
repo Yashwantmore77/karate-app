@@ -14,6 +14,9 @@
     "test": "npm run test:run --workspaces --if-present",
     "test:web": "npm run test:run -w @kumite/web",
     "test:api": "npm run test:run -w @kumite/api",
-    "test:shared": "npm run test:run -w @kumite/shared"
+    "test:shared": "npm run test:run -w @kumite/shared",
+    "docs:tools": "npm install --prefix docs/operator-handbook/tools --no-audit --no-fund --silent",
+    "docs:pdf": "npm run docs:tools && node docs/operator-handbook/tools/make-pdf.mjs",
+    "docs:screenshots": "npm run docs:tools && node docs/operator-handbook/tools/screenshots.mjs"
   }
 }

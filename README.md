@@ -12,6 +12,11 @@ How to run a tournament in the app, screen by screen, with screenshots, every
 validation rule and what each message means, is in the
 [user guide](docs/user-guide/README.md).
 
+Someone running a tournament for the first time should start with the
+[operator handbook](docs/operator-handbook/README.md): every job in order,
+click by click, with checklists to print. It is also a
+[PDF](docs/operator-handbook/Operator-Handbook.pdf) to print or send.
+
 ## How it fits together
 
 ```
