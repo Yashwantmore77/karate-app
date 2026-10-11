@@ -75,11 +75,12 @@ const TOURNAMENT_ADMIN = ALL.filter((p) => p !== P.USER_MANAGE)
 
 export const ROLE_PERMISSIONS = {
   super_admin: ALL,
-  // Kept at full access: `admin` is the account the app has always shipped
-  // with and every existing screen assumes it can do everything.
-  // Everything a tournament needs; backups and rulesets are system-wide and
-  // stay with the super admin (PRD v1 §4).
-  admin: ALL.filter((p) => ![P.BACKUP_MANAGE, P.RULESET_MANAGE].includes(p)),
+  // Full system access, backups and rulesets included. An installation's first
+  // account is an administrator and may be its only one, so anything an
+  // administrator could not do would be out of reach altogether. A super admin
+  // is not a wider set of powers, only a wider scope: it works across
+  // organisations, where an administrator works inside its own.
+  admin: ALL,
   // Everything an admin does inside a tournament, on the tournaments it was
   // given. Accounts, backups and rulesets are system-wide and are not its
   // business; which tournaments it reaches is decided by the assignment, not

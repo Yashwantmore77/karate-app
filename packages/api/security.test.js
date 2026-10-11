@@ -31,24 +31,73 @@ describe('security review', () => {
     expect(() => checkSecret({ NODE_ENV: 'development' })).not.toThrow()
   })
 
-  it('never seeds the published demo passwords into a production database', async () => {
+  it('ships no accounts of its own, in any environment', async () => {
+    vi.resetModules()
+    try {
+      // A freshly loaded store, before the test roster is put into it: an
+      // installation starts with nothing to sign in as, so no password
+      // written down in this repository opens one.
+      const { listUsers } = await import('./auth/users.js')
+      expect((await listUsers({ limit: 1 })).total).toBe(0)
+    } finally {
+      vi.resetModules()
+    }
+  })
+
+  it('makes the first account from the environment, never from code', async () => {
     vi.resetModules()
     const before = { ...process.env }
     try {
       process.env.NODE_ENV = 'production'
-      delete process.env.SEED_DEMO_ACCOUNTS
       const { initialAccounts } = await import('./auth/users.js')
       expect(await initialAccounts({})).toEqual([])
       const [admin, ...rest] = await initialAccounts({ BOOTSTRAP_ADMIN_EMAIL: 'Owner@Example.org', BOOTSTRAP_ADMIN_PASSWORD: 'a-long-passphrase' })
       expect(rest).toHaveLength(0)
-      expect(admin).toMatchObject({ email: 'owner@example.org', role: 'super_admin' })
+      expect(admin).toMatchObject({ email: 'owner@example.org', role: 'admin' })
       expect(admin.passwordHash).not.toContain('a-long-passphrase')
-      // too short a bootstrap password is refused
+      // Too short a bootstrap password is refused, by the same rule every
+      // other account is held to.
       expect(await initialAccounts({ BOOTSTRAP_ADMIN_EMAIL: 'a@b.co', BOOTSTRAP_ADMIN_PASSWORD: 'short' })).toEqual([])
     } finally {
       process.env = before
       vi.resetModules()
     }
+  })
+
+  describe('the credentials shown on the sign-in screen', () => {
+    const asked = () => call('GET', '/auth/test-credentials')
+
+    it('says nothing unless it is switched on', async () => {
+      const before = { ...process.env }
+      try {
+        process.env.BOOTSTRAP_ADMIN_EMAIL = 'boss@club.test'
+        process.env.BOOTSTRAP_ADMIN_PASSWORD = 'open-sesame-9'
+        delete process.env.SHOW_TEST_CREDENTIALS
+        expect((await asked()).body).toEqual({ credentials: null })
+        // Any other value is off too: only the exact word turns it on.
+        process.env.SHOW_TEST_CREDENTIALS = 'yes'
+        expect((await asked()).body).toEqual({ credentials: null })
+      } finally {
+        process.env = before
+      }
+    })
+
+    it('gives the bootstrap administrator when it is', async () => {
+      const before = { ...process.env }
+      try {
+        process.env.SHOW_TEST_CREDENTIALS = 'true'
+        process.env.BOOTSTRAP_ADMIN_EMAIL = 'Boss@Club.test'
+        process.env.BOOTSTRAP_ADMIN_PASSWORD = 'open-sesame-9'
+        expect((await asked()).body).toEqual({ credentials: { email: 'boss@club.test', password: 'open-sesame-9' } })
+
+        // Switched on but with nothing to show: still silent, rather than an
+        // empty pair the screen would print as blanks.
+        delete process.env.BOOTSTRAP_ADMIN_PASSWORD
+        expect((await asked()).body).toEqual({ credentials: null })
+      } finally {
+        process.env = before
+      }
+    })
   })
 
   it("keeps an organisation's admin from granting roles in another organisation's tournaments", async () => {

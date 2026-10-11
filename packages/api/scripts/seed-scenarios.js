@@ -323,6 +323,34 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
   }
 
   /**
+   * The accounts the scenarios are run and read through, when there are none.
+   *
+   * The app itself ships no accounts: an installation's first administrator
+   * comes from BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD and the rest
+   * are made through Accounts. This seeder is the one place that still hands
+   * out a known password, because its whole purpose is test data and it is
+   * never run by itself — and it stays out of the way of a real installation:
+   * one account already in the store and it creates none.
+   */
+  async function loadRoster() {
+    if ((await listAssignableOfficials().catch(() => [])).length) return
+    const roster = [
+      { email: 'admin@kata.local', role: 'admin' },
+      { email: 'referee@kata.local', role: 'referee' },
+      ...[1, 2, 3, 4].map((seat) => ({ email: `judge${seat}@kata.local`, role: 'judge', seat })),
+      { email: 'superadmin@kata.local', role: 'super_admin' },
+      { email: 'owner@kata.local', role: 'tournament_owner' },
+      { email: 'registrar@kata.local', role: 'registration_officer' },
+      { email: 'weighin@kata.local', role: 'weighin_officer' },
+      { email: 'announcer@kata.local', role: 'announcer' },
+      { email: 'scoreboard@kata.local', role: 'scoreboard_operator' },
+      { email: 'viewer@kata.local', role: 'viewer' },
+    ]
+    for (const account of roster) await createUser({ ...account, password: OFFICIAL_PASSWORD })
+    log(`[seed] no accounts found, so a test roster was created (password ${OFFICIAL_PASSWORD}): ${roster.map((a) => a.email).join(', ')}`)
+  }
+
+  /**
    * The referees and judges to put on matches. When the database has none,
    * test officials are created, so every scheduled match has a panel.
    */
@@ -348,7 +376,7 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
     }
   }
 
-  return { tms, random, pick, day, name, dobFor, tournament, teams, players, approve, weighAll, steps, draw, schedule, fight, boutsOf, openBouts, finishDivision, kata, loadOfficials, get officials() { return officials } }
+  return { tms, random, pick, day, name, dobFor, tournament, teams, players, approve, weighAll, steps, draw, schedule, fight, boutsOf, openBouts, finishDivision, kata, loadRoster, loadOfficials, get officials() { return officials } }
 }
 
 // --- the scenarios -------------------------------------------------------------------
@@ -379,6 +407,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
   }
   const b = builder(stores, { now, log })
   const { tms, day } = b
+  await b.loadRoster()
   await b.loadOfficials()
   const summary = []
   const note = (t, title, status, scenarios) => summary.push({ id: t.id, slug: t.slug, title, status, scenarios })

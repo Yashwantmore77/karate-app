@@ -114,14 +114,19 @@ describe('sessions (PRD v1 §26)', () => {
 })
 
 describe('rulesets (PRD v1 §6, §24)', () => {
-  it('lets staff read, only the super admin write, and a tournament apply one', async () => {
+  it('lets staff read, an administrator write, and a tournament apply one', async () => {
     const { body: { rulesets } } = await call('GET', '/rulesets', undefined, tokens.admin)
     const wkf = rulesets.find((r) => r.id === 'builtin-wkf')
     expect(wkf).toBeTruthy()
     const draft = { name: 'District Cadet', description: 'Shorter bouts', kumite: { ...wkf.kumite, matchDurationSec: 90 }, kata: wkf.kata }
-    expect((await call('POST', '/rulesets', draft, tokens.admin)).status).toBe(403)
-    const created = await call('POST', '/rulesets', draft, tokens.superadmin)
+    // Writing a ruleset is an administrator's now as well as a super admin's:
+    // full system access, so the one account an installation starts with is
+    // not shut out of its own rules.
+    expect((await call('POST', '/rulesets', { ...draft, name: 'Super Cadet' }, tokens.superadmin)).status).toBe(201)
+    const created = await call('POST', '/rulesets', draft, tokens.admin)
     expect(created.status).toBe(201)
+    // Still closed to every role below: staff read the rules, never edit them.
+    expect((await call('POST', '/rulesets', { ...draft, name: 'Operator Cadet' }, tokens.scoreboard)).status).toBe(403)
 
     const t = await tournament('rules-open')
     const applied = await call('POST', `/tournaments/${t}/ruleset`, { rulesetId: created.body.ruleset.id }, tokens.admin)
@@ -137,10 +142,15 @@ describe('system audit and backup (PRD v1 §22-23)', () => {
     expect(audit.some((a) => a.action === 'organization.changed' && a.reason === 'created')).toBe(true)
     expect(audit.some((a) => a.action === 'auth.logout')).toBe(true)
 
-    expect((await call('GET', '/system/backup', undefined, tokens.admin)).status).toBe(403)
-    const backup = (await call('GET', '/system/backup', undefined, tokens.superadmin)).body
+    // A backup is an administrator's too, for the same reason: an installation
+    // whose only account could not take one would have no way to take one.
+    expect((await call('GET', '/system/backup', undefined, tokens.superadmin)).status).toBe(200)
+    const backup = (await call('GET', '/system/backup', undefined, tokens.admin)).body
     expect(backup.format).toBe(BACKUP_FORMAT)
     expect(backup.collections.organizations).toHaveLength(1)
+    // And refused to every role below, which is the part that matters: a
+    // backup carries every player's details.
+    expect((await call('GET', '/system/backup', undefined, tokens.scoreboard)).status).toBe(403)
   })
 
   it('restores a backup into an empty store, and refuses a full one', async () => {

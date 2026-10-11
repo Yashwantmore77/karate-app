@@ -52,14 +52,15 @@ In the table, `<app>` is the address where your app is installed (for example `h
 3. If two-step sign-in is on for your account, enter the 6-digit code from your authenticator app.
 4. The app opens the home screen for your role (table below).
 
-![The sign-in page. The role buttons only fill in the demo accounts of the test server.](images/login.webp)
+![The sign-in page: email, password and Sign in.](images/login.webp)
 
-*The sign-in page. The role buttons only fill in the demo accounts of the test server.*
+*The sign-in page: email, password and Sign in.*
 
 - A sign-in lasts 12 hours, one tournament day. After that, sign in again.
 - More than 10 sign-in attempts for one account in a minute, or 60 from one address, are refused with "too many attempts". Wait a minute and try again.
 - **Forgot password** sends a reset link that works for 30 minutes. At most 5 requests per 15 minutes.
-- Test server only: every demo account uses the password `test123`. Change or delete these accounts on a real server.
+- There is no sign-up. Accounts are made by an administrator, and the app ships with none: the first administrator of a new installation comes from the server's own settings, and makes everyone else.
+- Test server only: a dashed **Administrator, for testing** panel may sit under the button, showing an address and password with a **Fill these in** button. It appears only where it has been switched on deliberately, never on a real server.
 
 ### Roles and what each one sees
 

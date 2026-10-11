@@ -98,7 +98,8 @@ You sign in once on each device, and the app opens the right screen for your rol
 
 *The sign-in page: 1 Email, 2 Password, 3 Sign in*
 
-- Ignore the buttons above the boxes (Admin, Referee, Judge 1 …). They only fill in the practice accounts of a test server.
+- Your account was made for you by an administrator. There is no "sign up": the app ships with no accounts of any kind, and the only one that ever appears by itself is the first administrator of a brand-new installation (see below).
+- On a test server you may see a dashed **Administrator, for testing** panel under the button, showing an address and password with a **Fill these in** button. It appears only where someone has deliberately switched it on, and never on a real event's server.
 - Forgot your password? Click **Forgot password?** under the button. The email you get has a link that works for 30 minutes.
 - After more than 10 tries in one minute, the app says "too many attempts". Wait one minute and try again.
 
@@ -116,6 +117,8 @@ The bar across the top is on every page. The numbers match the picture.
 4. **Guide**: the step-by-step guide built into the app.
 5. **My account**: your password, two-step sign-in, and the devices you are signed in on.
 6. **Sign out** (the arrow at the far right): use it on a shared computer.
+
+Between those sit the rest of an administrator's pages: **Dashboard**, **Analytics**, **Rulesets** (the bout rules a tournament can be run under), **Sign-ins**, **System** (backups and the audit log), **Scoreboard**, **Live board** and **Public site**.
 
 Other staff see fewer items. A referee sees Matches, a judge sees Kata scoring, and an announcer sees Call matches.
 
@@ -227,6 +230,13 @@ The app puts every player in a category by itself, so the categories must exist 
 ### Job 4: Make accounts for your staff
 
 Each official needs their own account. Make them before the event, so everyone can test their sign-in.
+
+> **On a brand-new installation**, there are no accounts at all — the app ships
+> with none, so no password printed in a manual anywhere can open your event.
+> Whoever sets the server up puts an address and a password into its settings
+> (`BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD`), and starting the
+> server turns that pair into the first **Tournament Admin**. That account makes
+> every other one, here. Change its password from **My account** once you are in.
 
 1. Click **Accounts** in the top bar (1), then **New account** (2).
 

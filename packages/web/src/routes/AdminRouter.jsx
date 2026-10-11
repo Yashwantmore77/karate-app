@@ -18,7 +18,8 @@ export default function AdminRouter({ uid, profile }) {
       <Route path="/" element={<AdminTournamentList uid={uid} />} />
       <Route path="/dashboard" element={<AdminDashboard profile={profile} />} />
       {profile?.role === 'super_admin' && <Route path="/organizations" element={<AdminOrganizations />} />}
-      {profile?.role === 'super_admin' && <Route path="/rulesets" element={<AdminRulesets />} />}
+      {/* An administrator's, like backups: full system access. */}
+      <Route path="/rulesets" element={<AdminRulesets />} />
       <Route path="/system" element={<AdminSystem profile={profile} />} />
       <Route path="/analytics" element={<Analytics />} />
       <Route path="/accounts" element={<AdminUserList uid={uid} />} />

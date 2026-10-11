@@ -29,7 +29,7 @@ const api = async (method, url, body, token) => {
 
 const tokens = {}
 const accounts = { admin: 'admin@kata.local', referee: 'referee@kata.local', judge: 'judge1@kata.local', announcer: 'announcer@kata.local', scoreboard: 'scoreboard@kata.local' }
-for (const [role, email] of Object.entries(accounts)) tokens[role] = (await api('POST', '/auth/login', { email, password: 'test123' })).body.token
+for (const [role, email] of Object.entries(accounts)) tokens[role] = (await api('POST', '/auth/login', { email, password: 'test12345' })).body.token
 // The test tournaments load in the background after the server starts.
 let ts = []
 for (let i = 0; i < 120 && ts.length < 12; i += 1) {
@@ -160,16 +160,18 @@ const formControl = (loc) => loc.locator('xpath=ancestor::div[contains(@class,"M
 
 // --- 2. Sign in and find your way around ------------------------------------------------
 await shot('signin', async () => {
-  const page = await open(null, `${BASE}/login`, { wait: 'Sign in as' })
+  const page = await open(null, `${BASE}/login`, { wait: 'Sign in' })
   await page.getByLabel('Email').fill('you@yourclub.in')
   await page.getByLabel('Password').fill('your-password')
   const boxes = await mark(page, [[page.getByLabel('Email'), 1], [page.getByLabel('Password'), 2], [btn(page, 'Sign in'), 3]])
   await save(page, 'signin', around(page, boxes, { pad: 50, minW: 640, y0: 120, y1: 760 }))
 })
 await shot('topbar', async () => {
-  const page = await open('admin', `${BASE}/admin`, { wait: 'Test 08', height: 520, width: 1440 })
+  // Wide enough that the menu is not squeezed: an administrator's bar carries
+  // every page, and crowded labels make the numbered boxes unreadable.
+  const page = await open('admin', `${BASE}/admin`, { wait: 'Test 08', height: 520, width: 1760 })
   const boxes = await mark(page, [[btn(page, 'Tournaments'), 1], [btn(page, 'Matches'), 2], [btn(page, 'Accounts'), 3], [btn(page, 'Guide'), 4], [btn(page, 'My account'), 5], [btn(page, 'Sign out'), 6]])
-  await save(page, 'topbar', around(page, boxes, { x0: 0, x1: 1440, y0: 0, y1: 360 }))
+  await save(page, 'topbar', around(page, boxes, { x0: 0, x1: 1760, y0: 0, y1: 360 }))
 })
 await shot('tournament-screen', async () => {
   const page = await open('admin', manage('district-open', 'overview'), { wait: 'Needs attention', height: 860 })

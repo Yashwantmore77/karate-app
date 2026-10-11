@@ -97,8 +97,9 @@ SEED_SCENARIOS=true npm run server         # no database: load them into memory 
 
 `--wipe` removes every tournament with all its data, and every match and category, including
 older ones, plus the coach logins of those tournaments. Staff accounts, organisations and rulesets stay.
-If the database has no referee or judge accounts, test officials are created
-(`test.referee1@test.local`, `test.judge1@test.local` … password `test12345`) so every match has a panel. It writes a backup to
+If the database has no accounts at all, a test roster is created (`admin@kata.local`, `referee@kata.local`,
+`judge1@kata.local` … password `test12345`); if it has accounts but no referees or judges, it creates test
+officials instead (`test.referee1@test.local`, `test.judge1@test.local` … same password), so every match has a panel. It writes a backup to
 `packages/api/backups/before-wipe-<time>.json` first (`npm run restore -w @kumite/api -- <file>` brings it back).
 Dates are counted from the day it runs, so "open" is really open and "live" is today.
 
@@ -123,7 +124,16 @@ npm run seed:sample -w @kumite/api -- --reset   # rebuild it from scratch
 npm run mock -w @kumite/api                     # rehearse a whole Kata + Kumite event end to end (22 checked steps)
 npm run mock -w @kumite/api -- --kata bouts     # the same, with kata fought as bouts (flags) on the mats
 npm run loadtest -w @kumite/api                 # mats scoring live while spectators poll
+npm run db:reset -w @kumite/api -- --yes        # empty the database, leaving one administrator
 ```
+
+`db:reset` is the hand-over: it drops every collection — tournaments, players,
+matches, results, files, the audit and sign-in logs and every account — and puts
+back the single administrator named by `BOOTSTRAP_ADMIN_EMAIL` /
+`BOOTSTRAP_ADMIN_PASSWORD`. It refuses to run without `--yes`, and refuses
+before dropping anything if those two are unset, so a reset can never leave a
+database no one can sign in to. Take a backup first if the data might be wanted:
+`npm run backup -w @kumite/api -- backups/before-reset.json`.
 
 Writes to the database in `packages/api/.env` (`MONGODB_URI`): one tournament,
 "Sample State Open 2027" (`/tournament/sample-open-2027`), carried from setup to
@@ -150,8 +160,8 @@ production:
 | `MONGODB_URI`, `MONGODB_DB` | Atlas connection. Unset means in-memory. |
 | `NODE_ENV` | Set to `production` on the live server. It turns on the production safety checks below. |
 | `JWT_SECRET` | Token signing secret, **32+ characters; required in production** (the server will not start without it). In development, leaving it unset means a random secret per boot. |
-| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | The first super admin of an empty production database (password 12+ characters). Production never seeds the demo accounts. |
-| `SEED_DEMO_ACCOUNTS` | `true` to seed the demo accounts (password `test123`) into a database anyway; for staging only. |
+| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | **The only account the app ever creates by itself**: the first Tournament Admin of an empty database (password 8+ characters, the same rule every account is held to). Leave them unset and the database stays empty, with nothing to sign in as. |
+| `SHOW_TEST_CREDENTIALS` | `true` prints the pair above on the sign-in screen, with a button that fills the form. **Testing only** — it hands a working administrator password to anyone who can reach the API. |
 | `CORS_ORIGIN` | The front end's origin, exactly — no trailing slash. |
 | `TRUST_PROXY` | Set only when a proxy sits in front (Render does). |
 | `APP_URL` | The front end's address, for certificate QR codes and email links. |

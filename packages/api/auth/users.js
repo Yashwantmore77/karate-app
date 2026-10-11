@@ -69,43 +69,64 @@ export const verifyPassword = async (password, stored) => {
   return timingSafeEqual(expectedBuf, derived)
 }
 
-// The demo roster, password "test123". Used directly, in memory, when no
-// MONGODB_URI is configured, so local development and the test suite need no
-// database. Into MongoDB it is seeded only outside production, or when
-// SEED_DEMO_ACCOUNTS=true: a published password must never open a real
-// event. A production database starts with one super admin instead, from
-// BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD.
-const SEED = [
-  { uid: 'admin-uid-001', email: 'admin@kata.local', role: 'admin', password: 'test123' },
-  { uid: 'ref-uid-001', email: 'referee@kata.local', role: 'referee', password: 'test123' },
-  { uid: 'judge1-uid', email: 'judge1@kata.local', role: 'judge', seat: 1, password: 'test123' },
-  { uid: 'judge2-uid', email: 'judge2@kata.local', role: 'judge', seat: 2, password: 'test123' },
-  { uid: 'judge3-uid', email: 'judge3@kata.local', role: 'judge', seat: 3, password: 'test123' },
-  { uid: 'judge4-uid', email: 'judge4@kata.local', role: 'judge', seat: 4, password: 'test123' },
-  // PRD section 3 staff roles. Not on the login screen's quick-select chips,
-  // which stay as they were; sign in with the address.
-  { uid: 'registrar-uid', email: 'registrar@kata.local', role: 'registration_officer', password: 'test123' },
-  { uid: 'weighin-uid', email: 'weighin@kata.local', role: 'weighin_officer', password: 'test123' },
-  { uid: 'announcer-uid', email: 'announcer@kata.local', role: 'announcer', password: 'test123' },
-  { uid: 'scoreboard-uid', email: 'scoreboard@kata.local', role: 'scoreboard_operator', password: 'test123' },
-  // PRD point 33 follow-up: an owner runs the events it is given and sees no
-  // other. Seeded with nothing assigned, so it starts out seeing none; the
-  // scenario seeder hands it one tournament.
-  { uid: 'owner-uid', email: 'owner@kata.local', role: 'tournament_owner', password: 'test123' },
-  { uid: 'superadmin-uid', email: 'superadmin@kata.local', role: 'super_admin', password: 'test123' },
-  { uid: 'viewer-uid', email: 'viewer@kata.local', role: 'viewer', password: 'test123' },
-]
+// --- the first account ------------------------------------------------------
+
+// The shortest password any account may have (USER_SCHEMA), applied to the
+// bootstrap administrator too: one rule, not a special case.
+const MIN_PASSWORD = USER_SCHEMA.password.min
+
+/**
+ * The one account an empty database starts with, read from the environment.
+ *
+ * Nothing here ships a roster. Accounts live in the database and are made by
+ * an administrator through /users; the only one that can appear on its own is
+ * this administrator, and its address and password come from
+ * BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD rather than from code.
+ * Set neither and the database stays empty, with nothing to sign in as.
+ */
+export async function initialAccounts(env = process.env) {
+  const email = normalizeEmail(env.BOOTSTRAP_ADMIN_EMAIL || '')
+  const password = env.BOOTSTRAP_ADMIN_PASSWORD || ''
+  if (!email || password.length < MIN_PASSWORD) return []
+  // An administrator, not a super admin: an administrator has full system
+  // access, and a single-tenant installation never needs the role above it.
+  return [{ uid: randomUUID(), email, role: 'admin', passwordHash: await hashPassword(password) }]
+}
 
 // --- in-memory store (no MONGODB_URI) --------------------------------------
 
 const memoryUsers = new Map()
+let memoryReady = null
 
 async function loadMemoryUsers() {
-  if (memoryUsers.size) return memoryUsers
-  for (const { password, ...user } of SEED) {
-    memoryUsers.set(user.email.toLowerCase(), { ...user, passwordHash: await hashPassword(password) })
+  // Latched on the promise rather than on the map's size: an empty bootstrap
+  // leaves the map empty, and a size check would redo the work on every call.
+  if (!memoryReady) {
+    memoryReady = (async () => {
+      for (const user of await initialAccounts()) memoryUsers.set(user.email, user)
+    })()
   }
+  await memoryReady
   return memoryUsers
+}
+
+/**
+ * Puts a ready-made roster into the in-memory store, hashing each password.
+ *
+ * This exists for the test suite, which signs in as a dozen different roles
+ * (see `test/roster.js`). Keeping it out here is the point: no account and no
+ * password is written down in the code that serves the app, so there is
+ * nothing to publish and nothing to forget to remove. Refused once a database
+ * is configured, where the only account that appears by itself is the
+ * bootstrap administrator.
+ */
+export async function installAccounts(accounts) {
+  if (isMongoConfigured()) throw new Error('installAccounts is for the in-memory store only')
+  const users = await loadMemoryUsers()
+  for (const { password, ...user } of accounts) {
+    users.set(user.email.toLowerCase(), { ...user, passwordHash: await hashPassword(password) })
+  }
+  return users.size
 }
 
 async function findMemoryUserByEmail(email) {
@@ -187,35 +208,6 @@ async function deleteMemoryUser(uid) {
 
 let seeded = false
 
-const isProduction = () => process.env.NODE_ENV === 'production'
-export const seedDemoAccounts = () => process.env.SEED_DEMO_ACCOUNTS === 'true'
-  || (!isProduction() && process.env.SEED_DEMO_ACCOUNTS !== 'false')
-
-/** The first accounts of an empty database: the demo roster, or one super admin. */
-export async function initialAccounts(env = process.env) {
-  if (seedDemoAccounts()) {
-    return Promise.all(SEED.map(async ({ password, ...user }) => ({ ...user, passwordHash: await hashPassword(password) })))
-  }
-  const email = normalizeEmail(env.BOOTSTRAP_ADMIN_EMAIL || '')
-  const password = env.BOOTSTRAP_ADMIN_PASSWORD || ''
-  if (!email || password.length < 12) {
-    console.warn('[auth] No accounts yet. Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD (12+ characters) to create the first super admin.')
-    return []
-  }
-  return [{ uid: randomUUID(), email, role: 'super_admin', passwordHash: await hashPassword(password) }]
-}
-
-/** In production, names any demo account that still has the demo password. */
-async function warnAboutDemoPasswords(collection) {
-  if (!isProduction()) return
-  const exposed = []
-  for (const { email, password } of SEED) {
-    const row = await collection.findOne({ email }, { projection: { passwordHash: 1 } })
-    if (row && (await verifyPassword(password, row.passwordHash))) exposed.push(email)
-  }
-  if (exposed.length) console.warn(`[auth] SECURITY: these accounts still use the published demo password; change or delete them: ${exposed.join(', ')}`)
-}
-
 async function usersCollection() {
   const db = await getDb()
   const collection = db.collection(COLLECTION)
@@ -225,7 +217,6 @@ async function usersCollection() {
       const docs = await initialAccounts()
       if (docs.length) await collection.insertMany(docs)
     }
-    warnAboutDemoPasswords(collection).catch(() => {})
     await collection.createIndex({ email: 1 }, { unique: true })
     await collection.createIndex({ uid: 1 }, { unique: true })
   }

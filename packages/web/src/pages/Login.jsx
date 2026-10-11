@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Navigate, Link as RouterLink } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
@@ -6,18 +6,10 @@ import {
   Box, Typography, Button, TextField, CircularProgress, Stack, useMediaQuery, Link
 } from '@mui/material'
 import { useSession } from '../state/SessionContext'
+import { testCredentials } from '../data/session'
 import { currentCoords } from '../data/geolocation'
 import AppStage from '../components/AppStage'
 import { AO, AKA, CYAN } from '../theme/tokens'
-
-const testUsers = [
-  { label: 'Admin', email: 'admin@kata.local', pass: 'test123', accent: CYAN },
-  { label: 'Referee', email: 'referee@kata.local', pass: 'test123', accent: '#5B7BFF' },
-  { label: 'Judge 1', email: 'judge1@kata.local', pass: 'test123', accent: '#FF9192' },
-  { label: 'Judge 2', email: 'judge2@kata.local', pass: 'test123', accent: '#FF9192' },
-  { label: 'Judge 3', email: 'judge3@kata.local', pass: 'test123', accent: '#FF9192' },
-  { label: 'Judge 4', email: 'judge4@kata.local', pass: 'test123', accent: '#FF9192' },
-]
 
 const validationSchema = Yup.object({
   email: Yup.string().email('Invalid email').required('Email required'),
@@ -64,7 +56,16 @@ export default function Login() {
   const [needCode, setNeedCode] = useState(false)
   const [code, setCode] = useState('')
   const [codeError, setCodeError] = useState('')
+  // The administrator credentials, when the server is set up to show them
+  // (SHOW_TEST_CREDENTIALS). Null everywhere else, and the panel stays away.
+  const [demo, setDemo] = useState(null)
   const stillness = useMediaQuery('(prefers-reduced-motion: reduce)')
+
+  useEffect(() => {
+    let live = true
+    testCredentials().then((found) => { if (live) setDemo(found) })
+    return () => { live = false }
+  }, [])
 
   const formik = useFormik({
     initialValues: { email: '', password: '' },
@@ -93,8 +94,8 @@ export default function Login() {
     },
   })
 
-  const selectUser = (testUser) => {
-    formik.setValues({ email: testUser.email, password: testUser.pass })
+  const fillDemo = () => {
+    formik.setValues({ email: demo.email, password: demo.password })
     formik.setErrors({})
   }
 
@@ -146,61 +147,6 @@ export default function Login() {
             </Typography>
           </Box>
         </Stack>
-
-        <Typography sx={{
-          fontSize: 11, letterSpacing: '2px', textTransform: 'uppercase',
-          color: 'rgba(255,255,255,0.4)', fontWeight: 700, mb: 1.5,
-        }}>
-          Sign in as
-        </Typography>
-
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
-          gap: 1,
-          mb: 3,
-        }}>
-          {testUsers.map((testUser) => {
-            const active = formik.values.email === testUser.email
-            return (
-              <Box
-                key={testUser.email}
-                role="button"
-                tabIndex={0}
-                onClick={() => selectUser(testUser)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    selectUser(testUser)
-                  }
-                }}
-                sx={{
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  textAlign: 'center',
-                  py: 1.1,
-                  borderRadius: 2,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: active ? '#fff' : 'rgba(255,255,255,0.68)',
-                  border: '1px solid',
-                  borderColor: active ? testUser.accent : 'rgba(255,255,255,0.14)',
-                  backgroundColor: active ? `${testUser.accent}24` : 'rgba(255,255,255,0.03)',
-                  boxShadow: active ? `0 0 18px ${testUser.accent}44` : 'none',
-                  transition: 'all .2s ease',
-                  '&:hover': {
-                    borderColor: testUser.accent,
-                    backgroundColor: `${testUser.accent}1c`,
-                    transform: stillness ? 'none' : 'translateY(-2px)',
-                  },
-                  '&:focus-visible': { outline: `2px solid ${CYAN}`, outlineOffset: 2 },
-                }}
-              >
-                {testUser.label}
-              </Box>
-            )
-          })}
-        </Box>
 
         <Box component="form" onSubmit={formik.handleSubmit} noValidate>
           <TextField
@@ -275,11 +221,45 @@ export default function Login() {
           </Box>
         </Box>
 
-        <Typography sx={{
-          mt: 2.5, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.4)',
-        }}>
-          Pick a role above to fill the demo credentials
-        </Typography>
+        {demo && (
+          <Box sx={{
+            mt: 2.5, p: 2, borderRadius: 2,
+            border: '1px dashed rgba(255,255,255,0.22)',
+            backgroundColor: 'rgba(255,255,255,0.03)',
+          }}>
+            <Typography sx={{
+              fontSize: 11, letterSpacing: '2px', textTransform: 'uppercase',
+              color: 'rgba(255,255,255,0.45)', fontWeight: 700, mb: 1,
+            }}>
+              Administrator, for testing
+            </Typography>
+            <Stack spacing={0.5} sx={{ mb: 1.5 }}>
+              {[['Email', demo.email], ['Password', demo.password]].map(([label, value]) => (
+                <Stack key={label} direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
+                  <Typography sx={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', minWidth: 68 }}>{label}</Typography>
+                  <Typography sx={{
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                    fontSize: 13, color: '#fff', wordBreak: 'break-all', userSelect: 'all',
+                  }}>
+                    {value}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+            <Button
+              fullWidth
+              size="small"
+              onClick={fillDemo}
+              sx={{
+                color: CYAN, fontWeight: 700, fontSize: 12, borderRadius: 1.5,
+                border: `1px solid ${CYAN}55`,
+                '&:hover': { backgroundColor: `${CYAN}14`, borderColor: CYAN },
+              }}
+            >
+              Fill these in
+            </Button>
+          </Box>
+        )}
 
         {/* The browser's permission prompt is the only warning someone would
             otherwise get, and it arrives without saying who is asking or why. */}
