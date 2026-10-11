@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createApp } from './index.js'
 import { createUser } from './auth/users.js'
+import { readOutbox, clearOutbox } from './lib/mailer.js'
+import { totp } from './auth/totp.js'
 
 /**
  * The tournament owner: an account that runs the tournaments it was given and
@@ -21,9 +23,11 @@ const call = async (method, path, body, token) => {
   })
   return { status: res.status, body: res.status === 204 ? null : await res.json().catch(() => null) }
 }
-const login = async (email, password = 'test123') => (await call('POST', '/auth/login', { email, password })).body.token
+const login = async (email, password = 'test123', code) => (await call('POST', '/auth/login', { email, password, ...(code ? { code } : {}) })).body.token
+const signIn = (email, password, code) => call('POST', '/auth/login', { email, password, ...(code ? { code } : {}) })
 
 beforeEach(async () => {
+  clearOutbox()
   const app = createApp()
   http = app.http
   port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
@@ -137,6 +141,50 @@ describe('tournament owner', () => {
     }, root)
     expect(made.status).toBe(400)
     expect(made.body.error).toBe('invalid_tournamentRoles')
+  })
+
+  it('signs in with its own email and password, like any other account', async () => {
+    const stamp = Date.now()
+    const root = await login('superadmin@kata.local')
+    const admin = await login('admin@kata.local')
+    const mine = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Login ${stamp}` }, admin)).body.tournament
+    const email = `owner.login${stamp}@x.local`
+    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, root)
+
+    // The ordinary sign-in: no separate portal, no link, no shared account.
+    expect((await signIn(email, 'wrong-password')).status).toBe(401)
+    const ok = await signIn(email, 'password1')
+    expect(ok.status).toBe(200)
+    expect(ok.body.user.role).toBe('tournament_owner')
+    // The web routes by this role, and the account carries its own password.
+    expect(ok.body.user.password).toBeUndefined()
+    expect(ok.body.user.tournamentIds).toEqual([mine.id])
+    // The token it gets works on its own tournament.
+    expect((await call('GET', `/tournaments/${mine.id}`, undefined, ok.body.token)).status).toBe(200)
+    // It can see and end its own sessions.
+    expect((await call('GET', '/auth/sessions', undefined, ok.body.token)).status).toBe(200)
+  })
+
+  it('can reset its own forgotten password and turn on two-step sign-in', async () => {
+    const stamp = Date.now()
+    const root = await login('superadmin@kata.local')
+    const email = `owner.secure${stamp}@x.local`
+    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner' }, root)
+
+    // Forgot password: the same emailed one-time link every account gets.
+    await call('POST', '/auth/forgot', { email })
+    const mail = readOutbox().find((m) => m.to === email)
+    expect(mail).toBeTruthy()
+    const token = mail.text.match(/token=([a-f0-9]+)/)[1]
+    expect((await call('POST', '/auth/reset', { token, password: 'a-new-password' })).body).toEqual({ ok: true })
+    expect((await signIn(email, 'password1')).status).toBe(401)
+    const owner = (await signIn(email, 'a-new-password')).body.token
+
+    // Two-step sign-in, for an account that holds a whole event.
+    const setup = (await call('POST', '/auth/2fa/setup', {}, owner)).body
+    expect((await call('POST', '/auth/2fa/enable', { code: totp(setup.secret) }, owner)).body).toEqual({ twoFactorEnabled: true })
+    expect((await signIn(email, 'a-new-password')).body.error).toBe('two_factor_required')
+    expect((await signIn(email, 'a-new-password', totp(setup.secret))).status).toBe(200)
   })
 
   it('stays inside its organisation', async () => {

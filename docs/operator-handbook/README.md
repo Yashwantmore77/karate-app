@@ -269,6 +269,12 @@ A new owner with nothing ticked sees no tournaments at all — the list says
 "None yet" against their name. That is the point of the role: an owner reaches
 exactly what you ticked and nothing else.
 
+The owner signs in on the ordinary sign-in page, with the email and password the
+Super Admin gave them — there is no separate address and no shared account. Give
+them those two, and ask them to sign in once before the event. They can change
+their own password under My account, use **Forgot password?** if they lose it,
+and switch on two-step sign-in, exactly like any other account.
+
 Their app is the same as yours, with less on it. The top bar shows **My
 tournaments**, Analytics, Live board and Public site; there is no Accounts, no
 System and no **New Tournament** button, and they cannot delete a tournament.
