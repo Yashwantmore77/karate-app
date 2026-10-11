@@ -1,6 +1,6 @@
 import { verifyToken } from './jwt.js'
 import { unauthorized, forbidden } from '../lib/errors.js'
-import { can, roleIn } from '@kumite/shared/permissions.js'
+import { can, roleIn, reachesOnlyAssigned, actsAsTournamentAdmin } from '@kumite/shared/permissions.js'
 import { sessionActive } from './sessions.js'
 
 const bearer = (header) => {
@@ -31,11 +31,37 @@ export function requireAuth(req, _res, next) {
   }, next)
 }
 
-/** HTTP: use after requireAuth. Admin passes every role gate. */
+/**
+ * HTTP: use after requireAuth. Admin passes every role gate.
+ *
+ * This is the gate for the surfaces that belong to the installation rather
+ * than to one tournament: accounts, sign-ins, creating and deleting
+ * tournaments, organisations, rulesets and backups. A tournament owner is not
+ * an administrator of the system and never passes it. For work inside a
+ * tournament use requireTournamentAdmin below.
+ */
 export function requireRole(...roles) {
   return (req, _res, next) => {
     if (!req.user) return next(unauthorized())
     if (['admin', 'super_admin'].includes(req.user.role) || roles.includes(req.user.role)) return next()
+    return next(forbidden())
+  }
+}
+
+/**
+ * HTTP: use after requireAuth on a route that is already scoped to one
+ * tournament. Admins, super admins and tournament owners pass; name any other
+ * role that may also do this action (a referee generating a draw, say).
+ *
+ * This answers only "may this role do this?". Whether the tournament is the
+ * caller's is answered where the record is loaded — tournamentAccess for a
+ * nested route, the category and match guards for a flat one — so a route
+ * must still resolve its tournament, as every route here already does.
+ */
+export function requireTournamentAdmin(...roles) {
+  return (req, _res, next) => {
+    if (!req.user) return next(unauthorized())
+    if (actsAsTournamentAdmin(req.user.role) || roles.includes(req.user.role)) return next()
     return next(forbidden())
   }
 }
@@ -69,6 +95,10 @@ export const mayAccessTournament = (account, tournamentId, tournament = null) =>
   if (account?.organizationId && tournament && tournament.organizationId !== account.organizationId) return false
   // A role given for this tournament is access to it.
   if (account?.tournamentRoles?.[tournamentId]) return true
+  // A tournament owner reaches exactly what it was given. An empty list means
+  // none: the account exists before anyone assigns it an event, and until
+  // then it must see nothing.
+  if (reachesOnlyAssigned(account?.role)) return !!account?.tournamentIds?.includes(tournamentId)
   return !account?.tournamentIds?.length || account.tournamentIds.includes(tournamentId)
 }
 

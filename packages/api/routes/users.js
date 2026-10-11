@@ -42,6 +42,17 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
     }
     return out
   }
+  /**
+   * A tournament owner is created by the super admin alone: the role hands
+   * someone a whole event, so who may hold it is not an organisation admin's
+   * decision. Handing that owner its tournaments is, and stays below with the
+   * rest of the assignment fields.
+   */
+  const assertMayGrantOwner = (req, role, before = null) => {
+    if (req.user.role === 'super_admin') return
+    const owner = 'tournament_owner'
+    if (role === owner || (role && before?.role === owner)) throw forbidden('role_forbidden')
+  }
   // Tournament roles and assignments may only name tournaments the acting
   // admin's organisation runs (PRD point 33, PRD v1 §4).
   const assertTournamentsInScope = async (body, org) => {
@@ -68,6 +79,7 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
 
   router.post('/', async (req, res) => {
     const org = await scopeOf(req)
+    assertMayGrantOwner(req, req.body?.role)
     await assertTournamentsInScope(req.body, org)
     const user = await createUser(scopedBody(req.body, org))
     // PRD v1 §22 audit: account and role changes.
@@ -82,6 +94,7 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
     const body = scopedBody(req.body, org)
     if (org && req.body?.organizationId === undefined) delete body.organizationId
     const before = await findUser(req.params.uid)
+    assertMayGrantOwner(req, body.role, before)
     if (body.role && before && body.role !== before.role) {
       // Your own role is changed by another administrator, never by yourself:
       // otherwise the last admin can demote themselves out of the system.
@@ -100,6 +113,8 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
     if (req.params.uid === req.user.uid) throw badRequest('cannot_delete_self')
     await assertInScope(req.params.uid, await scopeOf(req))
     const before = await findUser(req.params.uid)
+    // Removing an owner is the same decision as creating one.
+    if (before?.role === 'tournament_owner' && req.user.role !== 'super_admin') throw forbidden('role_forbidden')
     if (before && ['referee', 'judge'].includes(before.role)) await assertNotAssigned(req.params.uid)
     await deleteUser(req.params.uid)
     await audit(req.user, { action: 'user.changed', entity: 'user', entityId: req.params.uid, before: { email: before?.email, role: before?.role }, reason: 'deleted' })

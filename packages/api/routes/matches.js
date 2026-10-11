@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, requireRole, mayAccessTournament } from '../auth/middleware.js'
+import { requireAuth, requireTournamentAdmin, mayAccessTournament } from '../auth/middleware.js'
 import { matchAuthority } from '../auth/matchAccess.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
@@ -261,7 +261,7 @@ export function matchRoutes(stores, tms = null) {
   // there deciding who is called next, and waiting on an administrator to add
   // each pairing stops the mat. Removing one stays an administrator's job —
   // a match carries its judges' scores, and deleting it destroys them.
-  nested.post('/:categoryId/matches', requireRole('referee'), async (req, res) => {
+  nested.post('/:categoryId/matches', requireTournamentAdmin('referee'), async (req, res) => {
     const fields = body.forCreate(req.body)
     // A drawn category's bouts come from its draw (and its locks), not from here.
     guard.assertNotDrawn(await guard.scope(req.user, req.params.categoryId, { write: 'structure' }))
@@ -286,7 +286,7 @@ export function matchRoutes(stores, tms = null) {
    * The new bouts have no time, mat or panel. Scheduling them is a separate
    * decision, and leaving them unscheduled means a draw can never clash.
    */
-  nested.post('/:categoryId/matches/draw', requireRole('referee'), async (req, res) => {
+  nested.post('/:categoryId/matches/draw', requireTournamentAdmin('referee'), async (req, res) => {
     // Nothing to configure yet. A body is still checked, so a mistyped option
     // is refused rather than quietly ignored.
     validate(req.body ?? {}, {})
@@ -397,7 +397,7 @@ export function matchRoutes(stores, tms = null) {
 
   // A referee, not only an admin, records how a bout ended: they are the one
   // standing at the mat when it does.
-  flat.patch('/:id', requireRole('referee'), async (req, res) => {
+  flat.patch('/:id', requireTournamentAdmin('referee'), async (req, res) => {
     const { correctionReason, ...patch } = body.forPatch(req.body)
     const existing = await loadOrFail(matches, req.params.id)
     // AC-14: only within a tournament the account works, and a referee only
@@ -467,7 +467,7 @@ export function matchRoutes(stores, tms = null) {
    * bout that was fought only as a recorded correction, with a reason and the
    * correction privilege (Rule 6). Every removal is in the audit log.
    */
-  flat.delete('/:id', requireRole('admin'), async (req, res) => {
+  flat.delete('/:id', requireTournamentAdmin(), async (req, res) => {
     const existing = await loadOrFail(matches, req.params.id)
     const reason = typeof req.query.reason === 'string' ? req.query.reason.trim().slice(0, 300) : (typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '')
     let found = { category: null, tournament: null, drawn: false }

@@ -10,6 +10,7 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { useSession } from '../state/SessionContext'
 import { CYAN, TEXT } from '../theme/tokens'
 import { useConnection } from '../state/ConnectionContext'
+import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 
 const CONNECTION = {
   online: { label: '● Live', color: 'success' },
@@ -32,6 +33,12 @@ const MENUS = {
     { label: 'Sign-ins', to: '/admin/sign-ins', tip: 'Who signed in, when and from where (failed attempts too).' },
     { label: 'System', to: '/admin/system', tip: 'Backups and the system-wide audit log.' },
     { label: 'Scoreboard', to: '/display', tip: 'The hall scoreboard for the big screen (opens full screen).' },
+    { label: 'Live board', to: '/live', tip: 'Every mat: the bout on it and what comes next, for a screen in the hall.' },
+    { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
+  ],
+  tournament_owner: [
+    { label: 'My tournaments', to: '/tournament_owner', tip: 'The tournaments you have been given. Open one to run it.' },
+    { label: 'Analytics', to: '/tournament_owner/analytics', tip: 'Results across your tournaments: clubs, athletes and medals.' },
     { label: 'Live board', to: '/live', tip: 'Every mat: the bout on it and what comes next, for a screen in the hall.' },
     { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
@@ -179,7 +186,7 @@ export default function AppNav({ user, profile }) {
           )}
 
           <Chip
-            label={profile.role}
+            label={ROLE_LABEL[profile.role] || profile.role}
             size="small"
             sx={{ display: { xs: 'none', sm: 'inline-flex' }, mr: 1, textTransform: 'capitalize' }}
           />
@@ -212,7 +219,7 @@ export default function AppNav({ user, profile }) {
       <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <Box sx={{ width: 240, pt: 1 }} role="presentation">
           <Typography variant="overline" sx={{ px: 2, color: TEXT.secondary }}>
-            {profile.role}
+            {ROLE_LABEL[profile.role] || profile.role}
           </Typography>
           <Divider sx={{ mt: 1 }} />
           <List>

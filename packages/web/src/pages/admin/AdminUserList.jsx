@@ -39,13 +39,15 @@ const MESSAGES = {
   invalid_role: 'Pick one of the available roles.',
   invalid_seat: 'Seat must be a whole number of 1 or more.',
   cannot_delete_self: 'You cannot delete the account you are signed in with.',
+  role_forbidden: 'Only a super admin can create, change or remove a Tournament Owner.',
+  cannot_change_own_role: 'Another administrator has to change your own role.',
   not_found: 'That account no longer exists.',
   forbidden: 'Only an administrator can manage accounts.',
   unauthorized: 'Your session has expired. Sign in again.',
 }
 const messageFor = (err) => MESSAGES[err?.code] || (err?.code && err.code !== 'error' ? describeError(err) : 'Something went wrong. Try again.')
 
-export default function AdminUserList({ uid }) {
+export default function AdminUserList({ uid, profile = null }) {
   const navigate = useNavigate()
   const [writeError, setWriteError] = useState(null)
   const [openModal, setOpenModal] = useState(false)
@@ -134,7 +136,16 @@ export default function AdminUserList({ uid }) {
   }
 
   const roleColour = (role) =>
-    role === 'admin' ? 'primary' : role === 'referee' ? 'secondary' : 'default'
+    role === 'admin' ? 'primary' : role === 'tournament_owner' ? 'info' : role === 'referee' ? 'secondary' : 'default'
+
+  // Only a super admin hands out ownership of an event; an administrator
+  // assigns tournaments to an owner that already exists. The server refuses
+  // the rest, so the form offers only what it would accept.
+  const maySetOwner = profile?.role === 'super_admin'
+  const roleOptions = users.ROLES.filter((r) => r !== 'tournament_owner' || maySetOwner || editing?.role === 'tournament_owner')
+  // For an owner the tournament list is the whole of its access, so the field
+  // says so instead of "all tournaments".
+  const isOwner = formik.values.role === 'tournament_owner'
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
@@ -190,11 +201,15 @@ export default function AdminUserList({ uid }) {
                     <TableRow key={account.uid}>
                       <TableCell>{account.email}</TableCell>
                       <TableCell>
-                        <Chip label={account.role} size="small" color={roleColour(account.role)} />
+                        <Chip label={ROLE_LABEL[account.role] || account.role} size="small" color={roleColour(account.role)} />
                         {Object.keys(account.tournamentRoles || {}).length > 0 && <Chip size="small" variant="outlined" sx={{ ml: 0.5 }} label={`+${Object.keys(account.tournamentRoles).length} event role${Object.keys(account.tournamentRoles).length > 1 ? 's' : ''}`} />}
                       </TableCell>
                       <TableCell>{account.seat ?? '—'}</TableCell>
-                      <TableCell>{account.tournamentIds?.length ? account.tournamentIds.map(tournamentName).join(', ') : 'All'}</TableCell>
+                      <TableCell>
+                        {account.tournamentIds?.length
+                          ? account.tournamentIds.map(tournamentName).join(', ')
+                          : account.role === 'tournament_owner' ? 'None yet' : 'All'}
+                      </TableCell>
                       {orgs.length > 0 && <TableCell>{account.organizationId ? orgName(account.organizationId) : 'None (all)'}</TableCell>}
                       <TableCell>{account.twoFactorEnabled ? '✓ On' : 'Off'}</TableCell>
                       <TableCell align="right">
@@ -251,8 +266,10 @@ export default function AdminUserList({ uid }) {
                 value={formik.values.role}
                 onChange={formik.handleChange}
               >
-                {users.ROLES.map((role) => (
-                  <MenuItem key={role} value={role}>{ROLE_LABEL[role] || role}</MenuItem>
+                {roleOptions.map((role) => (
+                  <MenuItem key={role} value={role} disabled={role === 'tournament_owner' && !maySetOwner}>
+                    {ROLE_LABEL[role] || role}
+                  </MenuItem>
                 ))}
               </Select>
               {formik.errors.role && <FormHelperText>{formik.errors.role}</FormHelperText>}
@@ -268,8 +285,10 @@ export default function AdminUserList({ uid }) {
               select fullWidth margin="normal" label="Tournaments this account may work"
               value={formik.values.tournamentIds}
               onChange={(e) => formik.setFieldValue('tournamentIds', typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-              slotProps={{ select: { multiple: true, renderValue: (ids) => (ids.length ? ids.map(tournamentName).join(', ') : 'All tournaments') }, inputLabel: { shrink: true } }}
-              helperText="Leave empty for all tournaments. A super admin always sees all."
+              slotProps={{ select: { multiple: true, renderValue: (ids) => (ids.length ? ids.map(tournamentName).join(', ') : isOwner ? 'None yet' : 'All tournaments') }, inputLabel: { shrink: true } }}
+              helperText={isOwner
+                ? 'A Tournament Owner reaches exactly these tournaments. Empty means none at all.'
+                : 'Leave empty for all tournaments. A super admin always sees all.'}
             >
               {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
             </TextField>

@@ -9,6 +9,7 @@ import JudgeRouter from './routes/JudgeRouter'
 import RefereeRouter from './routes/RefereeRouter'
 import AdminRouter from './routes/AdminRouter'
 import StaffRouter from './routes/StaffRouter'
+import OwnerRouter from './routes/OwnerRouter'
 import PublicTournament from './pages/public/PublicTournament'
 import PublicTournamentList from './pages/public/PublicTournamentList'
 import RegisterPortal from './pages/public/RegisterPortal'
@@ -248,6 +249,19 @@ function AppShell() {
                     <Navigate to="/no-role" replace />
                   ) : (
                     <RequireRole role="admin" profile={routeProfile}><AdminRouter uid={user.uid} profile={profile} /></RequireRole>
+                  )}
+                </RequireAuth>
+              }
+            />
+            {/* A tournament owner runs the events it was given, and no others. */}
+            <Route
+              path="/tournament_owner/*"
+              element={
+                <RequireAuth user={user}>
+                  {!profile ? (
+                    <Navigate to="/no-role" replace />
+                  ) : (
+                    <RequireRole role="tournament_owner" profile={profile}><OwnerRouter uid={user.uid} profile={profile} /></RequireRole>
                   )}
                 </RequireAuth>
               }

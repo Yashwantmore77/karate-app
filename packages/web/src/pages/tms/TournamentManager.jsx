@@ -116,7 +116,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
       <Container maxWidth="xl" sx={{ py: 3 }}>
         {current && <WorkflowGuide tournament={tournament} version={version} tabs={tabs} current={current} goTab={(key) => setParams({ tab: key })} role={role} />}
         <ExportAuditContext.Provider value={logExport}>
-          {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} goTab={(key) => setParams({ tab: key })} />}
+          {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} basePath={basePath} goTab={(key) => setParams({ tab: key })} />}
         </ExportAuditContext.Provider>
       </Container>
       {action.feedback}

@@ -21,7 +21,7 @@ export default function AdminRouter({ uid, profile }) {
       {profile?.role === 'super_admin' && <Route path="/rulesets" element={<AdminRulesets />} />}
       <Route path="/system" element={<AdminSystem profile={profile} />} />
       <Route path="/analytics" element={<Analytics />} />
-      <Route path="/accounts" element={<AdminUserList uid={uid} />} />
+      <Route path="/accounts" element={<AdminUserList uid={uid} profile={profile} />} />
       <Route path="/sign-ins" element={<AdminLoginLog />} />
       {/* A tournament is run from its tournament screen; the old page only listed scoring categories. */}
       <Route path="/tournament/:tournamentId" element={<ToManage />} />

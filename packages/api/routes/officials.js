@@ -1,9 +1,9 @@
 import { Router } from 'express'
-import { listAssignableOfficials } from '../auth/users.js'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { listAssignableOfficials, findUserRecord } from '../auth/users.js'
+import { requireAuth, requireTournamentAdmin } from '../auth/middleware.js'
 import { badRequest } from '../lib/errors.js'
 
-const SELECTABLE = ['referee', 'judge', 'admin']
+const SELECTABLE = ['referee', 'judge', 'admin', 'tournament_owner']
 
 /**
  * Who can be put on a match.
@@ -15,13 +15,17 @@ const SELECTABLE = ['referee', 'judge', 'admin']
  */
 export function officialRoutes() {
   const router = Router()
-  router.use(requireAuth, requireRole('referee'))
+  router.use(requireAuth, requireTournamentAdmin('referee'))
 
   router.get('/', async (req, res) => {
     const { role } = req.query
     if (role !== undefined && !SELECTABLE.includes(role)) throw badRequest('invalid_role')
 
-    const officials = await listAssignableOfficials()
+    // An account inside an organisation picks from that organisation's people.
+    const organizationId = req.user.role === 'super_admin'
+      ? null
+      : (await findUserRecord(req.user.uid))?.organizationId || null
+    const officials = await listAssignableOfficials({ organizationId })
     res.json({ officials: role ? officials.filter((o) => o.role === role) : officials })
   })
 

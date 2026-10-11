@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { requireAuth, requireRole, tournamentAccess, mayAccessTournament } from '../auth/middleware.js'
+import { requireAuth, requireRole, requireTournamentAdmin, tournamentAccess, mayAccessTournament } from '../auth/middleware.js'
+import { reachesOnlyAssigned } from '@kumite/shared/permissions.js'
 import { findUserRecord, listCoachAccounts, deleteUser } from '../auth/users.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
@@ -87,7 +88,10 @@ export function tournamentRoutes(stores, tms) {
     const account = await findUserRecord(req.user.uid)
     // An account limited to some tournaments (PRD section 4) pages through
     // only those; everyone else pages the store directly.
-    if ((account?.tournamentIds?.length || account?.organizationId) && account.role !== 'super_admin') {
+    // An owner is always filtered, even with nothing assigned yet: for it an
+    // empty assignment means no tournaments rather than every one.
+    if ((account?.tournamentIds?.length || account?.organizationId || reachesOnlyAssigned(account?.role))
+      && account.role !== 'super_admin') {
       const needle = q.toLowerCase()
       const allowed = (await tournaments.list()).filter((t) => mayAccessTournament(account, t.id, t)
         && (!needle || [t.name, t.location].some((v) => String(v ?? '').toLowerCase().includes(needle))))
@@ -118,7 +122,7 @@ export function tournamentRoutes(stores, tms) {
     res.status(201).json({ tournament: await tournaments.insert(org ? { ...doc, organizationId: org } : doc) })
   })
 
-  router.patch('/:id', requireRole('admin'), async (req, res) => {
+  router.patch('/:id', requireTournamentAdmin(), async (req, res) => {
     // confirmImpact acknowledges a master-date change that re-ages players
     // (PRD v1 §9); it is an instruction, not a field.
     const { confirmImpact, ...fields } = req.body || {}
