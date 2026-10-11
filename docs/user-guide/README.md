@@ -67,9 +67,8 @@ An account has one role. An admin can also give it a different role inside one t
 
 For every role except Tournament Owner, an empty tournament list means all of
 them. For a Tournament Owner it means none: an owner reaches exactly the
-tournaments ticked for it. Only a Super Admin creates, changes or deletes an
-owner account; a Tournament Admin ticks its tournaments, inside its own
-organisation.
+tournaments ticked for it. A Tournament Admin creates the owner account and
+ticks its tournaments, inside its own organisation.
 
 | Role | Home screen | Tournament tabs and screens |
 | --- | --- | --- |
@@ -1013,7 +1012,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | You do not have permission to do that. | Your role cannot do this; ask an admin |
 | An account with that email already exists. | Use the existing account or another email |
 | You cannot change your own role. Ask another administrator. | Another admin changes it |
-| Only a super admin can create, change or remove a Tournament Owner. | A Super Admin makes the account; a Tournament Admin then ticks its tournaments |
+| Only a super admin can create or change a Super Admin account. | Ask a Super Admin; an organisation's admin cannot make one |
 
 ## 14. Karate terms on screen
 

@@ -39,7 +39,7 @@ const MESSAGES = {
   invalid_role: 'Pick one of the available roles.',
   invalid_seat: 'Seat must be a whole number of 1 or more.',
   cannot_delete_self: 'You cannot delete the account you are signed in with.',
-  role_forbidden: 'Only a super admin can create, change or remove a Tournament Owner.',
+  role_forbidden: 'Only a super admin can create or change a Super Admin account.',
   cannot_change_own_role: 'Another administrator has to change your own role.',
   not_found: 'That account no longer exists.',
   forbidden: 'Only an administrator can manage accounts.',
@@ -47,7 +47,7 @@ const MESSAGES = {
 }
 const messageFor = (err) => MESSAGES[err?.code] || (err?.code && err.code !== 'error' ? describeError(err) : 'Something went wrong. Try again.')
 
-export default function AdminUserList({ uid, profile = null }) {
+export default function AdminUserList({ uid }) {
   const navigate = useNavigate()
   const [writeError, setWriteError] = useState(null)
   const [openModal, setOpenModal] = useState(false)
@@ -138,11 +138,6 @@ export default function AdminUserList({ uid, profile = null }) {
   const roleColour = (role) =>
     role === 'admin' ? 'primary' : role === 'tournament_owner' ? 'info' : role === 'referee' ? 'secondary' : 'default'
 
-  // Only a super admin hands out ownership of an event; an administrator
-  // assigns tournaments to an owner that already exists. The server refuses
-  // the rest, so the form offers only what it would accept.
-  const maySetOwner = profile?.role === 'super_admin'
-  const roleOptions = users.ROLES.filter((r) => r !== 'tournament_owner' || maySetOwner || editing?.role === 'tournament_owner')
   // For an owner the tournament list is the whole of its access, so the field
   // says so instead of "all tournaments".
   const isOwner = formik.values.role === 'tournament_owner'
@@ -266,10 +261,8 @@ export default function AdminUserList({ uid, profile = null }) {
                 value={formik.values.role}
                 onChange={formik.handleChange}
               >
-                {roleOptions.map((role) => (
-                  <MenuItem key={role} value={role} disabled={role === 'tournament_owner' && !maySetOwner}>
-                    {ROLE_LABEL[role] || role}
-                  </MenuItem>
+                {users.ROLES.map((role) => (
+                  <MenuItem key={role} value={role}>{ROLE_LABEL[role] || role}</MenuItem>
                 ))}
               </Select>
               {formik.errors.role && <FormHelperText>{formik.errors.role}</FormHelperText>}
