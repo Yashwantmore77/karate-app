@@ -235,7 +235,7 @@ Each official needs their own account. Make them before the event, so everyone c
 *1 Accounts, 2 New account*
 
 2. Type the person's **Email** (1) and a **Password** (2) of at least 8 characters.
-3. Choose the **Role** (3): Referee, Kata Judge, Announcer, Scoreboard Operator, Weigh-in Officer, Registration Officer, Tournament Admin or Viewer (read-only). **Tournament Owner** is in the list only when a Super Admin is signed in; see "Hand a tournament to its owner" below.
+3. Choose the **Role** (3): Referee, Kata Judge, Announcer, Scoreboard Operator, Weigh-in Officer, Registration Officer, Tournament Admin, Tournament Owner or Viewer (read-only). For a Tournament Owner, see "Hand a tournament to its owner" below.
 4. For a Kata Judge, type their **Seat** (4) on the panel: 1 for the first judge, 2 for the second, and so on.
 5. Click **Create account** (5).
 
@@ -255,23 +255,21 @@ them they do everything you do: details, categories, entries, weigh-in, draw,
 bouts, results, certificates and reports. Outside them they see nothing at all:
 no other tournament, no staff accounts, no sign-in log, no backups.
 
-Making one takes two people, on purpose:
+You make one yourself, in two steps:
 
-1. **A Super Admin creates the account.** In Accounts, New account, with the
-   role **Tournament Owner**. A Tournament Admin does not get this choice; the
-   app answers "Only a super admin can create, change or remove a Tournament
-   Owner" if one tries.
-2. **You, the Tournament Admin, give them their tournaments.** Open the account
-   in Accounts, and tick them under **Tournaments this account may work**. You
-   can only tick tournaments your own organisation runs.
+1. **Create the account.** In Accounts, click **New account**, fill in their
+   email and a password, and choose the role **Tournament Owner**.
+2. **Give them their tournaments.** Open the account again in Accounts and tick
+   them under **Tournaments this account may work**. You can only tick
+   tournaments your own organisation runs.
 
 A new owner with nothing ticked sees no tournaments at all — the list says
 "None yet" against their name. That is the point of the role: an owner reaches
 exactly what you ticked and nothing else.
 
-The owner signs in on the ordinary sign-in page, with the email and password the
-Super Admin gave them — there is no separate address and no shared account. Give
-them those two, and ask them to sign in once before the event. They can change
+The owner signs in on the ordinary sign-in page, with the email and password you
+gave them — there is no separate address and no shared account. Give them those
+two, and ask them to sign in once before the event. They can change
 their own password under My account, use **Forgot password?** if they lose it,
 and switch on two-step sign-in, exactly like any other account.
 
@@ -785,4 +783,4 @@ Section 1 explained event, category, pool, bout, mat, Aka and Ao. These are the 
 | Provisional, Verified, Published | A result worked out by the app, checked by you, and shown to the public |
 | Pass | An ID card with a photo and a QR code, scanned at the door or the mat |
 | Needs attention | The box at the top of each tab that lists what to fix next |
-| Tournament Owner | An account that runs the tournaments it was given, and sees no others. A Super Admin creates it; a Tournament Admin gives it its tournaments |
+| Tournament Owner | An account that runs the tournaments it was given, and sees no others. A Tournament Admin creates it and ticks its tournaments |

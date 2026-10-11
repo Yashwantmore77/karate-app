@@ -39,16 +39,14 @@ const TOURNAMENT = { location: 'Pune', date: '2027-03-14', template: 'kumite' }
 describe('tournament owner', () => {
   it('reaches its own tournament and nothing else', async () => {
     const stamp = Date.now()
-    const root = await login('superadmin@kata.local')
     const admin = await login('admin@kata.local')
 
     const mine = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Owned ${stamp}` }, admin)).body.tournament
     const other = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Not owned ${stamp}` }, admin)).body.tournament
 
-    // Only the super admin mints an owner.
+    // The administrator makes the owner account.
     const email = `owner${stamp}@x.local`
-    expect((await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner' }, admin)).status).toBe(403)
-    const created = await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner' }, root)
+    const created = await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner' }, admin)
     expect(created.status).toBe(201)
     const ownerUid = created.body.user.uid
 
@@ -70,11 +68,10 @@ describe('tournament owner', () => {
 
   it('does an administrator\'s work inside the tournament it holds', async () => {
     const stamp = Date.now()
-    const root = await login('superadmin@kata.local')
     const admin = await login('admin@kata.local')
     const mine = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Run by owner ${stamp}` }, admin)).body.tournament
     const email = `owner.work${stamp}@x.local`
-    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, root)
+    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, admin)
     const owner = await login(email, 'password1')
 
     // Its settings, its categories, its entrants.
@@ -96,11 +93,10 @@ describe('tournament owner', () => {
 
   it('is kept out of the system-wide screens', async () => {
     const stamp = Date.now()
-    const root = await login('superadmin@kata.local')
     const admin = await login('admin@kata.local')
     const mine = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Limits ${stamp}` }, admin)).body.tournament
     const email = `owner.limits${stamp}@x.local`
-    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, root)
+    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, admin)
     const owner = await login(email, 'password1')
 
     // No new tournaments, and no removing the one it runs.
@@ -115,41 +111,38 @@ describe('tournament owner', () => {
     expect((await call('GET', '/organizations', undefined, owner)).status).toBe(403)
   })
 
-  it('cannot be created, changed or removed by an administrator', async () => {
+  it('is created, changed and removed by an administrator', async () => {
     const stamp = Date.now()
-    const root = await login('superadmin@kata.local')
     const admin = await login('admin@kata.local')
     const email = `owner.guard${stamp}@x.local`
-    const uid = (await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner' }, root)).body.user.uid
+    const made = await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner' }, admin)
+    expect(made.status).toBe(201)
+    const uid = made.body.user.uid
 
-    expect((await call('PATCH', `/users/${uid}`, { role: 'admin' }, admin)).status).toBe(403)
-    expect((await call('DELETE', `/users/${uid}`, undefined, admin)).status).toBe(403)
-    // Assigning tournaments is still an administrator's job.
     const t = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Assignable ${stamp}` }, admin)).body.tournament
     expect((await call('PATCH', `/users/${uid}`, { tournamentIds: [t.id] }, admin)).status).toBe(200)
-    // The super admin may still change or remove the account.
-    expect((await call('PATCH', `/users/${uid}`, { role: 'viewer' }, root)).status).toBe(200)
+    expect((await call('PATCH', `/users/${uid}`, { role: 'viewer' }, admin)).status).toBe(200)
+    expect((await call('PATCH', `/users/${uid}`, { role: 'tournament_owner' }, admin)).status).toBe(200)
+    expect((await call('DELETE', `/users/${uid}`, undefined, admin)).status).toBe(204)
   })
 
   it('is not handed out as a role inside one tournament', async () => {
     const stamp = Date.now()
-    const root = await login('superadmin@kata.local')
     const admin = await login('admin@kata.local')
     const t = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Scoped role ${stamp}` }, admin)).body.tournament
     const made = await call('POST', '/users', {
       email: `scoped${stamp}@x.local`, password: 'password1', role: 'viewer', tournamentRoles: { [t.id]: 'tournament_owner' },
-    }, root)
+    }, admin)
     expect(made.status).toBe(400)
     expect(made.body.error).toBe('invalid_tournamentRoles')
   })
 
   it('signs in with its own email and password, like any other account', async () => {
     const stamp = Date.now()
-    const root = await login('superadmin@kata.local')
     const admin = await login('admin@kata.local')
     const mine = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Login ${stamp}` }, admin)).body.tournament
     const email = `owner.login${stamp}@x.local`
-    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, root)
+    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, admin)
 
     // The ordinary sign-in: no separate portal, no link, no shared account.
     expect((await signIn(email, 'wrong-password')).status).toBe(401)
@@ -167,9 +160,9 @@ describe('tournament owner', () => {
 
   it('can reset its own forgotten password and turn on two-step sign-in', async () => {
     const stamp = Date.now()
-    const root = await login('superadmin@kata.local')
+    const admin = await login('admin@kata.local')
     const email = `owner.secure${stamp}@x.local`
-    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner' }, root)
+    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner' }, admin)
 
     // Forgot password: the same emailed one-time link every account gets.
     await call('POST', '/auth/forgot', { email })
@@ -189,11 +182,10 @@ describe('tournament owner', () => {
 
   it('drives the hall screen for its own bouts, and not for anyone else\'s', async () => {
     const stamp = Date.now()
-    const root = await login('superadmin@kata.local')
     const admin = await login('admin@kata.local')
     const mine = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Screens ${stamp}` }, admin)).body.tournament
     const email = `owner.screen${stamp}@x.local`
-    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, root)
+    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, admin)
     const owner = await login(email, 'password1')
 
     // A bout of its own: category, entrants, then the bout.
@@ -233,9 +225,10 @@ describe('tournament owner', () => {
     const tb = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `B Cup ${stamp}` }, adminB)).body.tournament
 
     const email = `owner.org${stamp}@x.local`
+    // A's own administrator makes the owner and gives it A's tournament.
     const uid = (await call('POST', '/users', {
-      email, password: 'password1', role: 'tournament_owner', organizationId: a.id, tournamentIds: [ta.id],
-    }, root)).body.user.uid
+      email, password: 'password1', role: 'tournament_owner', tournamentIds: [ta.id],
+    }, adminA)).body.user.uid
 
     // B's administrator can neither see nor assign A's owner.
     expect((await call('PATCH', `/users/${uid}`, { tournamentIds: [tb.id] }, adminB)).status).toBe(403)
