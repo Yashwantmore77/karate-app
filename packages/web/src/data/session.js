@@ -80,3 +80,21 @@ export async function loginToServer(email, password, coords = null, code = null)
   store(issued)
   return user
 }
+
+/**
+ * The administrator credentials the server is willing to show on the sign-in
+ * screen, or null — which is the normal answer, and the answer from any older
+ * server that has no such route. A failure here is never worth a message: the
+ * screen simply does not offer the shortcut.
+ */
+export async function testCredentials() {
+  const url = apiUrl('/auth/test-credentials')
+  if (!url) return null
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    return (await res.json())?.credentials || null
+  } catch {
+    return null
+  }
+}

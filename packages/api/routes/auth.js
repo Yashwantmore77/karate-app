@@ -82,6 +82,28 @@ export function authRoutes({ audit = async () => {} } = {}) {
     recordLogin({ req, email, user, outcome: 'success', coords })
   })
 
+  /**
+   * The administrator's address and password, for the sign-in screen to show
+   * while an installation is being tested.
+   *
+   * Silent unless SHOW_TEST_CREDENTIALS is "true", and it must stay that way
+   * anywhere real: this hands a working administrator password to anyone who
+   * can reach the API, with no sign-in of its own.
+   *
+   * It answers from the two bootstrap variables, not from the database. A
+   * stored password is a hash and cannot be read back, so the plain text
+   * exists only here — which also means this is right only while the first
+   * administrator still has the password it was created with. Change that
+   * password and the screen is telling an old story; clear the variables when
+   * testing is over.
+   */
+  router.get('/test-credentials', (_req, res) => {
+    const email = String(process.env.BOOTSTRAP_ADMIN_EMAIL || '').trim().toLowerCase()
+    const password = process.env.BOOTSTRAP_ADMIN_PASSWORD || ''
+    const on = process.env.SHOW_TEST_CREDENTIALS === 'true' && email && password
+    res.json({ credentials: on ? { email, password } : null })
+  })
+
   // --- forgot / reset password (PRD section 4) -------------------------------
 
   const resetRequests = rateLimit({ windowMs: 15 * 60_000, max: 5, code: 'too_many_attempts', keyOf: (req) => `${req.ip || 'unknown'}|${attemptedEmail(req)}` })

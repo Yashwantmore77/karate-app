@@ -26,6 +26,7 @@ const MENUS = {
     { label: 'Dashboard', to: '/admin/dashboard', tip: 'Every tournament at a glance: entries, weigh-ins, bouts and what needs doing.' },
     { label: 'Tournaments', to: '/admin', tip: 'Create a tournament, or open one to manage it.' },
     { label: 'Analytics', to: '/admin/analytics', tip: 'Results across tournaments: clubs, athletes and medals.' },
+    { label: 'Rulesets', to: '/admin/rulesets', tip: 'The rules a tournament can be run under: bout length, points, senshu.' },
     // The referee screens, which an admin may also use: scheduling, panels,
     // the draw, and deleting a bout.
     { label: 'Matches', to: '/referee', tip: 'The bouts you can score or manage, by category.' },
@@ -114,8 +115,11 @@ export default function AppNav({ user, profile }) {
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
+  // An administrator's menu, plus the one thing only a super admin has:
+  // organisations. Rulesets and backups are an administrator's too, so they
+  // sit in that menu rather than being added here.
   const base = profile?.role === 'super_admin'
-    ? [...MENUS.admin.slice(0, 3), { label: 'Organisations', to: '/admin/organizations' }, { label: 'Rulesets', to: '/admin/rulesets' }, ...MENUS.admin.slice(3)]
+    ? [...MENUS.admin.slice(0, 3), { label: 'Organisations', to: '/admin/organizations' }, ...MENUS.admin.slice(3)]
     : MENUS[profile?.role] || []
   const items = base.length && profile?.role !== 'coach' ? [...base, { label: 'My account', to: '/account' }] : base
   const onPublicScreen = ['/display', '/login', '/live'].includes(location.pathname)
@@ -153,8 +157,19 @@ export default function AppNav({ user, profile }) {
             Kumite
           </Typography>
 
-          {/* Full menu on a laptop at the scorer's table; a drawer on a phone. */}
-          <Box sx={{ display: { xs: 'none', lg: 'flex' }, gap: 0.5, flexGrow: 1, minWidth: 0 }}>
+          {/* Full menu on a laptop at the scorer's table; a drawer on a phone.
+              The row scrolls rather than squeezing: an administrator's menu is
+              a dozen items, and without this they shrink below their own text
+              and the labels run into each other on a 1280-wide laptop. */}
+          <Box sx={{
+            display: { xs: 'none', lg: 'flex' },
+            gap: 0.5,
+            flexGrow: 1,
+            minWidth: 0,
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
+          }}>
             {items.map((item) => {
               const isActive = active?.to === item.to
               return (
@@ -165,7 +180,8 @@ export default function AppNav({ user, profile }) {
                   aria-current={isActive ? 'page' : undefined}
                   sx={{
                     color: TEXT.secondary,
-                    px: 1.5,
+                    px: 1.25,
+                    flexShrink: 0,
                     whiteSpace: 'nowrap',
                     ...(isActive ? activeSx : {}),
                   }}

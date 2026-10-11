@@ -12,6 +12,7 @@ const session = vi.hoisted(() => ({
   getToken: () => null,
   clearSession: vi.fn(),
   loginToServer: vi.fn(),
+  testCredentials: vi.fn(async () => null),
   tokenExpiresAt: () => null,
 }))
 vi.mock('../data/session', () => session)
@@ -51,31 +52,41 @@ describe('Login', () => {
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 
-  it('offers a one-click sign-in for each seeded account', async () => {
+  it('offers no credentials of its own when the server shows none', async () => {
     renderLogin()
     await screen.findByRole('button', { name: /sign in/i })
-    for (const label of ['Admin', 'Referee', 'Judge 1', 'Judge 2', 'Judge 3', 'Judge 4']) {
-      expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
-    }
+    // The app ships no accounts, so with the server quiet there is nothing to
+    // offer and no chips promising a sign-in that would be refused.
+    expect(screen.queryByText(/administrator, for testing/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /fill these in/i })).not.toBeInTheDocument()
   })
 
-  it('fills the form when a role is picked', async () => {
-    const user = userEvent.setup()
+  it('shows the administrator credentials the server reports', async () => {
+    session.testCredentials.mockResolvedValue({ email: 'boss@club.test', password: 'open-sesame-9' })
     renderLogin()
-    await user.click(await screen.findByRole('button', { name: 'Admin' }))
-    expect(screen.getByLabelText(/email/i)).toHaveValue('admin@kata.local')
-    expect(screen.getByLabelText(/password/i)).toHaveValue('test123')
+    expect(await screen.findByText('boss@club.test')).toBeInTheDocument()
+    expect(screen.getByText('open-sesame-9')).toBeInTheDocument()
   })
 
-  it('signs in as the picked account', async () => {
-    session.loginToServer.mockResolvedValue({ uid: 'r1', email: 'referee@kata.local', role: 'referee' })
+  it('fills the form from the credentials it was shown', async () => {
+    session.testCredentials.mockResolvedValue({ email: 'boss@club.test', password: 'open-sesame-9' })
     const user = userEvent.setup()
     renderLogin()
-    await user.click(await screen.findByRole('button', { name: 'Referee' }))
+    await user.click(await screen.findByRole('button', { name: /fill these in/i }))
+    expect(screen.getByLabelText(/email/i)).toHaveValue('boss@club.test')
+    expect(screen.getByLabelText(/password/i)).toHaveValue('open-sesame-9')
+  })
+
+  it('signs in with the credentials it filled in', async () => {
+    session.testCredentials.mockResolvedValue({ email: 'boss@club.test', password: 'open-sesame-9' })
+    session.loginToServer.mockResolvedValue({ uid: 'a1', email: 'boss@club.test', role: 'admin' })
+    const user = userEvent.setup()
+    renderLogin()
+    await user.click(await screen.findByRole('button', { name: /fill these in/i }))
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
-    await waitFor(() => expect(screen.getByText('Referee Home')).toBeInTheDocument())
-    expect(session.loginToServer).toHaveBeenCalledWith('referee@kata.local', 'test123', null)
+    await waitFor(() => expect(screen.getByText('Admin Home')).toBeInTheDocument())
+    expect(session.loginToServer).toHaveBeenCalledWith('boss@club.test', 'open-sesame-9', null)
   })
 
   it('signs in against the API and goes to the role home', async () => {

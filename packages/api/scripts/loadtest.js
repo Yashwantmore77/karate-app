@@ -11,6 +11,7 @@
 // viewer comes from this one machine. Use a staging copy, never a live event.
 
 import { performance } from 'node:perf_hooks'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { io as connect } from 'socket.io-client'
 import { runningEvent, parseDivisionKey } from '@kumite/shared/tms.js'
 
@@ -48,16 +49,41 @@ async function startLocal() {
   return { url: `http://localhost:${port}`, close: () => new Promise((resolve) => http.close(resolve)) }
 }
 
-export async function runLoadTest({ url = null, email = 'admin@kata.local', password = 'test123', mats = MATS, viewers = VIEWERS, seconds = SECONDS, quiet = false } = {}) {
+/**
+ * The administrator this script runs as.
+ *
+ * Against a real server (--url) it has to be given one, because that server's
+ * accounts live in its database. Against its own in-process server it makes a
+ * throwaway administrator with a password generated for this run, so the
+ * script carries no account and no password of its own.
+ */
+async function scriptAdmin({ email, password, local }) {
+  if (email && password) return { email, password }
+  if (!local) {
+    const fromEnv = { email: process.env.BOOTSTRAP_ADMIN_EMAIL, password: process.env.BOOTSTRAP_ADMIN_PASSWORD }
+    if (fromEnv.email && fromEnv.password) return fromEnv
+    throw new Error('Give an administrator account to sign in with: --email and --password (or BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD).')
+  }
+  const { createUser } = await import('../auth/users.js')
+  const made = {
+    email: `script-${randomUUID().slice(0, 8)}@localhost.test`,
+    password: randomBytes(18).toString('base64url'),
+  }
+  await createUser({ ...made, role: 'admin' })
+  return made
+}
+
+export async function runLoadTest({ url = null, email = null, password = null, mats = MATS, viewers = VIEWERS, seconds = SECONDS, quiet = false } = {}) {
   const local = url ? null : await startLocal()
   const base = url || local.url
+  const account = await scriptAdmin({ email, password, local: !url })
   const api = async (path, opts = {}, token) => {
     const res = await fetch(`${base}/api/v1${path}`, { ...opts, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })
     if (!res.ok) throw Object.assign(new Error(`${path}: ${res.status}`), { status: res.status })
     return res.status === 204 ? null : res.json()
   }
 
-  const { token } = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+  const { token } = await api('/auth/login', { method: 'POST', body: JSON.stringify(account) })
   const tournaments = (await api('/tournaments?limit=100', {}, token)).tournaments
   const tournament = tournaments.find((t) => t.slug) || tournaments[0]
   if (!tournament) throw new Error('No tournament to test against')
@@ -143,7 +169,7 @@ export async function runLoadTest({ url = null, email = 'admin@kata.local', pass
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const report = await runLoadTest({ url: opt('url', null), email: opt('email', 'admin@kata.local'), password: opt('password', 'test123') })
+  const report = await runLoadTest({ url: opt('url', null), email: opt('email', null), password: opt('password', null) })
   // A failed command or page is a failed run, so this can gate a release.
   const failed = report.commands.failed + report.publicPage.failed + report.scoreboard.failed
   process.exit(failed ? 1 : 0)

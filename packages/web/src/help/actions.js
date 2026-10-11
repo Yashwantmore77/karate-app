@@ -38,6 +38,7 @@ export const ACTIONS = {
   'Install app': 'Installs this app on the device: it opens full screen and keeps working without a connection.',
   'Sign out': 'Signs you out on this device.',
   'Sign in': 'Signs you in.',
+  'Fill these in': 'Puts the administrator address and password above into the form, ready to sign in.',
   'Officials sign in': 'Sign-in for staff: organisers, referees, judges and officers.',
   'Staff sign-in': 'Sign-in for staff: organisers, referees, judges and officers.',
   'Go to next page': 'Shows the next page of the list.',

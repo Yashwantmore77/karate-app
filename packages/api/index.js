@@ -334,5 +334,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     await seedScenarios(stores, { log: () => {} })
     console.log('[seed] test tournaments loaded into memory (SEED_SCENARIOS=true)')
   }
+  // Said once, at the start, rather than on every failed sign-in: an
+  // installation with no accounts cannot be signed in to at all, and the only
+  // way to make the first one is the pair of environment variables below.
+  const { listUsers } = await import('./auth/users.js')
+  if (!(await listUsers({ limit: 1 })).total) {
+    console.warn('[auth] No accounts. Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD (8+ characters) and restart to create the first administrator.')
+  }
   http.listen(port, () => console.log(`kumite server on :${port}`))
 }

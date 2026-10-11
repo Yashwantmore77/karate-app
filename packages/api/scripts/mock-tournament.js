@@ -17,6 +17,8 @@
 import { performance } from 'node:perf_hooks'
 import { io as connect } from 'socket.io-client'
 
+import { randomBytes, randomUUID } from 'node:crypto'
+
 const args = process.argv.slice(2)
 const opt = (name, fallback) => {
   const i = args.indexOf(`--${name}`)
@@ -36,12 +38,37 @@ async function startLocal() {
   return { url: `http://localhost:${port}`, close: () => new Promise((resolve) => http.close(resolve)) }
 }
 
+/**
+ * The administrator this script runs as.
+ *
+ * Against a real server (--url) it has to be given one, because that server's
+ * accounts live in its database. Against its own in-process server it makes a
+ * throwaway administrator with a password generated for this run, so the
+ * script carries no account and no password of its own.
+ */
+async function scriptAdmin({ email, password, local }) {
+  if (email && password) return { email, password }
+  if (!local) {
+    const fromEnv = { email: process.env.BOOTSTRAP_ADMIN_EMAIL, password: process.env.BOOTSTRAP_ADMIN_PASSWORD }
+    if (fromEnv.email && fromEnv.password) return fromEnv
+    throw new Error('Give an administrator account to sign in with: --email and --password (or BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD).')
+  }
+  const { createUser } = await import('../auth/users.js')
+  const made = {
+    email: `script-${randomUUID().slice(0, 8)}@localhost.test`,
+    password: randomBytes(18).toString('base64url'),
+  }
+  await createUser({ ...made, role: 'admin' })
+  return made
+}
+
 export async function runMockTournament({
-  url = null, email = 'admin@kata.local', password = 'test123', teams = 4, players = 6, mats = 2,
-  kataMode = 'panel', demoAccounts = !url, cleanup = false, quiet = false,
+  url = null, email = null, password = null, teams = 4, players = 6, mats = 2,
+  kataMode = 'panel', rolePassword = null, cleanup = false, quiet = false,
 } = {}) {
   const local = url ? null : await startLocal()
   const base = url || local.url
+  const account = await scriptAdmin({ email, password, local: !url })
   const steps = []
   const log = (line) => { if (!quiet) console.log(line) }
   const call = async (method, path, body, token, { raw = false } = {}) => {
@@ -73,11 +100,14 @@ export async function runMockTournament({
 
   log(`Mock tournament against ${url || 'an in-process server'}: ${teams} teams × ${players} players, ${mats} mats, kata by ${kataMode === 'bouts' ? 'bouts (flags)' : 'judges\' panel'}`)
   const ctx = {}
-  const login = async (who, pass = password) => (await call('POST', '/auth/login', { email: who, password: pass })).token
+  const login = async (who, pass = account.password) => (await call('POST', '/auth/login', { email: who, password: pass })).token
 
   const run = async () => {
-    if (!(await step('Sign in as the organiser', async () => { ctx.admin = await login(email) }))) return
-    const as = async (who) => (demoAccounts ? login(who, 'test123') : ctx.admin)
+    if (!(await step('Sign in as the organiser', async () => { ctx.admin = await login(account.email) }))) return
+    // Each step as the role whose job it is, when the caller has a roster to
+    // sign in with; otherwise the administrator does all of it, which is what
+    // a fresh installation looks like.
+    const as = async (who) => (rolePassword ? login(who, rolePassword) : ctx.admin)
 
     if (!(await step('Create the tournament', async () => {
       const stamp = Date.now().toString(36)
@@ -431,7 +461,7 @@ export async function runMockTournament({
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const report = await runMockTournament({
-    url: opt('url', null), email: opt('email', 'admin@kata.local'), password: opt('password', 'test123'),
+    url: opt('url', null), email: opt('email', null), password: opt('password', null),
     teams: Number(opt('teams', 4)), players: Number(opt('players', 6)), mats: Number(opt('mats', 2)), cleanup: opt('cleanup', false) === true,
     kataMode: opt('kata', 'panel') === 'bouts' ? 'bouts' : 'panel',
   })
