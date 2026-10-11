@@ -48,8 +48,8 @@ The role/permission source of truth is [permissions.js](../packages/shared/permi
 
 | Role | Typical API access |
 | --- | --- |
-| `super_admin` | All tournaments, accounts, organisations, rulesets, backups, and tournament operations |
-| `admin` | Tournament administration and account administration within its organisation; no system backup/ruleset management |
+| `super_admin` | Every permission, across organisations |
+| `admin` | Every permission, rulesets and backups included, within its organisation. The same set as `super_admin`: the two differ in scope, not in what they may do |
 | `tournament_owner` | Tournament administration within assigned events |
 | `registration_officer` | View/manage registration and edit players |
 | `weighin_officer` | View registration and record weigh-ins |
@@ -70,6 +70,7 @@ The tables below use the `/api/v1` prefix implicitly. `:tid` is a tournament ID,
 | --- | --- | --- |
 | `GET /health` | Uptime probe. Returns server time, storage mode (`mongodb` or `memory`), and uptime. | None |
 | `POST /auth/login` | Verify email/password and optional TOTP; returns JWT and user. Creates a session and logs the attempt asynchronously. | Reads `users`; writes `sessions`, `loginEvents`; failed-login audit may write `auditLog`. |
+| `GET /auth/test-credentials` | The bootstrap administrator's address and password, for the sign-in screen to offer while testing. Answers `{ credentials: null }` unless `SHOW_TEST_CREDENTIALS` is exactly `true`. | Reads neither collection: it echoes the two environment variables, since a stored password is a hash. |
 | `POST /auth/forgot` | Request a password reset; response intentionally does not reveal whether the email exists. Sends email when the account exists. | Reads `users`; writes `passwordResets`. |
 | `POST /auth/reset` | Redeem reset token and set a new password. | Reads/deletes `passwordResets`; updates `users`. |
 | `POST /auth/2fa/setup`, `/auth/2fa/enable`, `/auth/2fa/disable` | Create a pending TOTP secret, confirm it, or disable TOTP for the signed-in account. | Updates `users`. |
@@ -254,7 +255,7 @@ Accepted live commands update in-memory `MatchRoom` state and are persisted asyn
 
 ## 5. Collections and relationships
 
-The storage adapter in [store.js](../packages/api/lib/store.js) exposes the same simple CRUD/query interface over MongoDB or per-process memory. Mongo collections are lazily opened and receive a unique `id` index plus collection-specific indexes. The implementation does not use Mongo schemas or foreign keys; domain services enforce relationships and delete/cascade logic is explicit. In memory mode the tournament/application stores start empty on each process boot; development auth can seed its demo accounts separately.
+The storage adapter in [store.js](../packages/api/lib/store.js) exposes the same simple CRUD/query interface over MongoDB or per-process memory. Mongo collections are lazily opened and receive a unique `id` index plus collection-specific indexes. The implementation does not use Mongo schemas or foreign keys; domain services enforce relationships and delete/cascade logic is explicit. In memory mode the tournament/application stores start empty on each process boot. Accounts start empty too, in either mode: the app ships no roster, and the only account it creates by itself is the first administrator of an empty database, from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`. The test suite installs the roster it signs in with from `packages/api/test/roster.js`, which the server never loads.
 
 ### Main application collections
 
