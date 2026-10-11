@@ -75,7 +75,7 @@ organisation.
 | --- | --- | --- |
 | Super Admin | `/admin` | Everything, plus backups, rulesets and organisations |
 | Tournament Admin | `/admin` | Every tournament tab, accounts, sign-ins, analytics |
-| Tournament Owner | `/tournament_owner` | Every tournament tab, on its assigned tournaments only. No accounts, sign-ins, backups or rulesets, and it cannot create or delete a tournament |
+| Tournament Owner | `/tournament_owner` | Every tournament tab, on its assigned tournaments only, including the hall screen for its own bouts. No accounts, sign-ins, backups or rulesets, and it cannot create or delete a tournament |
 | Registration Officer | Choose a tournament | Dashboard, Registrations |
 | Weigh-in Officer | Choose a tournament | Dashboard, Registrations (read), Weigh-in, Check-in & passes |
 | Announcer | Choose a tournament | Call matches, Check-in & passes |

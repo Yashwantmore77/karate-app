@@ -1,5 +1,7 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../auth/middleware.js'
+import { requireAuth, requireRole, requireTournamentAdmin } from '../auth/middleware.js'
+import { matchAuthority } from '../auth/matchAccess.js'
+import { forbidden } from '../lib/errors.js'
 import { validate } from '../lib/validate.js'
 
 // The one document a hall screen reads. A singleton rather than a row per
@@ -56,6 +58,20 @@ export function displayRoutes(stores) {
   const router = Router()
   const { display } = stores
 
+  /**
+   * A tournament owner may drive the screens of its own bouts and no others.
+   * The display documents are per mat, not per tournament — mat 2 is mat 2 for
+   * the whole installation — so the write is bound to the bout it publishes:
+   * the same authority that lets this account run that bout lets it put the
+   * bout on a screen. Referees, scoreboard operators and admins are unchanged.
+   */
+  const ownBoutOnly = async (req, payload) => {
+    if (req.user?.role !== 'tournament_owner') return
+    const match = payload?.matchId ? await stores.matches.get(payload.matchId) : null
+    const { ok } = await matchAuthority(req.user, match, stores)
+    if (!ok) throw forbidden('tournament_forbidden')
+  }
+
   const upsert = async (id, patch) => {
     const existing = await display.get(id)
     return existing ? display.update(id, patch) : display.insert({ status: 'closed', ...patch, id })
@@ -77,8 +93,9 @@ export function displayRoutes(stores) {
 
   // Publishing stays with whoever is running the mat, or the scoreboard
   // operator (PRD v1 §4: display control, no scoring authority).
-  router.put('/', requireAuth, requireRole('referee', 'scoreboard_operator'), async (req, res) => {
+  router.put('/', requireAuth, requireTournamentAdmin('referee', 'scoreboard_operator'), async (req, res) => {
     const payload = validate(req.body, DISPLAY_SCHEMA)
+    await ownBoutOnly(req, payload)
     const mat = matOf(req) || (Number.isInteger(Number(payload.fieldNumber)) ? matOf({ query: { mat: payload.fieldNumber } }) : null)
     // A referee's update never carries the operator's announcement away.
     const { message, ...scores } = payload

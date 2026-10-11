@@ -187,6 +187,39 @@ describe('tournament owner', () => {
     expect((await signIn(email, 'a-new-password', totp(setup.secret))).status).toBe(200)
   })
 
+  it('drives the hall screen for its own bouts, and not for anyone else\'s', async () => {
+    const stamp = Date.now()
+    const root = await login('superadmin@kata.local')
+    const admin = await login('admin@kata.local')
+    const mine = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Screens ${stamp}` }, admin)).body.tournament
+    const email = `owner.screen${stamp}@x.local`
+    await call('POST', '/users', { email, password: 'password1', role: 'tournament_owner', tournamentIds: [mine.id] }, root)
+    const owner = await login(email, 'password1')
+
+    // A bout of its own: category, entrants, then the bout.
+    const category = (await call('POST', `/tournaments/${mine.id}/categories`, {
+      name: 'Cadet -55', ageGroup: 'Cadet', gender: 'M', division: '-55 KG', event: 'kumite',
+    }, owner)).body.category
+    await call('POST', `/categories/${category.id}/competitors`, { name: 'Red Player', bib: '001', age: 15 }, owner)
+    await call('POST', `/categories/${category.id}/competitors`, { name: 'Blue Player', bib: '002', age: 15 }, owner)
+    const match = (await call('POST', `/categories/${category.id}/matches`, {}, owner)).body.match
+
+    const screen = { status: 'open', matchId: match.id, fieldNumber: '1', akaName: 'Red Player', aoName: 'Blue Player', akaScore: 0, aoScore: 0 }
+    expect((await call('PUT', '/display?mat=1', screen, owner)).status).toBe(200)
+
+    // A bout that is not its own stays out of reach, whatever it puts on screen.
+    const other = (await call('POST', '/tournaments', { ...TOURNAMENT, name: `Other screens ${stamp}` }, admin)).body.tournament
+    const otherCategory = (await call('POST', `/tournaments/${other.id}/categories`, {
+      name: 'Cadet -60', ageGroup: 'Cadet', gender: 'M', division: '-60 KG', event: 'kumite',
+    }, admin)).body.category
+    await call('POST', `/categories/${otherCategory.id}/competitors`, { name: 'Their Red', bib: '003', age: 15 }, admin)
+    await call('POST', `/categories/${otherCategory.id}/competitors`, { name: 'Their Blue', bib: '004', age: 15 }, admin)
+    const otherMatch = (await call('POST', `/categories/${otherCategory.id}/matches`, {}, admin)).body.match
+    expect((await call('PUT', '/display?mat=1', { ...screen, matchId: otherMatch.id }, owner)).status).toBe(403)
+    // And it cannot publish a screen that names no bout at all.
+    expect((await call('PUT', '/display?mat=1', { ...screen, matchId: null }, owner)).status).toBe(403)
+  })
+
   it('stays inside its organisation', async () => {
     const stamp = Date.now()
     const root = await login('superadmin@kata.local')
