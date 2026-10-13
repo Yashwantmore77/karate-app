@@ -51,13 +51,38 @@ describe('AdminTournamentList - rendered UI', () => {
     expect(fake.rows('tournaments')).toHaveLength(0)
   })
 
-  it('renders existing tournaments in the table with an editable status dropdown', async () => {
+  it('renders existing tournaments in the table, a new one as Draft', async () => {
     fake.seed({ tournaments: [SPRING_CUP] })
     renderPage()
 
     expect(await screen.findByText('Spring Cup')).toBeInTheDocument()
     expect(screen.getByText('NYC')).toBeInTheDocument()
     expect(screen.getByText(/draft/i)).toBeInTheDocument()
+  })
+
+  it('shows the stage the tournament is really in, not the old status field', async () => {
+    // The case that was broken: run through its stages to Live, while the
+    // separate draft/active/completed field it used to show still said draft.
+    fake.seed({ tournaments: [
+      { ...SPRING_CUP, lifecycleStatus: 'LIVE', status: 'draft' },
+      { ...SPRING_CUP, id: 't2', name: 'Autumn Open', lifecycleStatus: 'REGISTRATION_OPEN', status: 'draft' },
+    ] })
+    renderPage()
+
+    expect(await screen.findByText('Spring Cup')).toBeInTheDocument()
+    expect(screen.getByText(/✓ Live/)).toBeInTheDocument()
+    expect(screen.getByText(/Registration open/)).toBeInTheDocument()
+    expect(screen.queryByText(/draft/i)).not.toBeInTheDocument()
+  })
+
+  it('does not offer to change the stage from the list', async () => {
+    fake.seed({ tournaments: [{ ...SPRING_CUP, lifecycleStatus: 'LIVE' }] })
+    renderPage()
+
+    const row = (await screen.findByText('Spring Cup')).closest('tr')
+    // Stages move on the tournament's Dashboard, where each step is checked;
+    // a dropdown here only ever changed a field nothing read.
+    expect(within(row).queryByRole('combobox')).not.toBeInTheDocument()
   })
 
   it('opens the edit modal pre-filled with the tournament name', async () => {

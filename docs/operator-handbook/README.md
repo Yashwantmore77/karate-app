@@ -178,6 +178,8 @@ Set up the tournament a few weeks before the event; it takes about an hour. You 
 
 *1 the eye icon opens a tournament*
 
+The **Status** column shows the stage each tournament is in — Draft, Registration open, Weigh-in, Live, Completed and so on — and changes by itself as you move the tournament along. You move it on the tournament's Dashboard, not in this list.
+
 **Done when** the tournament's Dashboard opens with "Draft" at the top right.
 
 ### Job 2: Fill in the details
