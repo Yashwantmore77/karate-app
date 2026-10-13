@@ -255,7 +255,7 @@ Accepted live commands update in-memory `MatchRoom` state and are persisted asyn
 
 ## 5. Collections and relationships
 
-The storage adapter in [store.js](../packages/api/lib/store.js) exposes the same simple CRUD/query interface over MongoDB or per-process memory. Mongo collections are lazily opened and receive a unique `id` index plus collection-specific indexes. The implementation does not use Mongo schemas or foreign keys; domain services enforce relationships and delete/cascade logic is explicit. In memory mode the tournament/application stores start empty on each process boot. Accounts start empty too, in either mode: the app ships no roster, and the only account it creates by itself is the first administrator of an empty database, from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`. The test suite installs the roster it signs in with from `packages/api/test/roster.js`, which the server never loads.
+The storage adapter in [store.js](../packages/api/lib/store.js) exposes the same simple CRUD/query interface over MongoDB or per-process memory. Mongo collections are lazily opened and receive a unique `id` index plus collection-specific indexes. The implementation does not use Mongo schemas or foreign keys; domain services enforce relationships and delete/cascade logic is explicit. In memory mode the tournament/application stores start empty on each process boot. Accounts start empty too, in either mode: the app ships no roster, and the only account it creates by itself is the first super admin of an empty database, from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`. The test suite installs the roster it signs in with from `packages/api/test/roster.js`, which the server never loads.
 
 ### Main application collections
 

@@ -20,8 +20,12 @@ export const ROLE = {
 
 export const ROLE_LABEL = {
   super_admin: 'Super Admin',
-  admin: 'Tournament Admin',
-  tournament_owner: 'Tournament Owner',
+  // Super Admin and Admin hold the same permissions; the difference is scope,
+  // not power (a super admin works across organisations).
+  admin: 'Admin',
+  // The role key is historical. What it means to the people using it is an
+  // administrator whose reach is the tournaments they were given.
+  tournament_owner: 'Tournament Admin',
   registration_officer: 'Registration Officer',
   weighin_officer: 'Weigh-in Officer',
   referee: 'Referee',

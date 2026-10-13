@@ -61,8 +61,8 @@ The app runs the whole tournament for you: entries, draw, bouts, scores, results
 
 | Person | What they do | Screen they use |
 | --- | --- | --- |
-| You, the **Tournament Admin** | Run everything and fix problems | Every tab of the tournament |
-| **Tournament Owner** | Runs the tournaments they were given, and sees no others | Every tab of their own tournaments |
+| You, the **Admin** | Run everything and fix problems | Every tab of the tournament |
+| **Tournament Admin** | Runs the tournaments they were given, and sees no others | Every tab of their own tournaments |
 | **Registration Officer** | Checks and approves the entries | Registrations |
 | **Weigh-in Officer** | Weighs the Kumite players | Weigh-in |
 | **Announcer** | Calls the next bouts to each mat | Call matches |
@@ -98,7 +98,7 @@ You sign in once on each device, and the app opens the right screen for your rol
 
 *The sign-in page: 1 Email, 2 Password, 3 Sign in*
 
-- Your account was made for you by an administrator. There is no "sign up": the app ships with no accounts of any kind, and the only one that ever appears by itself is the first administrator of a brand-new installation (see below).
+- Your account was made for you by an administrator. There is no "sign up": the app ships with no accounts of any kind, and the only one that ever appears by itself is the first Super Admin of a brand-new installation (see below).
 - On a test server you may see a dashed **Administrator, for testing** panel under the button, showing an address and password with a **Fill these in** button. It appears only where someone has deliberately switched it on, and never on a real event's server.
 - Forgot your password? Click **Forgot password?** under the button. The email you get has a link that works for 30 minutes.
 - After more than 10 tries in one minute, the app says "too many attempts". Wait one minute and try again.
@@ -235,7 +235,7 @@ Each official needs their own account. Make them before the event, so everyone c
 > with none, so no password printed in a manual anywhere can open your event.
 > Whoever sets the server up puts an address and a password into its settings
 > (`BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD`), and starting the
-> server turns that pair into the first **Tournament Admin**. That account makes
+> server turns that pair into the first **Super Admin**. That account makes
 > every other one, here. Change its password from **My account** once you are in.
 
 1. Click **Accounts** in the top bar (1), then **New account** (2).
@@ -245,7 +245,7 @@ Each official needs their own account. Make them before the event, so everyone c
 *1 Accounts, 2 New account*
 
 2. Type the person's **Email** (1) and a **Password** (2) of at least 8 characters.
-3. Choose the **Role** (3): Referee, Kata Judge, Announcer, Scoreboard Operator, Weigh-in Officer, Registration Officer, Tournament Admin, Tournament Owner or Viewer (read-only). For a Tournament Owner, see "Hand a tournament to its owner" below.
+3. Choose the **Role** (3): Referee, Kata Judge, Announcer, Scoreboard Operator, Weigh-in Officer, Registration Officer, Admin, Tournament Admin or Viewer (read-only). For a Tournament Admin, see "Hand a tournament to its administrator" below.
 4. For a Kata Judge, type their **Seat** (4) on the panel: 1 for the first judge, 2 for the second, and so on.
 5. Click **Create account** (5).
 
@@ -257,10 +257,10 @@ Each official needs their own account. Make them before the event, so everyone c
 
 **Done when** every official is in the Accounts list. You need at least one Referee per mat and one Kata Judge per seat (5 seats unless you changed the panel size).
 
-### Hand a tournament to its owner
+### Hand a tournament to its administrator
 
 Someone who runs one event of their own — a club hosting its own cup, a district
-organiser — gets a **Tournament Owner** account. Inside the tournaments you give
+organiser — gets a **Tournament Admin** account. Inside the tournaments you give
 them they do everything you do: details, categories, entries, weigh-in, draw,
 bouts, results, certificates and reports. Outside them they see nothing at all:
 no other tournament, no staff accounts, no sign-in log, no backups.
@@ -268,16 +268,16 @@ no other tournament, no staff accounts, no sign-in log, no backups.
 You make one yourself, in two steps:
 
 1. **Create the account.** In Accounts, click **New account**, fill in their
-   email and a password, and choose the role **Tournament Owner**.
+   email and a password, and choose the role **Tournament Admin**.
 2. **Give them their tournaments.** Open the account again in Accounts and tick
    them under **Tournaments this account may work**. You can only tick
    tournaments your own organisation runs.
 
-A new owner with nothing ticked sees no tournaments at all — the list says
-"None yet" against their name. That is the point of the role: an owner reaches
+A new Tournament Admin with nothing ticked sees no tournaments at all — the
+list says "None yet" against their name. That is the point of the role: it reaches
 exactly what you ticked and nothing else.
 
-The owner signs in on the ordinary sign-in page, with the email and password you
+They sign in on the ordinary sign-in page, with the email and password you
 gave them — there is no separate address and no shared account. Give them those
 two, and ask them to sign in once before the event. They can change
 their own password under My account, use **Forgot password?** if they lose it,
@@ -288,7 +288,7 @@ tournaments**, Analytics, Live board and Public site; there is no Accounts, no
 System and no **New Tournament** button, and they cannot delete a tournament.
 If they need another one, tick it for them.
 
-**Done when** the owner signs in and sees their tournament, and only theirs.
+**Done when** they sign in and see their tournament, and only theirs.
 
 ## 5. Part 2 — Registration
 
@@ -495,7 +495,7 @@ On the morning, each device opens the app's address and signs in with the accoun
 
 | Device | Where | Signs in as | Opens |
 | --- | --- | --- | --- |
-| Your laptop | Your desk | Tournament Admin | The tournament's Dashboard |
+| Your laptop | Your desk | Admin | The tournament's Dashboard |
 | A tablet or laptop at each mat | The mat table | Referee | **Matches**, then the bout (Part 5) |
 | A phone or tablet for each kata judge | The judges' chairs | Kata Judge | **Kata scoring** |
 | A laptop or tablet | The announcer's table | Announcer | **Call matches** |
@@ -682,7 +682,7 @@ The reports cover registrations, players, teams, categories, weigh-in, pools, ma
 
 3. Later, click **→ Archived** to keep the tournament as read-only history.
 
-To correct a result after Completed, a Tournament Admin moves the tournament back to Live and types the reason. An archived tournament cannot be reopened.
+To correct a result after Completed, an Admin moves the tournament back to Live and types the reason. An archived tournament cannot be reopened.
 
 ## 10. Checklists to print
 
@@ -751,15 +751,15 @@ First look at **Needs attention** at the top of the tab: it names the problem an
 | "Entries are locked" when you change a player | On the Dashboard, click **Unlock entries** and type a reason. Not possible once the draw is locked |
 | "Time clash" when you schedule a bout | Choose another time or mat. The message says who clashes |
 | "That event is not on the mats now" | Finish the current event, then click **Switch to Kata** or **Switch to Kumite** at the top |
-| A wrong score on the console | Click **Undo** straight away. After the bout is closed, a Tournament Admin uses **Correct result** on the Matches tab and types the reason |
+| A wrong score on the console | Click **Undo** straight away. After the bout is closed, an Admin uses **Correct result** on the Matches tab and types the reason |
 | The mat's tablet lost the internet during a bout | Keep scoring. The tablet sends everything when it is back online |
 | "Another device is running this mat" | If that device has failed or left, click **Take over** |
 | A hall screen shows NOT LIVE | The mat's tablet is offline. Fix its Wi-Fi; the screen recovers by itself |
 | A judge sees "No kata round you are judging is open" | Start the round on the Kata panel (Job 21) and check that the judge has a seat |
 | A player does not come to the mat | The announcer marks them **Absent**. The referee records the result with **Decision**, or you use **Enter result** and choose No-show |
 | A player is injured and cannot go on | On Registrations, click the walking figure to withdraw them. Their remaining bouts go to their opponents |
-| "You do not have permission to do that" | Your role cannot do it. Ask a Tournament Admin |
-| A Tournament Owner cannot see a tournament | It has not been ticked for them. A Tournament Admin ticks it in Accounts, under "Tournaments this account may work" |
+| "You do not have permission to do that" | Your role cannot do it. Ask an Admin |
+| A Tournament Admin cannot see a tournament | It has not been ticked for them. An Admin ticks it in Accounts, under "Tournaments this account may work" |
 | "This session was signed out" | Your sign-in ended or was stopped from another device. Sign in again |
 
 For any other message, the full [User Guide](../user-guide/README.md) lists every message and what to do.
@@ -793,4 +793,4 @@ Section 1 explained event, category, pool, bout, mat, Aka and Ao. These are the 
 | Provisional, Verified, Published | A result worked out by the app, checked by you, and shown to the public |
 | Pass | An ID card with a photo and a QR code, scanned at the door or the mat |
 | Needs attention | The box at the top of each tab that lists what to fix next |
-| Tournament Owner | An account that runs the tournaments it was given, and sees no others. A Tournament Admin creates it and ticks its tournaments |
+| Tournament Admin | An account that runs the tournaments it was given, and sees no others. An Admin creates it and ticks its tournaments |

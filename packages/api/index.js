@@ -339,7 +339,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // way to make the first one is the pair of environment variables below.
   const { listUsers } = await import('./auth/users.js')
   if (!(await listUsers({ limit: 1 })).total) {
-    console.warn('[auth] No accounts. Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD (8+ characters) and restart to create the first administrator.')
+    console.warn('[auth] No accounts. Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD (8+ characters) and restart to create the first super admin.')
   }
   http.listen(port, () => console.log(`kumite server on :${port}`))
 }

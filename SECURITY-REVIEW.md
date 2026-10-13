@@ -15,7 +15,7 @@ Each fix below has a test in `packages/api/security.test.js`, `packages/api/prdv
 
 **Fix (now).** The roster is gone from the app altogether, so there is no environment in which it can be seeded:
 - `auth/users.js` holds no accounts and no passwords. The test suite installs the roster it signs in with from `packages/api/test/roster.js`, a file vitest loads and the server never does.
-- The only account the app creates by itself is the first administrator of an empty database, from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` (8+ characters, the rule every account is held to). Unset means an empty database and nothing to sign in as, which the server says once at startup.
+- The only account the app creates by itself is the first super admin of an empty database, from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` (8+ characters, the rule every account is held to). Unset means an empty database and nothing to sign in as, which the server says once at startup.
 - `SEED_DEMO_ACCOUNTS` no longer exists. `SEED_SCENARIOS` still builds test data, in memory only and never against MongoDB, and creates a roster only when the store has no accounts at all.
 
 > **Action for any database created before this fix:** sign in and delete every `@kata.local` account, or clear the database with `npm run db:reset -w @kumite/api -- --yes`, which leaves only the bootstrap administrator.
