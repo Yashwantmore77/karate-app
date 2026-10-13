@@ -30,6 +30,10 @@ const TEAM = {
 export function coachRoutes(tms) {
   const router = Router()
   router.use(requireAuth, requireCoach)
+  router.use(async (req, _res, next) => {
+    await tms.assertLinkSession(req.user)
+    next()
+  })
 
   const t = (req) => req.user.tournamentId
 

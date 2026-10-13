@@ -106,15 +106,21 @@ export function matchRoutes(stores, tms = null) {
       throw badRequest('same_competitor')
     }
 
+    const judgeIds = next.judgeIds || []
+    if (!next.refereeId && judgeIds.length === 0) return
+    const category = await categories.get(categoryId)
+    const tournament = category ? await tournaments.get(category.tournamentId) : null
+    // Someone newly put on the bout must be able to open its tournament, or the bout is stuck.
+    const reaches = (field, person) => !(field in patch) || !tournament || mayAccessTournament(person, tournament.id, tournament)
+
     if (next.refereeId) {
       const referee = await findUser(next.refereeId)
       // An admin may take a mat; anyone else with the whistle is a mistake.
-      if (!referee || !['referee', 'admin'].includes(referee.role)) {
+      if (!referee || !['referee', 'admin'].includes(referee.role) || !reaches('refereeId', referee)) {
         throw badRequest('invalid_refereeId')
       }
     }
 
-    const judgeIds = next.judgeIds || []
     if (judgeIds.length === 0) return
 
     if (next.refereeId && judgeIds.includes(next.refereeId)) {
@@ -123,13 +129,11 @@ export function matchRoutes(stores, tms = null) {
 
     for (const id of judgeIds) {
       const judge = await findUser(id)
-      if (!judge || judge.role !== 'judge') throw badRequest('invalid_judgeIds')
+      if (!judge || judge.role !== 'judge' || !reaches('judgeIds', judge)) throw badRequest('invalid_judgeIds')
     }
 
     // The panel size is the tournament's rule, so the limit is read from there
     // rather than fixed at four.
-    const category = await categories.get(categoryId)
-    const tournament = category ? await tournaments.get(category.tournamentId) : null
     const limit = tournament?.judgeCount ?? DEFAULT_JUDGE_COUNT
     if (judgeIds.length > limit) throw badRequest('too_many_judges')
   }

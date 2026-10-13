@@ -3220,20 +3220,31 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (password !== undefined) patch.passwordHash = password ? await hashSecret(password) : null
     if (active !== undefined) patch.active = !!active
     if (expiresAt !== undefined) patch.expiresAt = expiresAt || null
-    const row = current
+    // Regenerating replaces the row: link sessions name its id, so they end with it.
+    if (current && regenerate) await stores.registrationLinks.remove(current.id)
+    const row = current && !regenerate
       ? await stores.registrationLinks.update(current.id, patch)
-      : await stores.registrationLinks.insert({ tournamentId, active: true, passwordHash: null, expiresAt: null, ...patch })
+      : await stores.registrationLinks.insert({ tournamentId, active: current?.active ?? true, passwordHash: current?.passwordHash ?? null, expiresAt: current?.expiresAt ?? null, ...patch })
     await record(actor, { tournamentId, action: A.LINK_CHANGED, entity: 'registration_link', entityId: row.id, after: { regenerated: !!patch.token, passwordChanged: password !== undefined, active: row.active, expiresAt: row.expiresAt } })
     return publicLink(row)
   }
 
-  async function resolveLink(token) {
-    const link = (await stores.registrationLinks.list({ token }))[0]
-    if (!link || !token) throw missing('link_not_found')
+  const assertLinkOpen = (link) => {
+    if (!link) throw missing('link_not_found')
     if (!link.active) throw rule('link_disabled')
     if (link.expiresAt && new Date(link.expiresAt) < now()) throw rule('link_expired')
+    return link
+  }
+
+  async function resolveLink(token) {
+    const link = assertLinkOpen(token ? (await stores.registrationLinks.list({ token }))[0] : null)
     const tournament = await tournamentOf(link.tournamentId)
     return { link, tournament }
+  }
+
+  /** A session opened with a link lasts only while that link is open (a coach's own login is not a link). */
+  async function assertLinkSession(actor) {
+    if (isCoach(actor) && !String(actor.linkId).startsWith('account:')) assertLinkOpen(await stores.registrationLinks.get(actor.linkId))
   }
 
   async function linkInfo(token) {
@@ -3613,7 +3624,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // rulesets and locks
     listRulesets, resolveRuleset, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
     // links and coaches
-    getLink, saveLink, linkInfo, openLink, coachOverview,
+    getLink, saveLink, linkInfo, openLink, assertLinkSession, coachOverview,
     // public, dashboard, audit
     publicList, publicView, publicTournament, dashboard, listNotifications, markNotificationsRead, sendWeighInReminder,
     auditTrail: (tournamentId) => audit.forTournament(tournamentId),

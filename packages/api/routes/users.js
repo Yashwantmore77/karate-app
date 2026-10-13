@@ -3,6 +3,7 @@ import { listUsers, createUser, updateUser, deleteUser, findUserRecord, findUser
 import { requireAuth, requireRole, tournamentFor } from '../auth/middleware.js'
 import { badRequest, forbidden, notFound, conflict } from '../lib/errors.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
+import { revokeOtherSessions } from '../auth/sessions.js'
 
 /**
  * Account administration. There is no self-service signup anywhere in the
@@ -36,7 +37,6 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
   const scopedBody = (body, org) => {
     const out = { ...(body || {}) }
     if (org) {
-      if (out.role === 'super_admin') throw forbidden('role_forbidden')
       if (out.organizationId !== undefined && out.organizationId !== org) throw forbidden('organization_forbidden')
       out.organizationId = org
     }
@@ -51,6 +51,11 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
       const tournament = await tournamentFor(String(id))
       if (!tournament || tournament.organizationId !== org) throw forbidden('organization_forbidden')
     }
+  }
+  // Only a super admin makes, changes or removes a super admin: otherwise any
+  // admin could promote itself, or lock the super admin out.
+  const assertMayTouch = (req, target = null) => {
+    if (req.user.role !== 'super_admin' && (req.body?.role === 'super_admin' || target?.role === 'super_admin')) throw forbidden('role_forbidden')
   }
   const assertInScope = async (uid, org) => {
     if (!org) return
@@ -67,6 +72,7 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
   })
 
   router.post('/', async (req, res) => {
+    assertMayTouch(req)
     const org = await scopeOf(req)
     await assertTournamentsInScope(req.body, org)
     const user = await createUser(scopedBody(req.body, org))
@@ -82,6 +88,7 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
     const body = scopedBody(req.body, org)
     if (org && req.body?.organizationId === undefined) delete body.organizationId
     const before = await findUser(req.params.uid)
+    assertMayTouch(req, before)
     if (body.role && before && body.role !== before.role) {
       // Your own role is changed by another administrator, never by yourself:
       // otherwise the last admin can demote themselves out of the system.
@@ -89,6 +96,8 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
       if (['referee', 'judge'].includes(before.role)) await assertNotAssigned(req.params.uid)
     }
     const user = await updateUser(req.params.uid, body)
+    // A sign-in carries the role it was issued with, so a new role or password ends the others.
+    if (user.role !== before?.role || body.password) await revokeOtherSessions(user.uid, req.user.sid)
     const pick = (u) => ({ email: u?.email, role: u?.role, seat: u?.seat ?? null, tournamentIds: u?.tournamentIds || [], tournamentRoles: u?.tournamentRoles || null, organizationId: u?.organizationId || null })
     await audit(req.user, { action: 'user.changed', entity: 'user', entityId: user.uid, before: pick(before), after: pick(user), reason: body.password ? 'password changed' : null })
     res.json({ user })
@@ -100,8 +109,10 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
     if (req.params.uid === req.user.uid) throw badRequest('cannot_delete_self')
     await assertInScope(req.params.uid, await scopeOf(req))
     const before = await findUser(req.params.uid)
+    assertMayTouch(req, before)
     if (before && ['referee', 'judge'].includes(before.role)) await assertNotAssigned(req.params.uid)
     await deleteUser(req.params.uid)
+    await revokeOtherSessions(req.params.uid, null)
     await audit(req.user, { action: 'user.changed', entity: 'user', entityId: req.params.uid, before: { email: before?.email, role: before?.role }, reason: 'deleted' })
     res.status(204).end()
   })
