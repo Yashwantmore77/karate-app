@@ -88,9 +88,11 @@ export async function initialAccounts(env = process.env) {
   const email = normalizeEmail(env.BOOTSTRAP_ADMIN_EMAIL || '')
   const password = env.BOOTSTRAP_ADMIN_PASSWORD || ''
   if (!email || password.length < MIN_PASSWORD) return []
-  // An administrator, not a super admin: an administrator has full system
-  // access, and a single-tenant installation never needs the role above it.
-  return [{ uid: randomUUID(), email, role: 'admin', passwordHash: await hashPassword(password) }]
+  // A super admin: the first account of an installation is the one that sets
+  // the installation up, and organisations are the one thing an administrator
+  // cannot manage. Everything an administrator may do, this may do too
+  // (requireRole admits a super admin wherever it asks for an admin).
+  return [{ uid: randomUUID(), email, role: 'super_admin', passwordHash: await hashPassword(password) }]
 }
 
 // --- in-memory store (no MONGODB_URI) --------------------------------------

@@ -16,6 +16,7 @@ import { formatDate } from '../../utils/dateUtils'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { describeError } from '../../data/tms'
+import StatusBadge from '../../components/tms/StatusBadge'
 
 // What the tournament holds: decides which screens it needs (a Kumite-only
 // event has no kata panel, a Kata-only one no weigh-in). Panel size and slot
@@ -129,11 +130,6 @@ export default function AdminTournamentList({ uid, profile = null, basePath = '/
     setDeleteConfirm(null)
   }
 
-  const handleStatusChange = async (id, status) => {
-    await tournamentStore.update(id, { status })
-    await refresh()
-  }
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>
       <PageBar>
@@ -195,28 +191,12 @@ export default function AdminTournamentList({ uid, profile = null, basePath = '/
                     <TableCell>{new Date(t.date).toLocaleDateString()}</TableCell>
                     <TableCell>{typeLabel(t)}</TableCell>
                     <TableCell>
-                      <Select
-                        value={t.status}
-                        onChange={(e) => handleStatusChange(t.id, e.target.value)}
-                        size="small"
-                        variant="standard"
-                        disableUnderline
-                        sx={{
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          borderRadius: 1,
-                          px: 1,
-                          bgcolor: t.status === 'draft' ? 'warning.light' : t.status === 'active' ? 'success.light' : 'info.light',
-                          color: t.status === 'draft' ? 'warning.dark' : t.status === 'active' ? 'success.dark' : 'info.dark',
-                          '& .MuiSelect-select': { py: 0.5 },
-                          '& .MuiSvgIcon-root': { color: 'inherit' },
-                        }}
-                      >
-                        <MenuItem value="draft">Draft</MenuItem>
-                        <MenuItem value="active">Active</MenuItem>
-                        <MenuItem value="completed">Completed</MenuItem>
-                      </Select>
+                      {/* The tournament's real stage. It used to show a separate
+                          draft / active / completed field that nothing else read
+                          and the stages never updated, so a live tournament said
+                          "Draft" here for ever. Stages move on the tournament's
+                          Dashboard, where each step is checked. */}
+                      <StatusBadge status={t.lifecycleStatus || 'DRAFT'} />
                     </TableCell>
                     <TableCell align="right">
                       <IconButton

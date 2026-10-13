@@ -53,7 +53,9 @@ describe('security review', () => {
       expect(await initialAccounts({})).toEqual([])
       const [admin, ...rest] = await initialAccounts({ BOOTSTRAP_ADMIN_EMAIL: 'Owner@Example.org', BOOTSTRAP_ADMIN_PASSWORD: 'a-long-passphrase' })
       expect(rest).toHaveLength(0)
-      expect(admin).toMatchObject({ email: 'owner@example.org', role: 'admin' })
+      // A super admin: the account that sets an installation up is the one
+      // role that can also manage organisations.
+      expect(admin).toMatchObject({ email: 'owner@example.org', role: 'super_admin' })
       expect(admin.passwordHash).not.toContain('a-long-passphrase')
       // Too short a bootstrap password is refused, by the same rule every
       // other account is held to.

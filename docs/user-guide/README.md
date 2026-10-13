@@ -59,23 +59,23 @@ In the table, `<app>` is the address where your app is installed (for example `h
 - A sign-in lasts 12 hours, one tournament day. After that, sign in again.
 - More than 10 sign-in attempts for one account in a minute, or 60 from one address, are refused with "too many attempts". Wait a minute and try again.
 - **Forgot password** sends a reset link that works for 30 minutes. At most 5 requests per 15 minutes.
-- There is no sign-up. Accounts are made by an administrator, and the app ships with none: the first administrator of a new installation comes from the server's own settings, and makes everyone else.
+- There is no sign-up. Accounts are made by an administrator, and the app ships with none: the first account of a new installation is a Super Admin, made from the server's own settings, and it makes everyone else.
 - Test server only: a dashed **Administrator, for testing** panel may sit under the button, showing an address and password with a **Fill these in** button. It appears only where it has been switched on deliberately, never on a real server.
 
 ### Roles and what each one sees
 
 An account has one role. An admin can also give it a different role inside one tournament, or limit it to some tournaments (Accounts page).
 
-For every role except Tournament Owner, an empty tournament list means all of
-them. For a Tournament Owner it means none: an owner reaches exactly the
-tournaments ticked for it. A Tournament Admin creates the owner account and
+For every role except Tournament Admin, an empty tournament list means all of
+them. For a Tournament Admin it means none: it reaches exactly the
+tournaments ticked for it. An Admin or Super Admin creates the account and
 ticks its tournaments, inside its own organisation.
 
 | Role | Home screen | Tournament tabs and screens |
 | --- | --- | --- |
-| Super Admin | `/admin` | Everything, plus backups, rulesets and organisations |
-| Tournament Admin | `/admin` | Every tournament tab, accounts, sign-ins, analytics |
-| Tournament Owner | `/tournament_owner` | Every tournament tab, on its assigned tournaments only, including the hall screen for its own bouts. No accounts, sign-ins, backups or rulesets, and it cannot create or delete a tournament |
+| Super Admin | `/admin` | Everything: every tournament tab, accounts, sign-ins, analytics, backups, rulesets and organisations |
+| Admin | `/admin` | The same as a Super Admin, except organisations |
+| Tournament Admin | `/tournament_owner` | Every tournament tab, on its assigned tournaments only, including the hall screen for its own bouts. No accounts, sign-ins, backups or rulesets, and it cannot create or delete a tournament |
 | Registration Officer | Choose a tournament | Dashboard, Registrations |
 | Weigh-in Officer | Choose a tournament | Dashboard, Registrations (read), Weigh-in, Check-in & passes |
 | Announcer | Choose a tournament | Call matches, Check-in & passes |
@@ -85,15 +85,15 @@ ticks its tournaments, inside its own organisation.
 | Viewer (read-only) | Choose a tournament | Dashboard, Registrations, Reports |
 | Coach / Team Manager | The registration link | Their own team and players only |
 
-Only admins hold the sensitive privileges: correcting a finished score, overriding a result, redrawing pools, reopening a completed tournament, and overriding a closed weigh-in. A Tournament Owner holds the same ones inside the tournaments it was given.
+Only admins hold the sensitive privileges: correcting a finished score, overriding a result, redrawing pools, reopening a completed tournament, and overriding a closed weigh-in. A Tournament Admin holds the same ones inside the tournaments it was given.
 
 ![Staff with one job pick a tournament first (here the Registration Officer).](images/staff-picker.webp)
 
 *Staff with one job pick a tournament first (here the Registration Officer).*
 
-![A Tournament Owner sees only the tournaments ticked for it, and no admin screens.](images/owner-tournaments.webp)
+![A Tournament Admin sees only the tournaments ticked for it, and no system screens.](images/owner-tournaments.webp)
 
-*A Tournament Owner sees only the tournaments ticked for it, and no admin screens.*
+*A Tournament Admin sees only the tournaments ticked for it, and no system screens.*
 
 ### Help inside the app
 
@@ -908,7 +908,7 @@ The app checks every action on the server, so a rule cannot be skipped from any 
 | Registration link password | At most 10 tries per minute |
 | Two-step code | The current 6-digit code from the authenticator app |
 | Sign-in length | 12 hours; signing a device out ends its session at once |
-| Reach | An account limited to some tournaments, or to an organisation, cannot open others. A Tournament Owner with no tournaments ticked reaches none at all |
+| Reach | An account limited to some tournaments, or to an organisation, cannot open others. A Tournament Admin with no tournaments ticked reaches none at all |
 | Own role | Cannot be changed by yourself |
 | Uploads (photo, ID proof, logo) | PNG, JPEG or PDF, up to 2 MB; the file's content must match its type |
 | Request limits | 1,200 requests a minute per signed-in device; public pages and scoreboards 6,000 a minute per address |

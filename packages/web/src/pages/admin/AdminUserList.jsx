@@ -280,7 +280,7 @@ export default function AdminUserList({ uid }) {
               onChange={(e) => formik.setFieldValue('tournamentIds', typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
               slotProps={{ select: { multiple: true, renderValue: (ids) => (ids.length ? ids.map(tournamentName).join(', ') : isOwner ? 'None yet' : 'All tournaments') }, inputLabel: { shrink: true } }}
               helperText={isOwner
-                ? 'A Tournament Owner reaches exactly these tournaments. Empty means none at all.'
+                ? 'A Tournament Admin reaches exactly these tournaments. Empty means none at all.'
                 : 'Leave empty for all tournaments. A super admin always sees all.'}
             >
               {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
