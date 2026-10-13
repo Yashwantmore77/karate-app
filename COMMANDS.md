@@ -40,7 +40,7 @@ Render's settings.
 
 ## 1. Get the latest code
 
-Run in the top folder (`kata-app`):
+Run in the top folder (`karate-app`):
 
 ```
 git checkout main
@@ -113,7 +113,8 @@ npm run backup -- backups\day1.json
 ```
 
 `mkdir backups` is needed only the first time. If the folder already exists,
-it says so and nothing breaks.
+it says so and nothing breaks. `npm run backup` with no file name prints the
+backup to the screen instead.
 
 **Restore a backup into an empty database:**
 
@@ -184,9 +185,21 @@ builds the website — the same build Vercel runs.
 
 ## 6. The operator handbook (pictures and PDF)
 
-The pictures are taken from the app running with its test tournaments. First,
-start the API with test data (section 2) and the website in a second window.
-Then, in the top folder:
+The pictures are taken from the app running with its test tournaments, which
+the run changes as it goes, so start a throwaway server for it. In two windows,
+in the top folder. `node index.js` reads no `.env`, so this server is always
+in memory, never your live database; the higher rate limit stops the run
+tripping it:
+
+```
+cd packages\api && set "SEED_SCENARIOS=true" && set "API_RATE_LIMIT=100000" && node index.js
+```
+
+```
+npm run dev
+```
+
+Then, in a third window in the top folder:
 
 ```
 npm run docs:screenshots
@@ -197,8 +210,8 @@ npm run docs:pdf
 The first line retakes every picture, the second only the named ones, and the
 third rebuilds `docs\operator-handbook\Operator-Handbook.pdf`.
 
-The screenshot run changes the test data as it goes. To run it twice, restart
-the API in between.
+To run it twice, restart the API in between: the first run leaves the test
+data changed.
 
 ---
 
@@ -288,10 +301,10 @@ set MONGODB_URI=
 
 | Message | Meaning |
 | --- | --- |
-| `401 invalid_credentials` | Wrong email or password. Sign in on the website with exactly the same values to check. |
+| `401 invalid_credentials` | Wrong email or password. |
 | `429` / `too_many_attempts` | 10 wrong sign-ins in a minute. Wait a minute. |
 | `querySrv EBADRESP` | DNS on your computer — see above. |
-| `MONGODB_URI is not set` | That command needs a database, and `.env` names none. |
+| `MONGODB_URI is not set` | A warning from backup or restore: `.env` names no database, so the command is working on an empty memory store, not your live data. |
 
 ---
 
@@ -304,4 +317,5 @@ The commands are the same except for these:
 | `cd packages\api` | `cd packages/api` |
 | `copy a b` | `cp a b` |
 | `set "SEED_SCENARIOS=true" && npm run server` | `SEED_SCENARIOS=true npm run server` |
+| `set "SEED_SCENARIOS=true" && set "API_RATE_LIMIT=100000" && node index.js` | `SEED_SCENARIOS=true API_RATE_LIMIT=100000 node index.js` |
 | `ipconfig /flushdns` | macOS: `sudo dscacheutil -flushcache` |
