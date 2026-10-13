@@ -125,7 +125,29 @@ npm run mock -w @kumite/api                     # rehearse a whole Kata + Kumite
 npm run mock -w @kumite/api -- --kata bouts     # the same, with kata fought as bouts (flags) on the mats
 npm run loadtest -w @kumite/api                 # mats scoring live while spectators poll
 npm run db:reset -w @kumite/api -- --yes        # empty the database, leaving one administrator
+npm run demo -w @kumite/api -- --url <api>      # two demo tournaments, one played and one ready to run
+npm run demo -w @kumite/api -- --url <api> --remove   # take them out again
 ```
+
+`demo` builds two tournaments through the API, each run by its own Tournament
+Admin, every step signed in as the person whose job it is: coaches register
+through the link, the registration officer approves, the weigh-in officer weighs,
+the announcer checks athletes in and calls bouts, each mat's referee scores on the
+live console, and the kata judges score from their own seats.
+
+| Tournament | Left at |
+| --- | --- |
+| Pune District Karate Championship (Demo) | **Fully played**: every bout scored, results published, certificates issued — left Live, not Completed, so it can still be explored and corrected |
+| Nashik Open Karate Championship (Demo) | **Ready to run**: drawn, timetabled with a referee on every bout, athletes checked in and Live, with nothing scored |
+
+Each has 40 players from 4 clubs in 12 categories: kata, plus kumite in round-robin
+pools for the 10-11s and knockout brackets for the 12-13s. Against a real server
+it signs in with `DEMO_ADMIN_EMAIL` / `DEMO_ADMIN_PASSWORD` from
+`packages/api/.env`. The accounts it creates are at `@demo.karate.test`, a reserved
+domain that receives no mail, and are limited to the demo tournaments, so they
+reach nothing else on the server; they share one generated password, printed at
+the end. Without `--url` it runs against an in-process server in memory, never
+touching a database named in `.env`.
 
 `db:reset` is the hand-over: it drops every collection — tournaments, players,
 matches, results, files, the audit and sign-in logs and every account — and puts
