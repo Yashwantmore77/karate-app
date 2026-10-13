@@ -91,7 +91,7 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
   const [officials, setOfficials] = useState([])
   const [log, setLog] = useState(null) // { m, events }
   const [statusMenu, setStatusMenu] = useState(null) // { anchor, m }
-  useEffect(() => { listOfficials().then(setOfficials) }, [])
+  useEffect(() => { listOfficials(tid).then(setOfficials) }, [tid])
   const officialName = (uid) => officials.find((o) => o.uid === uid)?.label || uid
 
   const { loading, refreshing, wrap } = useLoading()

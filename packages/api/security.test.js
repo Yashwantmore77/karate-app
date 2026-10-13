@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createApp } from './index.js'
 import { checkSecret } from './auth/jwt.js'
+import { createUser } from './auth/users.js'
+import { issueReset } from './auth/resets.js'
 
 // Findings of the security review, each pinned by a test.
 
@@ -138,5 +140,72 @@ describe('security review', () => {
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(res.headers.get('access-control-allow-headers')).toContain('idempotency-key')
     expect(res.headers.get('x-powered-by')).toBeNull()
+  })
+
+  it('lets only a super admin make, change or remove a super admin', async () => {
+    const stamp = Date.now()
+    const root = await createUser({ email: `root${stamp}@x.local`, password: 'password1', role: 'super_admin' })
+    const admin = await login('admin@kata.local')
+    expect((await call('POST', '/users', { email: `climb${stamp}@x.local`, password: 'password1', role: 'super_admin' }, admin)).status).toBe(403)
+    expect((await call('PATCH', `/users/${root.uid}`, { password: 'taken-over-1' }, admin)).status).toBe(403)
+    expect((await call('DELETE', `/users/${root.uid}`, undefined, admin)).status).toBe(403)
+    const superAdmin = await login('superadmin@kata.local')
+    expect((await call('POST', '/users', { email: `second${stamp}@x.local`, password: 'password1', role: 'super_admin' }, superAdmin)).status).toBe(201)
+  })
+
+  it('ends the sign-ins of an account that is demoted, deleted or has its password reset', async () => {
+    const stamp = Date.now()
+    const signedIn = async (tag, role) => {
+      const user = await createUser({ email: `${tag}${stamp}@x.local`, password: 'password1', role })
+      return { user, token: await login(user.email, 'password1') }
+    }
+    const admin = await login('admin@kata.local')
+    const demoted = await signedIn('demoted', 'admin')
+    await call('PATCH', `/users/${demoted.user.uid}`, { role: 'viewer' }, admin)
+    expect((await call('GET', '/users', undefined, demoted.token)).status).toBe(401)
+
+    const deleted = await signedIn('deleted', 'admin')
+    await call('DELETE', `/users/${deleted.user.uid}`, undefined, admin)
+    expect((await call('POST', '/users', { email: `ghost${stamp}@x.local`, password: 'password1', role: 'admin' }, deleted.token)).status).toBe(401)
+
+    const reset = await signedIn('reset', 'referee')
+    expect((await call('POST', '/auth/reset', { token: await issueReset(reset.user.uid), password: 'brand-new-1' })).status).toBe(200)
+    expect((await call('GET', '/auth/me', undefined, reset.token)).status).toBe(401)
+    // The administrator who made the changes stays signed in.
+    expect((await call('GET', '/users', undefined, admin)).status).toBe(200)
+  })
+
+  it('ends coach sessions when their registration link is regenerated or switched off', async () => {
+    const admin = await login('admin@kata.local')
+    const t = (await call('POST', '/tournaments', { name: 'Link Cup', location: 'Pune', date: '2027-03-01', template: 'kumite' }, admin)).body.tournament
+    const openLink = async () => {
+      const { token } = (await call('PUT', `/tournaments/${t.id}/registration-link`, { active: true }, admin)).body.link
+      return (await call('POST', `/public/register/${token}/session`, {})).body.token
+    }
+    const first = await openLink()
+    expect((await call('GET', '/coach/me', undefined, first)).status).toBe(200)
+    await call('PUT', `/tournaments/${t.id}/registration-link`, { regenerate: true }, admin)
+    expect((await call('GET', '/coach/me', undefined, first)).body.error).toBe('link_not_found')
+
+    const second = await openLink()
+    expect((await call('GET', '/coach/me', undefined, second)).status).toBe(200)
+    await call('PUT', `/tournaments/${t.id}/registration-link`, { active: false }, admin)
+    expect((await call('GET', '/coach/me', undefined, second)).body.error).toBe('link_disabled')
+  })
+
+  it('offers and accepts only officials who can open the tournament', async () => {
+    const admin = await login('admin@kata.local')
+    const make = async (name) => (await call('POST', '/tournaments', { name, location: 'Pune', date: '2027-04-01', template: 'kumite' }, admin)).body.tournament
+    const [home, away] = [await make('Home Open'), await make('Away Open')]
+    const outsider = await createUser({ email: `away-ref${Date.now()}@x.local`, password: 'password1', role: 'referee', tournamentIds: [away.id] })
+
+    const { officials } = (await call('GET', `/officials?role=referee&tournamentId=${home.id}`, undefined, admin)).body
+    expect(officials.some((o) => o.uid === outsider.uid)).toBe(false)
+    expect(officials.some((o) => o.email === 'referee@kata.local')).toBe(true)
+
+    const category = (await call('POST', `/tournaments/${home.id}/categories`, { name: 'Open', ageGroup: 'Senior', gender: 'M', division: 'Open', event: 'kumite' }, admin)).body.category
+    const match = (await call('POST', `/categories/${category.id}/matches`, {}, admin)).body.match
+    expect((await call('PATCH', `/matches/${match.id}`, { refereeId: outsider.uid }, admin)).body.error).toBe('invalid_refereeId')
+    expect((await call('PATCH', `/matches/${match.id}`, { refereeId: 'ref-uid-001' }, admin)).status).toBe(200)
   })
 })

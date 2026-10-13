@@ -30,7 +30,7 @@ export default function KataTab({ tournament, version, action, role }) {
   const [judges, setJudges] = useState([])
   const [seats, setSeats] = useState({})
   const [official, setOfficial] = useState({ kind: 'penalty', playerId: '', seat: 1, value: '', technical: '', athletic: '', reason: '' })
-  useEffect(() => { listOfficials().then((o) => setJudges(o.filter((x) => x.role === 'judge'))).catch(() => {}) }, [])
+  useEffect(() => { listOfficials(tid).then((o) => setJudges(o.filter((x) => x.role === 'judge'))).catch(() => {}) }, [tid])
   useEffect(() => { setSeats(round?.judgeAssignments || {}) }, [round?.id, JSON.stringify(round?.judgeAssignments || {})])
 
   const load = () => tms.kata.divisions(tid).then(setDivisions).catch(() => setDivisions([]))

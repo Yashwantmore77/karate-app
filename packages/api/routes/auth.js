@@ -136,6 +136,8 @@ export function authRoutes({ audit = async () => {} } = {}) {
     const uid = await redeemReset(token)
     if (!uid) throw badRequest('invalid_or_expired_token')
     await setSecurity(uid, { password })
+    // A reset is how a stolen password is taken back: every existing sign-in ends.
+    await revokeOtherSessions(uid, null)
     res.json({ ok: true })
   })
 

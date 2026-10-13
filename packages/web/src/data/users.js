@@ -16,10 +16,10 @@ export const page = async ({ page: pageNumber = 1, limit = 25, q = '' } = {}) =>
   return { rows: payload.users, total: payload.total, pages: payload.pages, page: payload.page }
 }
 
-/** Referees and judges who can be put on a match. */
-export const officials = async (role) => {
-  const suffix = role ? `?role=${encodeURIComponent(role)}` : ''
-  return (await httpGet(`/officials${suffix}`)).officials
+/** Referees and judges who can be put on a match; with a tournament id, only those who can open it. */
+export const officials = async (role, tournamentId) => {
+  const query = new URLSearchParams(Object.entries({ role, tournamentId }).filter(([, v]) => v)).toString()
+  return (await httpGet(`/officials${query ? `?${query}` : ''}`)).officials
 }
 export const create = async (fields) => (await httpPost('/users', fields)).user
 export const update = async (uid, patch) => (await httpPatch(`/users/${uid}`, patch)).user

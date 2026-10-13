@@ -249,7 +249,7 @@ Players come in three ways: coaches enter them through the registration link, th
 
 *Settings, Registration link: copy the link, set a password and an expiry, or regenerate it.*
 
-- **Regenerate link** makes a new link; the old one stops working.
+- **Regenerate link** makes a new link; the old one stops working, even for coaches already part-way through registering with it. Switching the link off stops them too.
 - Coaches can register only while the tournament is in Registration open, within the opening and closing date and time (in the tournament's time zone), and while entries are not locked.
 - **Soft-lock coach entries** (Dashboard), or a "Coach entries lock at" time (Settings), stops coaches early while the office can still make changes.
 
@@ -451,7 +451,7 @@ On the Matches tab every bout gets a mat, a start time, a referee and judges. Th
 ### Schedule a bout
 
 1. Press **Schedule** on the bout.
-2. Choose the **Mat** (1 to the number of mats in Settings), the **Referee** (a referee or admin account) and the **Judges** (judge accounts).
+2. Choose the **Mat** (1 to the number of mats in Settings), the **Referee** (a referee or admin account) and the **Judges** (judge accounts). The lists show only people who work this tournament.
 3. Enter the **Time**. It is the local clock of the device you are using, which should be the venue's.
 4. Press **Save**.
 
@@ -700,7 +700,8 @@ Admins manage staff accounts and watch sign-ins. The super admin also takes back
 
 - Each email can have only one account.
 - Nobody can change their own role; another admin must.
-- Only a super admin can create another super admin.
+- Only a super admin can create, change or remove a super admin.
+- A new role, a new password or a removed account signs that person out on every device. So does a reset through **Forgot password**.
 - An official still on unfinished bouts cannot be removed until someone else is put on those bouts (Matches tab).
 - A team manager can make their own login from the registration page (**Create my own login**). It opens their team only, in that tournament only.
 
@@ -907,7 +908,7 @@ The app checks every action on the server, so a rule cannot be skipped from any 
 | Password reset | The link works for 30 minutes; at most 5 requests per 15 minutes |
 | Registration link password | At most 10 tries per minute |
 | Two-step code | The current 6-digit code from the authenticator app |
-| Sign-in length | 12 hours; signing a device out ends its session at once |
+| Sign-in length | 12 hours; signing a device out ends its session at once. A new role, a new password or a removed account ends every session of that account |
 | Reach | An account limited to some tournaments, or to an organisation, cannot open others. A Tournament Admin with no tournaments ticked reaches none at all |
 | Own role | Cannot be changed by yourself |
 | Uploads (photo, ID proof, logo) | PNG, JPEG or PDF, up to 2 MB; the file's content must match its type |
@@ -984,6 +985,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | --- | --- |
 | Time clash: … Pick another time or mat. | Choose another time, mat, referee or judge; the message names who clashes |
 | The referee cannot also sit on the judging panel. | Pick a different referee or remove them from the judges |
+| Only a referee (or admin) who works this tournament can referee a bout. / Only judge accounts that work this tournament can sit on the panel. | Pick someone from the list, or an Admin ticks this tournament on their account (Accounts) |
 | This official is still on N unfinished bouts. | Put someone else on those bouts (Matches tab) first |
 | That event is not on the mats now. Switch the session first. | Use Switch to Kata / Switch to Kumite at the top, when the other event is finished |
 | Finish what is under way before switching the session. | Finish or send back the called and live bouts, or complete the open kata round |
@@ -1008,12 +1010,12 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Wrong email or password. | Check both; use Forgot password if needed |
 | Too many attempts | Wait one minute, then try again |
 | Enter the code from your authenticator app. / That code did not match. | Enter the current 6-digit code; check the phone's clock |
-| This session was signed out. Sign in again. | Your session was ended on another device; sign in again |
+| This session was signed out. Sign in again. | Your session was ended on another device, or your role or password changed; sign in again |
 | Your account is not assigned to this tournament. | Admin: add the tournament to your account (Accounts) |
 | You do not have permission to do that. | Your role cannot do this; ask an admin |
 | An account with that email already exists. | Use the existing account or another email |
 | You cannot change your own role. Ask another administrator. | Another admin changes it |
-| Only a super admin can create or change a Super Admin account. | Ask a Super Admin; an organisation's admin cannot make one |
+| Only a super admin can create or change a Super Admin account. | Ask a Super Admin; an admin cannot make, change or remove one |
 
 ## 14. Karate terms on screen
 

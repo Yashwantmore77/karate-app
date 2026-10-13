@@ -329,7 +329,7 @@ A coach who opens the link types its password (1) and clicks **Continue** (2). T
 *What a coach sees first: 1 the link password, 2 Continue*
 
 - Coaches can register only between the opening and closing times you set in Job 2.
-- If the link reaches people it should not, click **Regenerate link**. The old link stops working; send the new one to the coaches.
+- If the link reaches people it should not, click **Regenerate link**. The old link stops working, even for coaches already part-way through registering; send the new one to the coaches.
 
 ### Job 7: Check and approve the entries
 
@@ -468,7 +468,7 @@ The app has already put each category on a mat. You add the start times and the 
 
 *Matches: 1 Schedule, 2 Open scoring console*
 
-3. Check the **Mat** (1), choose the **Referee** (2) and the **Judges** (3), and set the start **Time** (4).
+3. Check the **Mat** (1), choose the **Referee** (2) and the **Judges** (3), and set the start **Time** (4). The lists show only people who work this tournament.
 4. Click **Save** (5).
 
 ![Schedule: 1 mat, 2 referee, 3 judges, 4 time, 5 Save](images/p4-schedule.webp)
@@ -762,7 +762,7 @@ First look at **Needs attention** at the top of the tab: it names the problem an
 | A player is injured and cannot go on | On Registrations, click the walking figure to withdraw them. Their remaining bouts go to their opponents |
 | "You do not have permission to do that" | Your role cannot do it. Ask an Admin |
 | A Tournament Admin cannot see a tournament | It has not been ticked for them. An Admin ticks it in Accounts, under "Tournaments this account may work" |
-| "This session was signed out" | Your sign-in ended or was stopped from another device. Sign in again |
+| "This session was signed out" | Your sign-in ended, was stopped from another device, or an Admin changed your role or password. Sign in again |
 
 For any other message, the full [User Guide](../user-guide/README.md) lists every message and what to do.
 

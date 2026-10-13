@@ -406,13 +406,15 @@ export async function listUsers({ q = '', page = 1, limit = 25, organizationId =
  * nothing about managing them. Admins are included because an admin may take
  * a mat.
  */
-export async function listAssignableOfficials({ organizationId = null } = {}) {
+export async function listAssignableOfficials({ organizationId = null, reaches = null } = {}) {
   const users = await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())
   return users
     .filter((user) => ROLES.includes(user.role))
     // Inside an organisation the picker shows that organisation's people, the
     // same scope the account roster uses (PRD point 33).
     .filter((user) => !organizationId || (user.organizationId || null) === organizationId)
+    // For one tournament, only people who can open it: anyone else put on a bout could never score it.
+    .filter((user) => !reaches || reaches(user))
     .map(({ uid, email, role, seat }) => ({ uid, email, role, ...(seat === undefined ? {} : { seat }) }))
     .sort((a, b) => a.role.localeCompare(b.role) || String(a.email).localeCompare(String(b.email)))
 }

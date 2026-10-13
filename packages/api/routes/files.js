@@ -21,7 +21,10 @@ export function fileRoutes(tms) {
   const router = Router()
   router.use(requireAuth)
   router.get('/:id', async (req, res) => {
-    if (req.user.role === 'coach') return sendFile(res, await tms.readFile(req.user, req.params.id))
+    if (req.user.role === 'coach') {
+      await tms.assertLinkSession(req.user)
+      return sendFile(res, await tms.readFile(req.user, req.params.id))
+    }
     const account = await findUserRecord(req.user.uid)
     const file = await tms.readFile(req.user, req.params.id, { canViewRegistrations: can(account?.role, P.REGISTRATION_VIEW) })
     if (!file.public && !mayAccessTournament(account, file.tournamentId, account?.organizationId ? await tournamentFor(file.tournamentId) : null)) return res.status(403).json({ error: 'tournament_forbidden' })
