@@ -53,12 +53,3 @@ export function zonedInstant(local, tz = DEFAULT_TIME_ZONE, { endOfDay = false }
   instant = guess - offsetMinutes(instant, zone) * 60000
   return new Date(instant)
 }
-
-/** Compares two local values in one zone: negative, zero or positive. */
-export const compareLocal = (a, b, tz) => zonedInstant(a, tz) - zonedInstant(b, tz)
-
-/** An instant shown in the tournament's zone, e.g. "31 Dec 2026, 18:00". */
-export function formatInZone(instant, tz = DEFAULT_TIME_ZONE) {
-  if (!instant) return ''
-  return new Intl.DateTimeFormat('en-GB', { timeZone: isValidTimeZone(tz) ? tz : 'UTC', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(instant))
-}

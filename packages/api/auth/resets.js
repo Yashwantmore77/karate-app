@@ -8,11 +8,14 @@ export const RESET_TTL_MS = 30 * 60_000
 const memory = new Map()
 const hash = (token) => createHash('sha256').update(String(token)).digest('hex')
 
+let indexed = null
 async function collection() {
-  const db = await getDb()
-  const c = db.collection('passwordResets')
-  await c.createIndex({ hash: 1 }, { unique: true })
-  await c.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+  const c = (await getDb()).collection('passwordResets')
+  indexed ??= Promise.all([
+    c.createIndex({ hash: 1 }, { unique: true }),
+    c.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+  ]).catch((err) => { indexed = null; throw err })
+  await indexed
   return c
 }
 

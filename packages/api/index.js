@@ -228,6 +228,7 @@ export function createApp() {
         else if (room.seq === 0 && Number.isInteger(Number(match?.mat)) && Number(match.mat) >= 1) room.state = { ...room.state, fieldNumber: String(match.mat) }
       }
       socket.join(matchId)
+      room.usedAt = serverNow()
       // Anyone signed in may watch; control goes only to an admin of this
       // tournament or the bout's referee (AC-14).
       if (control && (await mayControl(socket, matchId))) room.claim(socket.id, { uid: socket.user.uid })
@@ -289,8 +290,15 @@ export function createApp() {
             room.remember(clientEventId, event.seq)
             broadcast(matchId, { ...event, matchId, clientEventId })
             // PRD point 33: every live change is logged, corrections audited.
-            tms.recordLiveEvent(socket.user, matchId, { seq: event.seq, cmd, payload, before, after: event.state, at: event.at }).catch(() => {})
-            tms.saveLiveState(matchId, { seq: room.seq, state: room.state, history: room.history, handoffs: room.handoffs, controllerUid: room.controllerUid, lastAt: room.lastAt }).catch(() => {})
+            // Written one after another per bout, and never awaited here so
+            // scoring never waits on the database: after a restart the saved
+            // bout is the latest, and Live/Paused follow the clock in order.
+            const logged = { seq: event.seq, cmd, payload, before, after: event.state, at: event.at }
+            const saved = { seq: room.seq, state: room.state, history: room.history, handoffs: room.handoffs, controllerUid: room.controllerUid, lastAt: room.lastAt }
+            room.saving = room.saving.then(() => Promise.all([
+              tms.recordLiveEvent(socket.user, matchId, logged).catch(() => {}),
+              tms.saveLiveState(matchId, saved).catch(() => {}),
+            ]))
           }
           ack?.({ ok: true, seq: room.seq })
         } catch (err) {
@@ -316,19 +324,30 @@ export function createApp() {
     })
   }, EXPIRY_SWEEP_MS)
 
+  // A bout nobody has used or watched for a day leaves memory; joining it
+  // again restores it from its save. A day rather than "when the last viewer
+  // leaves", so a device that scored offline can still replay without an
+  // action counting twice: the room remembers which ones it already has.
+  const IDLE_ROOM_MS = 24 * 60 * 60_000
+  const evictIdleRooms = (now = serverNow()) => rooms.forEach((room, matchId) => {
+    if (now - room.usedAt > IDLE_ROOM_MS && !io.sockets.adapter.rooms.get(matchId)?.size) rooms.delete(matchId)
+  })
+  const evict = setInterval(evictIdleRooms, 60 * 60_000)
+
   http.on('close', () => {
     clearInterval(sweep)
+    clearInterval(evict)
     if (pendingPublic) clearTimeout(pendingPublic)
   })
 
-  return { app, http, io, rooms, stores, tms }
+  return { app, http, io, rooms, stores, tms, evictIdleRooms }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { http, stores } = createApp()
   const port = process.env.PORT || 4000
   // Testing without a database: SEED_SCENARIOS=true loads the test tournaments
-  // into the in-memory store at start (never into MongoDB; use the script for that).
+  // into the in-memory store at start. Never into MongoDB: real data is made in the app.
   if (process.env.SEED_SCENARIOS === 'true' && !isMongoConfigured()) {
     const { seedScenarios } = await import('./scripts/seed-scenarios.js')
     await seedScenarios(stores, { log: () => {} })

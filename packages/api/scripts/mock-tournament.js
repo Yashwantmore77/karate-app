@@ -5,70 +5,25 @@
 // checked and reported; a failing step names what went wrong. Run from
 // packages/api:
 //
-//   npm run mock                                         in-process server, demo accounts
+//   npm run mock
 //   npm run mock -- --teams 6 --players 8 --mats 3
 //   npm run mock -- --kata bouts                         kata by flags on the mats (default: judges' panel)
-//   npm run mock -- --url https://staging.example.org --email admin@… --password … [--cleanup]
 //
-// Against a real server only the admin account is needed: the admin does the
-// officials' work too. Use a staging copy; --cleanup deletes the mock
-// tournament afterwards. It never touches other tournaments.
+// It runs against an in-process server, in memory, and keeps nothing.
 
 import { performance } from 'node:perf_hooks'
 import { io as connect } from 'socket.io-client'
-
-import { randomBytes, randomUUID } from 'node:crypto'
-
-const args = process.argv.slice(2)
-const opt = (name, fallback) => {
-  const i = args.indexOf(`--${name}`)
-  if (i < 0) return fallback
-  const v = args[i + 1]
-  return v === undefined || v.startsWith('--') ? true : v
-}
+import { opt, startLocal, scriptAdmin } from './lib.js'
 
 const FIRST = ['Aarav', 'Vihaan', 'Arjun', 'Kabir', 'Ishaan', 'Rohan', 'Aditya', 'Dhruv', 'Krish', 'Yash', 'Pranav', 'Atharv', 'Reyansh', 'Sai', 'Om', 'Vivaan']
 const LAST = ['Sharma', 'Patil', 'Kulkarni', 'Joshi', 'Iyer', 'Rao', 'Nair', 'Gupta', 'Mehta', 'Desai', 'Shinde', 'Pawar']
 
-async function startLocal() {
-  process.env.API_RATE_LIMIT = process.env.API_RATE_LIMIT || '1000000'
-  const { createApp } = await import('../index.js')
-  const { http } = createApp()
-  const port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
-  return { url: `http://localhost:${port}`, close: () => new Promise((resolve) => http.close(resolve)) }
-}
-
-/**
- * The administrator this script runs as.
- *
- * Against a real server (--url) it has to be given one, because that server's
- * accounts live in its database. Against its own in-process server it makes a
- * throwaway administrator with a password generated for this run, so the
- * script carries no account and no password of its own.
- */
-async function scriptAdmin({ email, password, local }) {
-  if (email && password) return { email, password }
-  if (!local) {
-    const fromEnv = { email: process.env.BOOTSTRAP_ADMIN_EMAIL, password: process.env.BOOTSTRAP_ADMIN_PASSWORD }
-    if (fromEnv.email && fromEnv.password) return fromEnv
-    throw new Error('Give an administrator account to sign in with: --email and --password (or BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD).')
-  }
-  const { createUser } = await import('../auth/users.js')
-  const made = {
-    email: `script-${randomUUID().slice(0, 8)}@localhost.test`,
-    password: randomBytes(18).toString('base64url'),
-  }
-  await createUser({ ...made, role: 'admin' })
-  return made
-}
-
 export async function runMockTournament({
-  url = null, email = null, password = null, teams = 4, players = 6, mats = 2,
-  kataMode = 'panel', rolePassword = null, cleanup = false, quiet = false,
+  teams = 4, players = 6, mats = 2, kataMode = 'panel', rolePassword = null, quiet = false,
 } = {}) {
-  const local = url ? null : await startLocal()
-  const base = url || local.url
-  const account = await scriptAdmin({ email, password, local: !url })
+  const local = await startLocal()
+  const base = local.url
+  const account = await scriptAdmin()
   const steps = []
   const log = (line) => { if (!quiet) console.log(line) }
   const call = async (method, path, body, token, { raw = false } = {}) => {
@@ -98,7 +53,7 @@ export async function runMockTournament({
   }
   const must = (ok, what) => { if (!ok) throw new Error(what) }
 
-  log(`Mock tournament against ${url || 'an in-process server'}: ${teams} teams × ${players} players, ${mats} mats, kata by ${kataMode === 'bouts' ? 'bouts (flags)' : 'judges\' panel'}`)
+  log(`Mock tournament, in memory: ${teams} teams × ${players} players, ${mats} mats, kata by ${kataMode === 'bouts' ? 'bouts (flags)' : 'judges\' panel'}`)
   const ctx = {}
   const login = async (who, pass = account.password) => (await call('POST', '/auth/login', { email: who, password: pass })).token
 
@@ -445,14 +400,12 @@ export async function runMockTournament({
       const { results } = await call('GET', `${T}/results`, undefined, ctx.admin)
       must(results.some((r) => r.resultStatus === 'LOCKED'), 'results were not locked')
     })
-
-    if (cleanup) await step('Clean up the mock tournament', async () => { await call('DELETE', T, undefined, ctx.admin) })
   }
 
   try {
     await run()
   } finally {
-    if (local) await local.close()
+    await local.close()
   }
   const failed = steps.filter((s) => !s.ok)
   log(failed.length ? `\nMock tournament: ${failed.length} of ${steps.length} steps failed.` : `\nMock tournament: all ${steps.length} steps passed.`)
@@ -461,8 +414,7 @@ export async function runMockTournament({
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const report = await runMockTournament({
-    url: opt('url', null), email: opt('email', null), password: opt('password', null),
-    teams: Number(opt('teams', 4)), players: Number(opt('players', 6)), mats: Number(opt('mats', 2)), cleanup: opt('cleanup', false) === true,
+    teams: Number(opt('teams', 4)), players: Number(opt('players', 6)), mats: Number(opt('mats', 2)),
     kataMode: opt('kata', 'panel') === 'bouts' ? 'bouts' : 'panel',
   })
   process.exit(report.ok ? 0 : 1)

@@ -124,9 +124,6 @@ export const reachesOnlyAssigned = (role) => ASSIGNED_ONLY_ROLES.includes(role)
 export const actsAsTournamentAdmin = (role) =>
   [ROLE.SUPER_ADMIN, ROLE.ADMIN, ROLE.TOURNAMENT_OWNER].includes(role)
 
-/** Roles an account can hold. Coaches and the public are not accounts. */
-export const ACCOUNT_ROLES = Object.values(ROLE).filter((r) => !['coach', 'public'].includes(r))
-
 /**
  * PRD v1 §4: "A user may be an administrator in one tournament and a referee
  * or coach in another." An account's role inside one tournament, falling back

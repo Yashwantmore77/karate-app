@@ -1,45 +1,26 @@
-// Test tournaments covering every stage and every situation the app handles.
-// Run from packages/api:
-//
-//   npm run seed:scenarios                    add the test tournaments (skipped if they are already there)
-//   npm run seed:scenarios -- --wipe --yes    DELETE every tournament and match first, then add them
-//
-// --wipe removes every tournament with all its data (teams, players, pools,
-// matches, results, certificates, passes, audit entries) and every match and
-// category, including ones from before the tournament system, and the coach
-// logins of those tournaments. Staff accounts, organisations and rulesets are
-// kept. A backup is written first to
-// backups/before-wipe-<time>.json, so the old data can be restored with
-// `npm run restore -- <file>`.
-//
-// It reads .env like the server does, so with MONGODB_URI set it writes to
-// that database. Everything goes through the same tournament service the API
-// uses, so the data obeys the same rules real data does.
+// Test tournaments covering every stage and every situation the app handles,
+// for the in-memory store only: the server loads them with SEED_SCENARIOS=true
+// when it has no database (the handbook's screenshots are taken from them),
+// and the load test runs against them. Never a database: real data is made in
+// the app. Everything goes through the same tournament service the API uses,
+// so the data obeys the same rules real data does.
 //
 // Dates are worked out from today, so "registration open" really is open and
 // "live" really is today, whenever this is run.
 
-import { pathToFileURL } from 'node:url'
-import { mkdir, writeFile } from 'node:fs/promises'
-import path from 'node:path'
-import { createStores, COLLECTIONS } from '../lib/store.js'
-import { createBackup } from '../lib/backup.js'
-import { isMongoConfigured, closeMongo } from '../db/mongo.js'
+import { isMongoConfigured } from '../db/mongo.js'
 import { createTms } from '@kumite/shared/tms.js'
 import { paymentsEnabled } from '@kumite/shared/features.js'
 import { seededRandom } from '@kumite/shared/pools.js'
 import { boutOutcome } from '@kumite/shared/results.js'
 import { CATEGORY_PRESETS, weightClasses } from '@kumite/shared/presets.js'
-import { listAssignableOfficials, listCoachAccounts, deleteUser, createUser, updateUser, findUserRecordByEmail } from '../auth/users.js'
+import { listAssignableOfficials, createUser, updateUser, findUserRecordByEmail } from '../auth/users.js'
 import { DEFAULT_SLOT_MINUTES, endOfSlot } from '../lib/schedule.js'
 
 export const SCENARIO_PREFIX = 'test-'
 export const LINK_PASSWORD = 'coach123'
 export const OFFICIAL_PASSWORD = 'test12345' // accounts need 8+ characters
 const admin = { uid: 'admin-uid-001', role: 'super_admin', meta: { ip: null, userAgent: 'seed-scenarios' } }
-
-// Kept out of a wipe: they are not tournament data.
-const KEEP = new Set(['organizations', 'rulesets'])
 
 // --- names -----------------------------------------------------------------------
 
@@ -57,44 +38,6 @@ const TEAMS = [
   { name: 'Shito Hyderabad', club: 'Shito Ryu Hyderabad', code: 'SRH', coachName: 'Sensei Lakshmi Reddy', district: 'Hyderabad', state: 'Telangana' },
   { name: 'Budokan Goa', club: 'Budokan Goa', code: 'BKG', coachName: 'Sensei Joel Dsouza', district: 'North Goa', state: 'Goa' },
 ].map((t, i) => ({ ...t, country: 'India', email: `coach${i + 1}@test.example`, mobile: `98${String(76543210 + i * 1111).slice(0, 8)}` }))
-
-// --- wipe ------------------------------------------------------------------------
-
-/** Every collection that holds tournament or match data. */
-export const WIPED_COLLECTIONS = COLLECTIONS.filter((name) => !KEEP.has(name))
-
-/** Removes every tournament and match. Returns how many records went, by collection. */
-export async function wipeTournaments(stores) {
-  const removed = {}
-  for (const name of WIPED_COLLECTIONS) {
-    const n = await stores[name].removeWhere({})
-    if (n) removed[name] = n
-  }
-  return removed
-}
-
-/** Team manager logins of tournaments that no longer exist. */
-export async function removeOrphanCoaches(stores) {
-  const live = new Set((await stores.tournaments.list({})).map((t) => t.id))
-  let removed = 0
-  for (const coach of await listCoachAccounts()) {
-    if (live.has(coach.tournamentId)) continue
-    await deleteUser(coach.uid)
-    removed += 1
-  }
-  return removed
-}
-
-async function backupFirst(stores, log) {
-  const backup = await createBackup(stores)
-  const rows = Object.values(backup.collections).reduce((n, list) => n + list.length, 0)
-  const dir = path.resolve(process.cwd(), 'backups')
-  await mkdir(dir, { recursive: true })
-  const file = path.join(dir, `before-wipe-${new Date().toISOString().replace(/[:.]/g, '-')}.json`)
-  await writeFile(file, JSON.stringify(backup))
-  log(`[seed] backup of the current data (${rows} records) written to ${file}`)
-  return file
-}
 
 // --- the builder ------------------------------------------------------------------
 
@@ -392,17 +335,11 @@ const JUNIORS = [
  * Builds the test tournaments. Returns a summary per tournament. Skipped
  * (returns null) when test tournaments are already there.
  */
-export async function seedScenarios(stores, { wipe = false, backup = false, now = new Date(), log = console.log } = {}) {
-  if (wipe) {
-    if (backup) await backupFirst(stores, log)
-    const removed = await wipeTournaments(stores)
-    const coaches = await removeOrphanCoaches(stores)
-    if (coaches) removed['coach logins'] = coaches
-    log(`[seed] wiped: ${Object.entries(removed).map(([k, n]) => `${k} ${n}`).join(', ') || 'nothing to remove'}`)
-  }
+export async function seedScenarios(stores, { now = new Date(), log = console.log } = {}) {
+  if (isMongoConfigured()) throw new Error('seedScenarios is for the in-memory store only')
   const existing = (await stores.tournaments.list({})).filter((t) => String(t.slug || '').startsWith(SCENARIO_PREFIX))
   if (existing.length) {
-    log(`[seed] ${existing.length} test tournaments are already there. Use --wipe --yes to start again.`)
+    log(`[seed] ${existing.length} test tournaments are already there.`)
     return null
   }
   const b = builder(stores, { now, log })
@@ -842,7 +779,7 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
   }
 
   const width = Math.max(...summary.map((s) => s.title.length))
-  log(`\n[seed] ${summary.length} test tournaments ready${isMongoConfigured() ? ' in MongoDB' : ' (in memory)'}\n`)
+  log(`\n[seed] ${summary.length} test tournaments ready (in memory)\n`)
   for (const s of summary) {
     log(`  ${s.title.padEnd(width)}  ${s.status.padEnd(19)} /tournament/${s.slug}`)
     for (const line of s.scenarios) log(`      · ${line}`)
@@ -850,22 +787,3 @@ export async function seedScenarios(stores, { wipe = false, backup = false, now 
   log('')
   return summary
 }
-
-async function main() {
-  const args = process.argv.slice(2)
-  const wipe = args.includes('--wipe')
-  if (wipe && !args.includes('--yes')) {
-    console.error('[seed] --wipe deletes EVERY tournament and match. Run again with --wipe --yes to go ahead (a backup is written first).')
-    process.exitCode = 1
-    return
-  }
-  if (!isMongoConfigured()) console.warn('[seed] MONGODB_URI is not set: this run uses the in-memory store and nothing is kept.')
-  await seedScenarios(createStores(), { wipe, backup: wipe && !args.includes('--no-backup') })
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
-  .catch((err) => {
-    console.error('[seed] failed:', err?.code || err?.message || err, err?.details ? JSON.stringify(err.details) : '', err?.stack?.split('\n').slice(1, 4).join('\n'))
-    process.exitCode = 1
-  })
-  .finally(() => (isMongoConfigured() ? closeMongo() : undefined))

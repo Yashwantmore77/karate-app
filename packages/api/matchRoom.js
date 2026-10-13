@@ -22,6 +22,10 @@ export class MatchRoom {
     this.seen = new Map()
     // Commands run one after another, in arrival order, even with async checks.
     this.queue = Promise.resolve()
+    // Saves of this bout run one after another, so the saved copy is the latest.
+    this.saving = Promise.resolve()
+    // When anyone last joined, took or scored the mat: an idle room leaves memory.
+    this.usedAt = serverNow()
     this.restored = false
     // Offline scoring: how many times the mat has passed to a different
     // person, and when the last change was stamped. A referee's device that
@@ -71,6 +75,7 @@ export class MatchRoom {
   claim(socketId, { force = false, uid = null } = {}) {
     if (this.controllerId && this.controllerId !== socketId && !force) return false
     this.controllerId = socketId
+    this.usedAt = serverNow()
     if (uid && this.controllerUid && uid !== this.controllerUid) this.handoffs += 1
     if (uid) this.controllerUid = uid
     return true
@@ -94,6 +99,7 @@ export class MatchRoom {
       throw Object.assign(new Error('not the controller'), { code: 'not_controller' })
     }
     const now = serverNow()
+    this.usedAt = now
     const at = Number.isFinite(clientAt) ? Math.min(now, Math.max(this.lastAt, clientAt)) : now
     this.lastAt = Math.max(this.lastAt, at)
     const step = stepBout({ state: this.state, history: this.history }, cmd, payload, at)

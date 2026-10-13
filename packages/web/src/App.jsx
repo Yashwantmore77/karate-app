@@ -165,9 +165,7 @@ export default function App() {
   )
 }
 
-// Split out so it can sit inside SessionProvider and call useSession(): the
-// provider itself picks the API or the local mock, and everything below this
-// line is identical either way.
+// Split out so it can sit inside SessionProvider and call useSession().
 function AppShell() {
   const { user, profile, loading, logout } = useSession()
   const isPortal = new URLSearchParams(location.search).has('portal')

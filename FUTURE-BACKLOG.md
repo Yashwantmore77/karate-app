@@ -13,8 +13,8 @@ These are not features; they are checks to run once the MVP is in use.
 | Item | Today | Notes |
 | --- | --- | --- |
 | External penetration test | An internal security review was done and its findings fixed (`SECURITY-REVIEW.md`) | Test a staging copy, never a live event |
-| Mock tournament on the venue setup | `npm run mock` rehearses a whole event end to end and passes all 19 steps in-process | Run `npm run mock -- --url <staging> --email … --password … --cleanup` against staging; then a day with real officials, devices and the venue network |
-| Load test against the real server | `npm run loadtest` passes in-process (10 mats, 600 spectators) | Run `npm run loadtest -- --url <staging> --email … --password …` from a machine the rate limit allows |
+| Mock tournament on the venue setup | `npm run mock` rehearses a whole event end to end and passes all 22 steps, in memory | A rehearsal day on a staging copy with real officials, devices and the venue network, entering the data in the app |
+| Load test against the real server | `npm run loadtest` passes in memory (10 mats, 600 spectators) | Measure a staging copy under real use; the script runs in memory only, so it never writes to a server |
 | Production settings | Documented in `README.md` and `packages/api/.env.example` | `NODE_ENV`, `JWT_SECRET`, `BOOTSTRAP_ADMIN_*`, `CORS_ORIGIN`, `TRUST_PROXY`, `APP_URL` |
 | Old demo accounts | Production no longer creates them, and warns at startup about any left | Any database created before the fix: change or delete the `@kata.local` accounts |
 
