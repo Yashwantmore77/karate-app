@@ -76,7 +76,8 @@ Needs Node 22.9 or later (the API reads its `.env` with `--env-file-if-exists`).
 ```bash
 npm install
 
-# Terminal 1 — the API, in memory, with the seeded accounts
+# Terminal 1 — the API (in memory unless packages/api/.env names a database;
+# sign in as BOOTSTRAP_ADMIN_EMAIL, or start it with SEED_SCENARIOS=true for test accounts)
 npm run server:dev
 
 # Terminal 2 — the front end, at http://localhost:5173
@@ -85,23 +86,29 @@ npm run dev
 ```
 
 With no `MONGODB_URI` the API keeps everything in memory and forgets it on
-restart. Its seeded accounts are listed in `packages/api/auth/users.js`.
+restart.
 
-### Test tournaments (every scenario)
+All application data (tournaments, players, results, accounts) is created,
+changed and deleted in the app, through its screens and API, under its rules and
+permissions. No script writes to or empties the database. The one record the
+app makes by itself is the first Super Admin, from `BOOTSTRAP_ADMIN_EMAIL` /
+`BOOTSTRAP_ADMIN_PASSWORD`, when the database has no accounts. `npm run backup`
+and `npm run restore` are kept for recovery (see [COMMANDS.md](COMMANDS.md)).
+
+### Test tournaments (in memory only)
 
 ```bash
-npm run seed:scenarios                     # add the 10 test tournaments
-npm run seed:scenarios -- --wipe --yes     # DELETE every tournament and match first, then add them
-SEED_SCENARIOS=true npm run server         # no database: load them into memory at start
+SEED_SCENARIOS=true npm run server         # no database: load the 10 test tournaments into memory at start
 ```
 
-`--wipe` removes every tournament with all its data, and every match and category, including
-older ones, plus the coach logins of those tournaments. Staff accounts, organisations and rulesets stay.
-If the database has no accounts at all, a test roster is created (`admin@kata.local`, `referee@kata.local`,
-`judge1@kata.local` … password `test12345`); if it has accounts but no referees or judges, it creates test
-officials instead (`test.referee1@test.local`, `test.judge1@test.local` … same password), so every match has a panel. It writes a backup to
-`packages/api/backups/before-wipe-<time>.json` first (`npm run restore -w @kumite/api -- <file>` brings it back).
-Dates are counted from the day it runs, so "open" is really open and "live" is today.
+They exist only in that server's memory and are never written to a database;
+with `MONGODB_URI` set the setting is ignored. If there are no accounts, a test
+roster is created (`admin@kata.local`, `referee@kata.local`, `judge1@kata.local`
+… password `test12345`); if there are accounts but no referees or judges, test
+officials are created instead (`test.referee1@test.local`, `test.judge1@test.local`
+… same password), so every match has a panel. Dates are counted from the day the
+server starts, so "open" is really open and "live" is today. The handbook's
+screenshots are taken from these tournaments.
 
 | # | Tournament | Stage | What it shows |
 | --- | --- | --- | --- |
@@ -116,54 +123,16 @@ Dates are counted from the day it runs, so "open" is really open and "live" is t
 | 09 | Diwali Karate Cup | Completed | Everything fought, published and locked; medal, participation and special-award certificates |
 | 10 | Winter Open 2025 | Archived | Read-only history |
 
-### Sample data
+### Rehearsal and load test (in memory only)
 
 ```bash
-npm run seed:sample -w @kumite/api              # add the sample tournament
-npm run seed:sample -w @kumite/api -- --reset   # rebuild it from scratch
 npm run mock -w @kumite/api                     # rehearse a whole Kata + Kumite event end to end (22 checked steps)
 npm run mock -w @kumite/api -- --kata bouts     # the same, with kata fought as bouts (flags) on the mats
 npm run loadtest -w @kumite/api                 # mats scoring live while spectators poll
-npm run db:reset -w @kumite/api -- --yes        # empty the database, leaving one administrator
-npm run demo -w @kumite/api -- --url <api>      # two demo tournaments, one played and one ready to run
-npm run demo -w @kumite/api -- --url <api> --remove   # take them out again
 ```
 
-`demo` builds two tournaments through the API, each run by its own Tournament
-Admin, every step signed in as the person whose job it is: coaches register
-through the link, the registration officer approves, the weigh-in officer weighs,
-the announcer checks athletes in and calls bouts, each mat's referee scores on the
-live console, and the kata judges score from their own seats.
-
-| Tournament | Left at |
-| --- | --- |
-| Pune District Karate Championship (Demo) | **Fully played**: every bout scored, results published, certificates issued — left Live, not Completed, so it can still be explored and corrected |
-| Nashik Open Karate Championship (Demo) | **Ready to run**: drawn, timetabled with a referee on every bout, athletes checked in and Live, with nothing scored |
-
-Each has 40 players from 4 clubs in 12 categories: kata, plus kumite in round-robin
-pools for the 10-11s and knockout brackets for the 12-13s. Against a real server
-it signs in with `DEMO_ADMIN_EMAIL` / `DEMO_ADMIN_PASSWORD` from
-`packages/api/.env`. The accounts it creates are at `@demo.karate.test`, a reserved
-domain that receives no mail, and are limited to the demo tournaments, so they
-reach nothing else on the server; they share one generated password, printed at
-the end. Without `--url` it runs against an in-process server in memory, never
-touching a database named in `.env`.
-
-`db:reset` is the hand-over: it drops every collection — tournaments, players,
-matches, results, files, the audit and sign-in logs and every account — and puts
-back the single administrator named by `BOOTSTRAP_ADMIN_EMAIL` /
-`BOOTSTRAP_ADMIN_PASSWORD`. It refuses to run without `--yes`, and refuses
-before dropping anything if those two are unset, so a reset can never leave a
-database no one can sign in to. Take a backup first if the data might be wanted:
-`npm run backup -w @kumite/api -- backups/before-reset.json`.
-
-Writes to the database in `packages/api/.env` (`MONGODB_URI`): one tournament,
-"Sample State Open 2027" (`/tournament/sample-open-2027`), carried from setup to
-live — age groups and weight categories, 6 teams, 62 players, pools, scheduled
-bouts on 3 mats, results, a final stage, published medals and certificates —
-plus the registration and weigh-in officer accounts if they are missing. It
-never touches other tournaments, and running it twice does not duplicate
-anything.
+Both start the API inside their own process, in memory, and keep nothing: a
+database named in `.env` is never touched.
 
 ## Configuration
 

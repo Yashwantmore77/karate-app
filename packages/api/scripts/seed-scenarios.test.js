@@ -1,27 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { createStores } from '../lib/store.js'
 import { createTms } from '@kumite/shared/tms.js'
-import { seedScenarios, wipeTournaments } from './seed-scenarios.js'
-import { listAssignableOfficials, listCoachAccounts, createCoachAccount, deleteUser } from '../auth/users.js'
+import { seedScenarios } from './seed-scenarios.js'
+import { listAssignableOfficials, deleteUser } from '../auth/users.js'
 
 const count = (list, f) => list.reduce((a, x) => { const k = f(x); a[k] = (a[k] || 0) + 1; return a }, {})
 
 describe('test tournament scenarios', () => {
-  it('wipes every tournament and match, then builds a tournament for each stage with every case', async () => {
+  it('builds a tournament for each stage with every case', async () => {
     const stores = createStores()
     const quiet = () => {}
-    const old = await stores.tournaments.insert({ name: 'Old Cup', location: 'X', date: '2026-01-01', template: 'kumite' })
-    await stores.matches.insert({ categoryId: 'legacy', status: 'completed' })
-    await stores.organizations.insert({ name: 'Kept Federation' })
-    await createCoachAccount({ email: 'old.coach@test.example', password: 'coach12345', tournamentId: old.id, teamId: 'team-1' })
-    // A database with no referees or judges: test officials are created for the matches.
+    // A store with no referees or judges: test officials are created for the matches.
     for (const o of await listAssignableOfficials()) if (['referee', 'judge'].includes(o.role)) await deleteUser(o.uid)
 
-    const summary = await seedScenarios(stores, { wipe: true, log: quiet })
-    expect(await stores.tournaments.get(old.id)).toBeNull()
-    expect(await stores.matches.list({ categoryId: 'legacy' })).toHaveLength(0)
-    expect(await stores.organizations.list({})).toHaveLength(1)
-    expect(await listCoachAccounts()).toHaveLength(0)
+    const summary = await seedScenarios(stores, { log: quiet })
     const officials = await listAssignableOfficials()
     expect(officials.filter((o) => o.role === 'referee').map((o) => o.email)).toEqual(['test.referee1@test.local', 'test.referee2@test.local'])
     expect(officials.filter((o) => o.role === 'judge')).toHaveLength(4)
@@ -96,10 +88,7 @@ describe('test tournament scenarios', () => {
     expect(started).toContain(true)
     expect(started).toContain(false)
 
-    // Not built twice; a wipe on its own clears it all.
+    // Not built twice.
     expect(await seedScenarios(stores, { log: quiet })).toBeNull()
-    await wipeTournaments(stores)
-    expect(await stores.tournaments.list({})).toHaveLength(0)
-    expect(await stores.players.list({})).toHaveLength(0)
   }, 180_000)
 })

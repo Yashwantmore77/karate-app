@@ -6,13 +6,17 @@ are at the end.
 
 Commands marked 🔴 delete data and cannot be undone.
 
+All application data (tournaments, players, results, accounts) is created,
+changed and deleted **in the app**, through its screens. No command here adds
+records to the database or empties it; only backup and restore touch it, for
+recovery.
+
 ---
 
 ## ⚠️ Read this first: which database a command works on
 
-Every command run from `packages\api` — and the `npm run server…` and
-`npm run seed…` commands run from the top folder — reads the settings file
-**`packages\api\.env`**.
+The server (`npm run server…`) and the backup and restore commands read the
+settings file **`packages\api\.env`**.
 
 | In `packages\api\.env` | The command works on |
 | --- | --- |
@@ -26,8 +30,7 @@ a `#` in front of the line to switch it off, remove the `#` to switch it on:
 # MONGODB_URI=mongodb+srv://…
 ```
 
-The demo command (section 3) is the exception: with `--url` it talks to the
-live site's API, and never reads `MONGODB_URI`.
+The test tools in section 4 never use `MONGODB_URI`: they always run in memory.
 
 **Never paste passwords, `MONGODB_URI` or `JWT_SECRET` into a chat, an issue
 or a screenshot.** They belong in `packages\api\.env` on your computer, and in
@@ -96,57 +99,7 @@ The app comes with **no accounts**. Choose one of these two:
 
 ---
 
-## 3. Demo tournaments on your live site
-
-Creates two demo tournaments on the live site:
-
-- **Pune District Karate Championship (Demo)** — fully played: every bout scored, results published, certificates issued.
-- **Nashik Open Karate Championship (Demo)** — ready to run: drawn, timetabled with referees, live, with nothing scored yet.
-
-**Once:** put your live administrator's login in `packages\api\.env`
-
-```
-DEMO_ADMIN_EMAIL=your-admin-email
-DEMO_ADMIN_PASSWORD=your-admin-password
-```
-
-Write each line plainly, with no quotes, no spaces around `=`, and nothing
-after the password.
-
-**Create them:**
-
-```
-cd packages\api
-npm run demo -- --url https://karate-app-06ow.onrender.com
-```
-
-It takes about 5 minutes. At the end it prints the demo accounts and **one
-password for all of them**. Keep that password to yourself. The demo accounts
-can reach only the two demo tournaments.
-
-**Just one of the two:**
-
-```
-npm run demo -- --url https://karate-app-06ow.onrender.com --only played
-npm run demo -- --url https://karate-app-06ow.onrender.com --only ready
-```
-
-🔴 **Take them out again.** This deletes the two demo tournaments and every
-`@demo.karate.test` account, and nothing else:
-
-```
-npm run demo -- --url https://karate-app-06ow.onrender.com --remove
-```
-
-**Try it on your computer first.** This runs in memory and saves nothing:
-
-```
-npm run demo
-```
-
----
-
-## 4. The database: backup, restore, empty
+## 3. The database: backup and restore
 
 These work on the database named by `MONGODB_URI` in `packages\api\.env`. Run
 them in `packages\api`.
@@ -176,60 +129,21 @@ It refuses a database that already holds data.
 npm run restore -- backups\day1.json --replace
 ```
 
-🔴 **Empty the database, leaving one administrator.** This deletes every
-tournament, player, result, file, log and account:
-
-```
-npm run db:reset -- --yes
-```
-
-Before deleting anything, it checks that `BOOTSTRAP_ADMIN_EMAIL` and
-`BOOTSTRAP_ADMIN_PASSWORD` are in `packages\api\.env`. Those become the one
-account left. Without them it refuses, so it cannot lock you out. It prints the
-database name before it drops anything.
-
 ---
 
-## 5. Test data
+## 4. Test data and test tools (in memory only)
 
-These write to the database in `packages\api\.env` when `MONGODB_URI` is set,
-and to memory when it is not (see the top of this file).
+None of these put test data in a database. With `MONGODB_URI` set,
+`SEED_SCENARIOS` is ignored, and `mock` and `loadtest` run in memory anyway
+and keep nothing.
 
-> ⚠️ `seed:scenarios`, `seed:sample` and `loadtest` create accounts with the
-> known password `test12345`. If you run them against your live database,
-> delete those accounts afterwards.
-
-**In memory only, on your computer:**
+**Ten test tournaments on your computer** (see section 2 for the test accounts):
 
 ```
 set "SEED_SCENARIOS=true" && npm run server
 ```
 
-**Ten test tournaments into the database in `.env`:**
-
-```
-npm run seed:scenarios
-```
-
-🔴 **Same, but delete every tournament and match first.** A backup is written to
-`packages\api\backups\` before anything is deleted.
-
-```
-npm run seed:scenarios -- --wipe --yes
-```
-
-**One sample tournament, carried from setup to live results:**
-
-```
-cd packages\api
-npm run seed:sample
-npm run seed:sample -- --reset
-```
-
-The second line removes the sample tournament first, then builds it again.
-
-**Rehearse a whole event end to end.** This runs every step with checks, and
-leaves a "Mock Open" tournament behind:
+**Rehearse a whole event end to end.** This runs every step with checks:
 
 ```
 cd packages\api
@@ -251,7 +165,7 @@ npm run loadtest -- --mats 8 --viewers 300 --seconds 60
 
 ---
 
-## 6. Tests and build
+## 5. Tests and build
 
 In the top folder:
 
@@ -268,7 +182,7 @@ builds the website — the same build Vercel runs.
 
 ---
 
-## 7. The operator handbook (pictures and PDF)
+## 6. The operator handbook (pictures and PDF)
 
 The pictures are taken from the app running with its test tournaments. First,
 start the API with test data (section 2) and the website in a second window.
@@ -288,7 +202,7 @@ the API in between.
 
 ---
 
-## 8. Live site settings
+## 7. Live site settings
 
 These are not commands: they are typed into the hosting sites' settings pages.
 
@@ -299,7 +213,7 @@ These are not commands: they are typed into the hosting sites' settings pages.
 | `MONGODB_URI` | The Atlas connection string |
 | `MONGODB_DB` | `kumite` |
 | `NODE_ENV` | `production` |
-| `JWT_SECRET` | 64 random characters (see section 9) |
+| `JWT_SECRET` | 64 random characters (see section 8) |
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | The first administrator, created only when the database has no accounts |
 | `CORS_ORIGIN` | `https://karate-app-delta.vercel.app` (no `/` at the end) |
 | `APP_URL` | `https://karate-app-delta.vercel.app` |
@@ -322,7 +236,7 @@ visible to anyone who opens the website.
 
 ---
 
-## 9. Fixing problems
+## 8. Fixing problems
 
 **Is the live server up, and on the database?**
 Open https://karate-app-06ow.onrender.com/health in a browser. It should say
@@ -341,14 +255,6 @@ the address, never the password:
 ```
 cd packages\api
 node --env-file-if-exists=.env -e "console.log(process.env.MONGODB_URI.split('://')[0]+'://')"
-```
-
-**Is the demo login in `.env` read correctly?** This shows the email and the
-password's length, never the password:
-
-```
-cd packages\api
-node --env-file-if-exists=.env -e "const e=process.env.DEMO_ADMIN_EMAIL||'',p=process.env.DEMO_ADMIN_PASSWORD||'';console.log('email:',JSON.stringify(e));console.log('password length:',p.length,'| spaces at the ends:',p!==p.trim())"
 ```
 
 **`querySrv EBADRESP` — your computer cannot look up the database.** This is a
@@ -385,8 +291,6 @@ set MONGODB_URI=
 | `401 invalid_credentials` | Wrong email or password. Sign in on the website with exactly the same values to check. |
 | `429` / `too_many_attempts` | 10 wrong sign-ins in a minute. Wait a minute. |
 | `querySrv EBADRESP` | DNS on your computer — see above. |
-| `Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD … first` | `db:reset` needs those in `packages\api\.env`. |
-| `already there … Run with --remove first` | The demo tournaments exist. Remove them, then create them again. |
 | `MONGODB_URI is not set` | That command needs a database, and `.env` names none. |
 
 ---

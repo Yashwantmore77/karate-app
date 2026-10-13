@@ -2,13 +2,11 @@
 // the socket while spectators poll the public page and the hall scoreboard,
 // then reports response times. Run from packages/api:
 //
-//   npm run loadtest                                  in-process server with the sample tournament
+//   npm run loadtest
 //   npm run loadtest -- --mats 8 --viewers 300 --seconds 60
-//   npm run loadtest -- --url https://scores.example.org --email admin@… --password …
 //
-// Against a real server, give it an admin account and expect its API rate
-// limit (API_RATE_LIMIT per minute per address) to apply: every simulated
-// viewer comes from this one machine. Use a staging copy, never a live event.
+// It runs against an in-process server, in memory, loaded with the test
+// tournaments (scripts/seed-scenarios.js), and keeps nothing.
 
 import { performance } from 'node:perf_hooks'
 import { opt, startLocal, scriptAdmin } from './lib.js'
@@ -32,13 +30,13 @@ const summary = (name, list, errors) => {
   return `${name.padEnd(22)} ${String(list.length).padStart(7)} ok ${String(errors).padStart(5)} failed   p50 ${f(percentile(list, 50))}   p95 ${f(percentile(list, 95))}   p99 ${f(percentile(list, 99))}   max ${f(list.length ? Math.max(...list) : null)}`
 }
 
-export async function runLoadTest({ url = null, email = null, password = null, mats = MATS, viewers = VIEWERS, seconds = SECONDS, quiet = false } = {}) {
-  const local = url ? null : await startLocal(async (stores) => {
-    const { seedSample } = await import('./seed-sample.js')
-    await seedSample(stores, { log: () => {} })
+export async function runLoadTest({ mats = MATS, viewers = VIEWERS, seconds = SECONDS, quiet = false } = {}) {
+  const local = await startLocal(async (stores) => {
+    const { seedScenarios } = await import('./seed-scenarios.js')
+    await seedScenarios(stores, { log: () => {} })
   })
-  const base = url || local.url
-  const account = await scriptAdmin({ email, password, local: !url })
+  const base = local.url
+  const account = await scriptAdmin()
   const api = async (path, opts = {}, token) => {
     const res = await fetch(`${base}/api/v1${path}`, { ...opts, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })
     if (!res.ok) throw Object.assign(new Error(`${path}: ${res.status}`), { status: res.status })
@@ -47,14 +45,18 @@ export async function runLoadTest({ url = null, email = null, password = null, m
 
   const { token } = await api('/auth/login', { method: 'POST', body: JSON.stringify(account) })
   const tournaments = (await api('/tournaments?limit=100', {}, token)).tournaments
-  const tournament = tournaments.find((t) => t.slug) || tournaments[0]
-  if (!tournament) throw new Error('No tournament to test against')
-  const queue = (await api(`/tournaments/${tournament.id}/matches`, {}, token)).matches
-    .filter((m) => m.redId && m.blueId && !['completed', 'cancelled'].includes(m.status))
-    // Only the event on the mats now can be scored (Kata and Kumite take turns).
-    .filter((m) => !m.divisionKey || parseDivisionKey(m.divisionKey).event === runningEvent(tournament))
-  const bouts = queue.slice(0, mats)
-  if (!bouts.length) throw new Error('No open bouts to score')
+  // The first live tournament with bouts waiting in the event on the mats now
+  // (Kata and Kumite take turns, and only that one can be scored).
+  let tournament = null
+  let bouts = []
+  for (const t of tournaments.filter((x) => x.lifecycleStatus === 'LIVE')) {
+    bouts = (await api(`/tournaments/${t.id}/matches`, {}, token)).matches
+      .filter((m) => m.redId && m.blueId && !['completed', 'cancelled'].includes(m.status))
+      .filter((m) => !m.divisionKey || parseDivisionKey(m.divisionKey).event === runningEvent(t))
+      .slice(0, mats)
+    if (bouts.length) { tournament = t; break }
+  }
+  if (!tournament) throw new Error('No open bouts to score')
 
   const commandMs = []
   const viewMs = []
@@ -122,7 +124,7 @@ export async function runLoadTest({ url = null, email = null, password = null, m
     scoreboard: { ok: displayMs.length, failed: displayErrors, p50: percentile(displayMs, 50), p95: percentile(displayMs, 95), p99: percentile(displayMs, 99) },
   }
   if (!quiet) {
-    console.log(`Load test: ${bouts.length} mats scoring every ${COMMAND_EVERY_MS} ms, ${viewers} viewers every ${VIEWER_EVERY_MS} ms, ${report.seconds} s against ${url || 'an in-process server'}`)
+    console.log(`Load test: ${bouts.length} mats scoring every ${COMMAND_EVERY_MS} ms, ${viewers} viewers every ${VIEWER_EVERY_MS} ms, ${report.seconds} s, in memory`)
     console.log(summary('Score commands', commandMs, commandErrors))
     console.log(summary('Public tournament page', viewMs, viewErrors))
     console.log(summary('Hall scoreboard', displayMs, displayErrors))
@@ -131,7 +133,7 @@ export async function runLoadTest({ url = null, email = null, password = null, m
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const report = await runLoadTest({ url: opt('url', null), email: opt('email', null), password: opt('password', null) })
+  const report = await runLoadTest()
   // A failed command or page is a failed run, so this can gate a release.
   const failed = report.commands.failed + report.publicPage.failed + report.scoreboard.failed
   process.exit(failed ? 1 : 0)

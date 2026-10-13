@@ -5,30 +5,25 @@
 // checked and reported; a failing step names what went wrong. Run from
 // packages/api:
 //
-//   npm run mock                                         in-process server, demo accounts
+//   npm run mock
 //   npm run mock -- --teams 6 --players 8 --mats 3
 //   npm run mock -- --kata bouts                         kata by flags on the mats (default: judges' panel)
-//   npm run mock -- --url https://staging.example.org --email admin@… --password … [--cleanup]
 //
-// Against a real server only the admin account is needed: the admin does the
-// officials' work too. Use a staging copy; --cleanup deletes the mock
-// tournament afterwards. It never touches other tournaments.
+// It runs against an in-process server, in memory, and keeps nothing.
 
 import { performance } from 'node:perf_hooks'
 import { io as connect } from 'socket.io-client'
-
 import { opt, startLocal, scriptAdmin } from './lib.js'
 
 const FIRST = ['Aarav', 'Vihaan', 'Arjun', 'Kabir', 'Ishaan', 'Rohan', 'Aditya', 'Dhruv', 'Krish', 'Yash', 'Pranav', 'Atharv', 'Reyansh', 'Sai', 'Om', 'Vivaan']
 const LAST = ['Sharma', 'Patil', 'Kulkarni', 'Joshi', 'Iyer', 'Rao', 'Nair', 'Gupta', 'Mehta', 'Desai', 'Shinde', 'Pawar']
 
 export async function runMockTournament({
-  url = null, email = null, password = null, teams = 4, players = 6, mats = 2,
-  kataMode = 'panel', rolePassword = null, cleanup = false, quiet = false,
+  teams = 4, players = 6, mats = 2, kataMode = 'panel', rolePassword = null, quiet = false,
 } = {}) {
-  const local = url ? null : await startLocal()
-  const base = url || local.url
-  const account = await scriptAdmin({ email, password, local: !url })
+  const local = await startLocal()
+  const base = local.url
+  const account = await scriptAdmin()
   const steps = []
   const log = (line) => { if (!quiet) console.log(line) }
   const call = async (method, path, body, token, { raw = false } = {}) => {
@@ -58,7 +53,7 @@ export async function runMockTournament({
   }
   const must = (ok, what) => { if (!ok) throw new Error(what) }
 
-  log(`Mock tournament against ${url || 'an in-process server'}: ${teams} teams × ${players} players, ${mats} mats, kata by ${kataMode === 'bouts' ? 'bouts (flags)' : 'judges\' panel'}`)
+  log(`Mock tournament, in memory: ${teams} teams × ${players} players, ${mats} mats, kata by ${kataMode === 'bouts' ? 'bouts (flags)' : 'judges\' panel'}`)
   const ctx = {}
   const login = async (who, pass = account.password) => (await call('POST', '/auth/login', { email: who, password: pass })).token
 
@@ -405,14 +400,12 @@ export async function runMockTournament({
       const { results } = await call('GET', `${T}/results`, undefined, ctx.admin)
       must(results.some((r) => r.resultStatus === 'LOCKED'), 'results were not locked')
     })
-
-    if (cleanup) await step('Clean up the mock tournament', async () => { await call('DELETE', T, undefined, ctx.admin) })
   }
 
   try {
     await run()
   } finally {
-    if (local) await local.close()
+    await local.close()
   }
   const failed = steps.filter((s) => !s.ok)
   log(failed.length ? `\nMock tournament: ${failed.length} of ${steps.length} steps failed.` : `\nMock tournament: all ${steps.length} steps passed.`)
@@ -421,8 +414,7 @@ export async function runMockTournament({
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const report = await runMockTournament({
-    url: opt('url', null), email: opt('email', null), password: opt('password', null),
-    teams: Number(opt('teams', 4)), players: Number(opt('players', 6)), mats: Number(opt('mats', 2)), cleanup: opt('cleanup', false) === true,
+    teams: Number(opt('teams', 4)), players: Number(opt('players', 6)), mats: Number(opt('mats', 2)),
     kataMode: opt('kata', 'panel') === 'bouts' ? 'bouts' : 'panel',
   })
   process.exit(report.ok ? 0 : 1)

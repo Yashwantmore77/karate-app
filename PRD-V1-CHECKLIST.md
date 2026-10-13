@@ -32,7 +32,7 @@ Legend:
 
 ## 1. Product overview — ✅
 
-One system covers setup to archive: configuration, registration, weigh-in, draw, kumite and kata scoring, results, certificates and the public portal. This follows the Appendix A workflow end to end, and `api/scripts/seed-sample.js` builds a full sample tournament through it.
+One system covers setup to archive: configuration, registration, weigh-in, draw, kumite and kata scoring, results, certificates and the public portal. This follows the Appendix A workflow end to end, and `api/scripts/mock-tournament.js` runs a full tournament through it (in memory) as an automated test.
 
 ## 2. Goals and success criteria — ✅
 

@@ -1,4 +1,6 @@
-// What the scripts that drive the API (mock, loadtest, demo) share.
+// What the scripts that drive the API (mock, loadtest) share. They run only
+// against the API in their own process, in memory: application data is made
+// in the app, never by a script.
 
 import { randomBytes, randomUUID } from 'node:crypto'
 
@@ -11,8 +13,11 @@ export const opt = (name, fallback) => {
   return v === undefined || v.startsWith('--') ? true : v
 }
 
-/** The API in this process on a free port. `prepare` gets its stores before it listens. */
+/** The API in this process, in memory, on a free port. `prepare` gets its stores before it listens. */
 export async function startLocal(prepare = async () => {}) {
+  // Never the database in .env: a script's records would land among real ones.
+  delete process.env.MONGODB_URI
+  if ((await import('../db/mongo.js')).isMongoConfigured()) throw new Error('scripts run in memory only; the database module was loaded before startLocal')
   // A script's simulated crowd shares one address, which the API rate limit
   // would otherwise (correctly) throttle.
   process.env.API_RATE_LIMIT = process.env.API_RATE_LIMIT || '1000000'
@@ -24,22 +29,10 @@ export async function startLocal(prepare = async () => {}) {
 }
 
 /**
- * The administrator a script runs as.
- *
- * Against a real server (--url) it has to be given one, because that server's
- * accounts live in its database: --email and --password, or the two variables
- * named in `env`. Against its own in-process server it makes a throwaway
- * administrator with a password generated for this run, so no script carries
- * an account or a password of its own.
+ * A throwaway administrator for the in-process server, with a password made
+ * for this run, so no script carries an account or a password of its own.
  */
-export async function scriptAdmin({ email, password, local, env = ['BOOTSTRAP_ADMIN_EMAIL', 'BOOTSTRAP_ADMIN_PASSWORD'] }) {
-  if (email && password) return { email, password }
-  if (!local) {
-    const [emailVar, passwordVar] = env
-    const fromEnv = { email: process.env[emailVar], password: process.env[passwordVar] }
-    if (fromEnv.email && fromEnv.password) return fromEnv
-    throw new Error(`Give an administrator to sign in as: --email and --password, or ${emailVar} and ${passwordVar} in packages/api/.env.`)
-  }
+export async function scriptAdmin() {
   const { createUser } = await import('../auth/users.js')
   const made = { email: `script-${randomUUID().slice(0, 8)}@localhost.test`, password: randomBytes(18).toString('base64url') }
   await createUser({ ...made, role: 'admin' })
