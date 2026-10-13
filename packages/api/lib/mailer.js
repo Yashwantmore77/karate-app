@@ -44,4 +44,3 @@ export async function sendMail({ to, subject, text }) {
 /** Development and test only: what would have been sent. */
 export const readOutbox = () => [...outbox]
 export const clearOutbox = () => { outbox.length = 0 }
-export const isMailConfigured = () => !!process.env.SMTP_URL

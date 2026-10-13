@@ -22,16 +22,9 @@
 // nothing else on the server. They share one generated password, printed at
 // the end.
 
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { io as connect } from 'socket.io-client'
-
-const args = process.argv.slice(2)
-const opt = (name, fallback) => {
-  const i = args.indexOf(`--${name}`)
-  if (i < 0) return fallback
-  const v = args[i + 1]
-  return v === undefined || v.startsWith('--') ? true : v
-}
+import { opt, startLocal, scriptAdmin } from './lib.js'
 
 // --- the people and places of the demo ---------------------------------------
 
@@ -130,37 +123,15 @@ const zonedDay = (offset = 0) => {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
 }
 
-// --- servers and accounts ------------------------------------------------------
-
-async function startLocal() {
-  // Trying it locally is always in memory: a database in .env is never
-  // written to by a run that names no server.
-  delete process.env.MONGODB_URI
-  process.env.API_RATE_LIMIT = process.env.API_RATE_LIMIT || '1000000'
-  const { createApp } = await import('../index.js')
-  const { http } = createApp()
-  const port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
-  return { url: `http://localhost:${port}`, close: () => new Promise((resolve) => http.close(resolve)) }
-}
-
-/** The administrator to run as: given, from .env, or minted for an in-process run. */
-async function administrator({ email: given, password, local }) {
-  if (given && password) return { email: given, password }
-  const fromEnv = { email: process.env.DEMO_ADMIN_EMAIL, password: process.env.DEMO_ADMIN_PASSWORD }
-  if (fromEnv.email && fromEnv.password) return fromEnv
-  if (!local) throw new Error('Give an administrator to sign in as: DEMO_ADMIN_EMAIL and DEMO_ADMIN_PASSWORD in packages/api/.env, or --email and --password.')
-  const { createUser } = await import('../auth/users.js')
-  const made = { email: `demo-runner-${randomUUID().slice(0, 8)}@localhost.test`, password: randomBytes(18).toString('base64url') }
-  await createUser({ ...made, role: 'admin' })
-  return made
-}
-
 // --- the run -------------------------------------------------------------------
 
 export async function runDemo({
   url = null, email: adminEmail = null, password: adminPassword = null,
   only = null, remove = false, staffPassword = null, quiet = false,
 } = {}) {
+  // Trying it locally is always in memory: a database in .env is never
+  // written to by a run that names no server.
+  if (!url) delete process.env.MONGODB_URI
   const local = url ? null : await startLocal()
   const base = (url || local.url).replace(/\/+$/, '')
   const steps = []
@@ -215,7 +186,7 @@ export async function runDemo({
         throw new Error(`no answer from ${base}/health`)
       })
     }
-    const admin = await administrator({ email: adminEmail, password: adminPassword, local: !!local })
+    const admin = await scriptAdmin({ email: adminEmail, password: adminPassword, local: !!local, env: ['DEMO_ADMIN_EMAIL', 'DEMO_ADMIN_PASSWORD'] })
     let A = null
     if (!(await step('Sign in as the administrator', async () => { A = await login(admin.email, admin.password); return admin.email }))) return report
 

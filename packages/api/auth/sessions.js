@@ -10,12 +10,16 @@ const CACHE_MS = 15_000
 const memory = new Map()
 const cache = new Map()
 
+let indexed = null
 async function collection() {
-  const db = await getDb()
-  const c = db.collection('sessions')
-  await c.createIndex({ sid: 1 }, { unique: true })
-  await c.createIndex({ uid: 1 })
-  await c.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+  const c = (await getDb()).collection('sessions')
+  // Once per process, like the other stores: this runs on every signed-in request.
+  indexed ??= Promise.all([
+    c.createIndex({ sid: 1 }, { unique: true }),
+    c.createIndex({ uid: 1 }),
+    c.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+  ]).catch((err) => { indexed = null; throw err })
+  await indexed
   return c
 }
 

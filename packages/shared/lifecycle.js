@@ -97,7 +97,6 @@ export const MATCH_STATUS = {
 }
 
 const M = MATCH_STATUS
-const NOT_STARTED = [M.SCHEDULED, M.CALLED, M.READY, M.OPEN]
 
 const MATCH_TRANSITIONS = {
   [M.SCHEDULED]: [M.CALLED, M.READY, M.OPEN, M.LIVE, M.COMPLETED, M.CANCELLED],
@@ -110,8 +109,6 @@ const MATCH_TRANSITIONS = {
   [M.COMPLETED]: [M.LIVE],
   [M.CANCELLED]: [M.SCHEDULED],
 }
-
-export const notStarted = (status) => NOT_STARTED.includes(status || M.SCHEDULED)
 
 // Exceptional completions (PRD v1 §13, §16), each needing a finish reason.
 export const RESULT_TYPES = ['COMPLETED', 'WALKOVER', 'DISQUALIFIED', 'NO_SHOW', 'KIKEN', 'MANUAL_OVERRIDE', 'CANCELLED']

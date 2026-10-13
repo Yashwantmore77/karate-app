@@ -4,23 +4,12 @@ import { validate } from '../lib/validate.js'
 import { signCoachToken } from '../auth/jwt.js'
 import { createCoachAccount } from '../auth/users.js'
 import { badRequest } from '../lib/errors.js'
-import { playerBody, withMeta, TEAM_MEMBER } from './tms.js'
+import { playerBody, withMeta, TEAM_MEMBER, TEAM as TEAM_FIELDS } from './tms.js'
 import { FILE_SCHEMA, sendFile } from './files.js'
 import { certificatesPdf } from '../lib/pdf.js'
 
-const TEAM = {
-  name: { type: 'string', required: true, max: 120 },
-  club: { type: 'string', max: 120, nullable: true },
-  code: { type: 'string', max: 30, nullable: true },
-  coachName: { type: 'string', max: 120, nullable: true },
-  contactPerson: { type: 'string', max: 120, nullable: true },
-  mobile: { type: 'string', max: 30, nullable: true },
-  email: { type: 'string', max: 200, nullable: true },
-  address: { type: 'string', max: 300, nullable: true },
-  district: { type: 'string', max: 80, nullable: true },
-  state: { type: 'string', max: 80, nullable: true },
-  country: { type: 'string', max: 80, nullable: true },
-}
+// The organisers' team fields, less `active`, which only organisers set.
+const { active: _organisersOnly, ...TEAM } = TEAM_FIELDS
 
 /**
  * PRD section 52, the coach / team manager panel. Every call acts as the coach

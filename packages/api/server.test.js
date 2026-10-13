@@ -620,3 +620,56 @@ describe('public live channel (PRD 57)', () => {
     viewer.disconnect()
   })
 })
+
+describe('live bouts kept for a restart', () => {
+  let app
+  beforeEach(async () => {
+    clients = []
+    app = createApp()
+    http = app.http
+    await app.stores.matches.insert({ id: 'm1', status: 'open', refereeId: null, judgeIds: [] })
+    port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
+    refereeToken = await tokenFor('referee@kata.local')
+  })
+  afterEach(async () => {
+    clients.forEach((c) => c.disconnect())
+    await new Promise((resolve) => http.close(resolve))
+  })
+
+  const score = (socket, id) => emit(socket, 'match:cmd', { matchId: 'm1', cmd: 'SCORE', payload: { side: 'aka', type: 'yuko' }, clientEventId: id })
+
+  it('saves a bout in the order it was scored, even when the database answers out of order', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    // The first save's read is slow and the next ones quick: unordered, the oldest copy lands last.
+    const { liveStates } = app.stores
+    const read = liveStates.get
+    let reads = 0
+    liveStates.get = async (id) => {
+      if (reads++ === 0) await new Promise((r) => setTimeout(r, 100))
+      return read(id)
+    }
+    for (const id of ['s1', 's2', 's3']) await score(referee, id)
+    await new Promise((r) => setTimeout(r, 250))
+    expect((await app.tms.loadLiveState('m1')).seq).toBe(3)
+  })
+
+  it('lets go of a bout nobody has used for a day, and brings it back from its save', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    await score(referee, 'e1')
+    const dayLater = Date.now() + 25 * 60 * 60_000
+    app.evictIdleRooms(dayLater)
+    expect(app.rooms.has('m1')).toBe(true) // still being watched
+
+    referee.disconnect()
+    await new Promise((r) => setTimeout(r, 50))
+    app.evictIdleRooms()
+    expect(app.rooms.has('m1')).toBe(true) // used a moment ago
+    app.evictIdleRooms(dayLater)
+    expect(app.rooms.has('m1')).toBe(false)
+
+    const back = await emit(client(), 'match:join', { matchId: 'm1' })
+    expect(back.seq).toBe(1)
+  })
+})

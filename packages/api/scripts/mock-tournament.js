@@ -17,50 +17,10 @@
 import { performance } from 'node:perf_hooks'
 import { io as connect } from 'socket.io-client'
 
-import { randomBytes, randomUUID } from 'node:crypto'
-
-const args = process.argv.slice(2)
-const opt = (name, fallback) => {
-  const i = args.indexOf(`--${name}`)
-  if (i < 0) return fallback
-  const v = args[i + 1]
-  return v === undefined || v.startsWith('--') ? true : v
-}
+import { opt, startLocal, scriptAdmin } from './lib.js'
 
 const FIRST = ['Aarav', 'Vihaan', 'Arjun', 'Kabir', 'Ishaan', 'Rohan', 'Aditya', 'Dhruv', 'Krish', 'Yash', 'Pranav', 'Atharv', 'Reyansh', 'Sai', 'Om', 'Vivaan']
 const LAST = ['Sharma', 'Patil', 'Kulkarni', 'Joshi', 'Iyer', 'Rao', 'Nair', 'Gupta', 'Mehta', 'Desai', 'Shinde', 'Pawar']
-
-async function startLocal() {
-  process.env.API_RATE_LIMIT = process.env.API_RATE_LIMIT || '1000000'
-  const { createApp } = await import('../index.js')
-  const { http } = createApp()
-  const port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
-  return { url: `http://localhost:${port}`, close: () => new Promise((resolve) => http.close(resolve)) }
-}
-
-/**
- * The administrator this script runs as.
- *
- * Against a real server (--url) it has to be given one, because that server's
- * accounts live in its database. Against its own in-process server it makes a
- * throwaway administrator with a password generated for this run, so the
- * script carries no account and no password of its own.
- */
-async function scriptAdmin({ email, password, local }) {
-  if (email && password) return { email, password }
-  if (!local) {
-    const fromEnv = { email: process.env.BOOTSTRAP_ADMIN_EMAIL, password: process.env.BOOTSTRAP_ADMIN_PASSWORD }
-    if (fromEnv.email && fromEnv.password) return fromEnv
-    throw new Error('Give an administrator account to sign in with: --email and --password (or BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD).')
-  }
-  const { createUser } = await import('../auth/users.js')
-  const made = {
-    email: `script-${randomUUID().slice(0, 8)}@localhost.test`,
-    password: randomBytes(18).toString('base64url'),
-  }
-  await createUser({ ...made, role: 'admin' })
-  return made
-}
 
 export async function runMockTournament({
   url = null, email = null, password = null, teams = 4, players = 6, mats = 2,

@@ -147,5 +147,3 @@ export function socketAuth(socket, next) {
     return next()
   }, () => next(Object.assign(new Error('unauthorized'), { data: { code: 'unauthorized' } })))
 }
-
-export const canControlMat = (user) => user?.role === 'referee' || user?.role === 'admin'

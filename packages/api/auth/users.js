@@ -146,59 +146,6 @@ async function listMemoryUsers() {
   return [...users.values()]
 }
 
-async function createMemoryUser(input) {
-  const { email, password, role, seat, tournamentIds, organizationId, tournamentRoles: rawRoles } = validate(input, USER_SCHEMA)
-  const tournamentRoles = cleanTournamentRoles(rawRoles)
-  const users = await loadMemoryUsers()
-  if (users.has(email)) throw conflict('email_taken')
-  const user = {
-    uid: randomUUID(),
-    email,
-    role,
-    ...(seat !== null && seat !== undefined ? { seat } : {}),
-    ...(tournamentIds?.length ? { tournamentIds } : {}),
-    ...(organizationId ? { organizationId } : {}),
-    ...(tournamentRoles ? { tournamentRoles } : {}),
-    passwordHash: await hashPassword(password),
-  }
-  users.set(email, user)
-  return user
-}
-
-async function updateMemoryUser(uid, patch) {
-  const fields = validate(patch, USER_SCHEMA, { partial: true })
-  const users = await loadMemoryUsers()
-  const existing = [...users.values()].find((u) => u.uid === uid)
-  if (!existing) throw notFound()
-
-  const next = { ...existing }
-  if (fields.email !== undefined) next.email = fields.email
-  if (fields.role !== undefined) next.role = fields.role
-  if (fields.seat !== undefined) {
-    if (fields.seat === null) delete next.seat
-    else next.seat = fields.seat
-  }
-  if (fields.tournamentIds !== undefined) next.tournamentIds = fields.tournamentIds || []
-  if (fields.organizationId !== undefined) {
-    if (fields.organizationId) next.organizationId = fields.organizationId
-    else delete next.organizationId
-  }
-  if (fields.tournamentRoles !== undefined) {
-    const roles = cleanTournamentRoles(fields.tournamentRoles)
-    if (roles) next.tournamentRoles = roles
-    else delete next.tournamentRoles
-  }
-  if (fields.password) next.passwordHash = await hashPassword(fields.password)
-
-  if (next.email !== existing.email && users.has(next.email)) throw conflict('email_taken')
-
-  // Keyed by address, so a changed address moves the row rather than leaving a
-  // stale key pointing at it.
-  users.delete(existing.email)
-  users.set(next.email, next)
-  return next
-}
-
 async function deleteMemoryUser(uid) {
   const users = await loadMemoryUsers()
   const existing = [...users.values()].find((u) => u.uid === uid)
@@ -240,11 +187,19 @@ async function listMongoUsers() {
   return collection.find({}).toArray()
 }
 
-async function createMongoUser(input) {
+async function deleteMongoUser(uid) {
+  const collection = await usersCollection()
+  const result = await collection.deleteOne({ uid })
+  if (!result.deletedCount) throw notFound()
+}
+
+// --- writes: one set of rules, whichever store is in use --------------------
+
+/** A new account from a request body: validated, password hashed. */
+async function newAccount(input) {
   const { email, password, role, seat, tournamentIds, organizationId, tournamentRoles: rawRoles } = validate(input, USER_SCHEMA)
   const tournamentRoles = cleanTournamentRoles(rawRoles)
-  const collection = await usersCollection()
-  const doc = {
+  return {
     uid: randomUUID(),
     email,
     role,
@@ -254,8 +209,48 @@ async function createMongoUser(input) {
     ...(tournamentRoles ? { tournamentRoles } : {}),
     passwordHash: await hashPassword(password),
   }
+}
+
+/** A change from a request body, field by field; null removes the field. */
+async function accountChange(patch) {
+  const fields = validate(patch, USER_SCHEMA, { partial: true })
+  const change = {}
+  for (const key of ['email', 'role', 'seat']) if (fields[key] !== undefined) change[key] = fields[key]
+  if (fields.tournamentIds !== undefined) change.tournamentIds = fields.tournamentIds || []
+  if (fields.organizationId !== undefined) change.organizationId = fields.organizationId || null
+  if (fields.tournamentRoles !== undefined) change.tournamentRoles = cleanTournamentRoles(fields.tournamentRoles)
+  if (fields.password) change.passwordHash = await hashPassword(fields.password)
+  return change
+}
+
+const applyChange = (record, change) => {
+  for (const [key, value] of Object.entries(change)) {
+    if (value === null) delete record[key]
+    else record[key] = value
+  }
+  return record
+}
+
+const mongoUpdate = (change) => {
+  const $set = {}
+  const $unset = {}
+  for (const [key, value] of Object.entries(change)) {
+    if (value === null) $unset[key] = ''
+    else $set[key] = value
+  }
+  return { ...(Object.keys($set).length ? { $set } : {}), ...(Object.keys($unset).length ? { $unset } : {}) }
+}
+
+async function insertAccount(doc) {
+  if (!isMongoConfigured()) {
+    const users = await loadMemoryUsers()
+    if (users.has(doc.email)) throw conflict('email_taken')
+    users.set(doc.email, doc)
+    return doc
+  }
   try {
-    await collection.insertOne(doc)
+    // A copy: the driver adds _id to whatever it is handed.
+    await (await usersCollection()).insertOne({ ...doc })
   } catch (err) {
     // The unique index is what actually decides; catching its violation avoids
     // a read-then-write race that a check up front would still lose.
@@ -265,48 +260,28 @@ async function createMongoUser(input) {
   return doc
 }
 
-async function updateMongoUser(uid, patch) {
-  const fields = validate(patch, USER_SCHEMA, { partial: true })
+async function updateAccount(uid, change) {
+  if (!isMongoConfigured()) {
+    const users = await loadMemoryUsers()
+    const existing = await findMemoryUserByUid(uid)
+    if (!existing) throw notFound()
+    const next = applyChange({ ...existing }, change)
+    if (next.email !== existing.email && users.has(next.email)) throw conflict('email_taken')
+    // Keyed by address, so a changed address moves the row rather than leaving a
+    // stale key pointing at it.
+    users.delete(existing.email)
+    users.set(next.email, next)
+    return next
+  }
   const collection = await usersCollection()
-  const existing = await collection.findOne({ uid })
-  if (!existing) throw notFound()
-
-  const $set = {}
-  const $unset = {}
-  if (fields.email !== undefined) $set.email = fields.email
-  if (fields.role !== undefined) $set.role = fields.role
-  if (fields.seat !== undefined) {
-    if (fields.seat === null) $unset.seat = ''
-    else $set.seat = fields.seat
-  }
-  if (fields.tournamentIds !== undefined) $set.tournamentIds = fields.tournamentIds || []
-  if (fields.organizationId !== undefined) {
-    if (fields.organizationId) $set.organizationId = fields.organizationId
-    else $unset.organizationId = ''
-  }
-  if (fields.tournamentRoles !== undefined) {
-    const roles = cleanTournamentRoles(fields.tournamentRoles)
-    if (roles) $set.tournamentRoles = roles
-    else $unset.tournamentRoles = ''
-  }
-  if (fields.password) $set.passwordHash = await hashPassword(fields.password)
-
+  if (!(await collection.findOne({ uid }))) throw notFound()
   try {
-    const update = {}
-    if (Object.keys($set).length) update.$set = $set
-    if (Object.keys($unset).length) update.$unset = $unset
-    await collection.updateOne({ uid }, update)
+    await collection.updateOne({ uid }, mongoUpdate(change))
   } catch (err) {
     if (err?.code === 11000) throw conflict('email_taken')
     throw err
   }
   return collection.findOne({ uid })
-}
-
-async function deleteMongoUser(uid) {
-  const collection = await usersCollection()
-  const result = await collection.deleteOne({ uid })
-  if (!result.deletedCount) throw notFound()
 }
 
 // --- the interface server/index.js actually calls ---------------------------
@@ -325,27 +300,17 @@ const strip = (user) => {
  * (reset), two-factor secrets. Only the auth routes call this.
  */
 export async function setSecurity(uid, { password, twoFactorSecret, pendingTwoFactorSecret }) {
-  const patch = {}
-  if (password !== undefined) patch.passwordHash = await hashPassword(password)
-  if (twoFactorSecret !== undefined) patch.twoFactorSecret = twoFactorSecret
-  if (pendingTwoFactorSecret !== undefined) patch.pendingTwoFactorSecret = pendingTwoFactorSecret
+  const change = {}
+  if (password !== undefined) change.passwordHash = await hashPassword(password)
+  if (twoFactorSecret !== undefined) change.twoFactorSecret = twoFactorSecret
+  if (pendingTwoFactorSecret !== undefined) change.pendingTwoFactorSecret = pendingTwoFactorSecret
   if (isMongoConfigured()) {
-    const collection = await usersCollection()
-    const $set = {}
-    const $unset = {}
-    for (const [k, v] of Object.entries(patch)) (v === null ? $unset : $set)[k] = v === null ? '' : v
-    const update = {}
-    if (Object.keys($set).length) update.$set = $set
-    if (Object.keys($unset).length) update.$unset = $unset
-    await collection.updateOne({ uid }, update)
+    await (await usersCollection()).updateOne({ uid }, mongoUpdate(change))
     return
   }
   const user = await findMemoryUserByUid(uid)
   if (!user) throw notFound()
-  for (const [k, v] of Object.entries(patch)) {
-    if (v === null) delete user[k]
-    else user[k] = v
-  }
+  applyChange(user, change)
 }
 
 /** The raw record, secrets included, for the auth routes only. */
@@ -426,30 +391,16 @@ export async function listAssignableOfficials({ organizationId = null, reaches =
  */
 export async function createCoachAccount({ email, password, tournamentId, teamId }) {
   const fields = validate({ email, password }, { email: USER_SCHEMA.email, password: USER_SCHEMA.password })
-  const doc = { uid: randomUUID(), email: fields.email, role: 'coach', tournamentId, teamId, passwordHash: await hashPassword(fields.password) }
-  if (isMongoConfigured()) {
-    try {
-      await (await usersCollection()).insertOne({ ...doc })
-    } catch (err) {
-      if (err?.code === 11000) throw conflict('email_taken')
-      throw err
-    }
-  } else {
-    const users = await loadMemoryUsers()
-    if (users.has(doc.email)) throw conflict('email_taken')
-    users.set(doc.email, doc)
-  }
+  const doc = await insertAccount({ uid: randomUUID(), email: fields.email, role: 'coach', tournamentId, teamId, passwordHash: await hashPassword(fields.password) })
   return { uid: doc.uid, email: doc.email, role: 'coach', tournamentId, teamId }
 }
 
 export async function createUser(input) {
-  const user = await (isMongoConfigured() ? createMongoUser(input) : createMemoryUser(input))
-  return strip(user)
+  return strip(await insertAccount(await newAccount(input)))
 }
 
 export async function updateUser(uid, patch) {
-  const user = await (isMongoConfigured() ? updateMongoUser(uid, patch) : updateMemoryUser(uid, patch))
-  return strip(user)
+  return strip(await updateAccount(uid, await accountChange(patch)))
 }
 
 /** Team manager logins (each belongs to one tournament and team). */

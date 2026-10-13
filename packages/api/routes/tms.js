@@ -60,7 +60,7 @@ export const TEAM_MEMBER = {
   notes: { type: 'string', max: 300, nullable: true },
 }
 
-const TEAM = {
+export const TEAM = {
   name: { type: 'string', required: true, max: 120 },
   club: { type: 'string', max: 120, nullable: true },
   code: { type: 'string', max: 30, nullable: true },

@@ -11,8 +11,6 @@ export const DEFAULT_RESULT_RULES = {
   bronzeCount: 2,
 }
 
-export const TIE_BREAKERS = ['points', 'wins', 'headToHead', 'scoreDiff', 'scoreFor', 'penalties']
-
 /**
  * The bout outcome in AKA/AO terms, whatever vocabulary the record used: the
  * console writes red/blue (red = AKA), the PRD speaks AKA/AO.
@@ -233,27 +231,6 @@ export function bracketLoser(match) {
   return outcome.winner === 'aka' ? match.ao : match.aka
 }
 
-/**
- * Fills later rounds from earlier results. Returns the matches whose corners
- * changed, so a caller writes only those.
- */
-export function advanceBracket(matches) {
-  const byKey = new Map(matches.map((m) => [m.key, { ...m }]))
-  const changed = []
-  const ordered = [...byKey.values()].sort((a, b) => a.round - b.round || a.slot - b.slot)
-  for (const match of ordered) {
-    if (match.round === 1) continue
-    const aka = bracketWinner(byKey.get(match.feedAka) || {}) ?? null
-    const ao = bracketWinner(byKey.get(match.feedAo) || {}) ?? null
-    if (aka !== match.aka || ao !== match.ao) {
-      match.aka = aka
-      match.ao = ao
-      changed.push(match)
-    }
-  }
-  return changed
-}
-
 // --- medals ------------------------------------------------------------------
 
 export const MEDALS = { GOLD: 'gold', SILVER: 'silver', BRONZE: 'bronze' }
@@ -299,8 +276,6 @@ export function poolMedals(standings, { label = 'pool' } = {}) {
     .filter((row) => row.played > 0 && medalFor[row.rank])
     .map((row) => ({ id: row.id, rank: row.rank, medal: medalFor[row.rank], reason: `Place ${row.rank} in the ${label}${row.tieBreak ? ` — ${row.tieBreak}` : ''}` }))
 }
-
-export const TALLY_BY = ['club', 'district', 'state', 'country']
 
 /** Section 43. `medals` carry the grouping fields of the player they went to. */
 export function medalTally(medals, by = 'club') {

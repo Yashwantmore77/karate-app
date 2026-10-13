@@ -11,15 +11,10 @@
 // viewer comes from this one machine. Use a staging copy, never a live event.
 
 import { performance } from 'node:perf_hooks'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { opt, startLocal, scriptAdmin } from './lib.js'
 import { io as connect } from 'socket.io-client'
 import { runningEvent, parseDivisionKey } from '@kumite/shared/tms.js'
 
-const args = process.argv.slice(2)
-const opt = (name, fallback) => {
-  const i = args.indexOf(`--${name}`)
-  return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : fallback
-}
 const MATS = Number(opt('mats', 6))
 const VIEWERS = Number(opt('viewers', 200))
 const SECONDS = Number(opt('seconds', 30))
@@ -37,44 +32,11 @@ const summary = (name, list, errors) => {
   return `${name.padEnd(22)} ${String(list.length).padStart(7)} ok ${String(errors).padStart(5)} failed   p50 ${f(percentile(list, 50))}   p95 ${f(percentile(list, 95))}   p99 ${f(percentile(list, 99))}   max ${f(list.length ? Math.max(...list) : null)}`
 }
 
-async function startLocal() {
-  // The simulated crowd shares one address, which the API rate limit would
-  // otherwise (correctly) throttle.
-  process.env.API_RATE_LIMIT = process.env.API_RATE_LIMIT || '1000000'
-  const { createApp } = await import('../index.js')
-  const { seedSample } = await import('./seed-sample.js')
-  const { http, stores } = createApp()
-  await seedSample(stores, { log: () => {} })
-  const port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
-  return { url: `http://localhost:${port}`, close: () => new Promise((resolve) => http.close(resolve)) }
-}
-
-/**
- * The administrator this script runs as.
- *
- * Against a real server (--url) it has to be given one, because that server's
- * accounts live in its database. Against its own in-process server it makes a
- * throwaway administrator with a password generated for this run, so the
- * script carries no account and no password of its own.
- */
-async function scriptAdmin({ email, password, local }) {
-  if (email && password) return { email, password }
-  if (!local) {
-    const fromEnv = { email: process.env.BOOTSTRAP_ADMIN_EMAIL, password: process.env.BOOTSTRAP_ADMIN_PASSWORD }
-    if (fromEnv.email && fromEnv.password) return fromEnv
-    throw new Error('Give an administrator account to sign in with: --email and --password (or BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD).')
-  }
-  const { createUser } = await import('../auth/users.js')
-  const made = {
-    email: `script-${randomUUID().slice(0, 8)}@localhost.test`,
-    password: randomBytes(18).toString('base64url'),
-  }
-  await createUser({ ...made, role: 'admin' })
-  return made
-}
-
 export async function runLoadTest({ url = null, email = null, password = null, mats = MATS, viewers = VIEWERS, seconds = SECONDS, quiet = false } = {}) {
-  const local = url ? null : await startLocal()
+  const local = url ? null : await startLocal(async (stores) => {
+    const { seedSample } = await import('./seed-sample.js')
+    await seedSample(stores, { log: () => {} })
+  })
   const base = url || local.url
   const account = await scriptAdmin({ email, password, local: !url })
   const api = async (path, opts = {}, token) => {
