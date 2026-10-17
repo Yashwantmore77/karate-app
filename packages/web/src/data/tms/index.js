@@ -7,6 +7,15 @@ import * as api from './api'
 export const { tms } = api
 
 /** A refusal from the service or the API, as something a person can read. */
+/**
+ * The message a screen shows for a failed call: its own wording for the codes
+ * it knows, the shared wording for anything else the server named, and the
+ * fallback when there is no code to go on.
+ */
+export const errorMessage = (err, messages = {}, fallback = 'Something went wrong. Try again.') => (
+  messages[err?.code] || (err?.code && err.code !== 'error' ? describeError(err) : fallback)
+)
+
 export function describeError(err) {
   const code = err?.code || err?.message || 'error'
   const details = err?.details

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAuth, requireCoach } from '../auth/middleware.js'
 import { validate } from '../lib/validate.js'
+import { PASSWORD_FIELD } from '@kumite/shared/accounts.js'
 import { signCoachToken } from '../auth/jwt.js'
 import { createCoachAccount } from '../auth/users.js'
 import { badRequest } from '../lib/errors.js'
@@ -42,7 +43,7 @@ export function coachRoutes(tms) {
   // opens the same coach session.
   router.post('/account', async (req, res) => {
     if (!req.user.teamId) throw badRequest('team_required')
-    const { email, password } = validate(req.body, { email: { type: 'string', required: true, max: 200, lowercase: true }, password: { type: 'string', required: true, min: 8, max: 100, trim: false } })
+    const { email, password } = validate(req.body, { email: { type: 'string', required: true, max: 200, lowercase: true }, password: PASSWORD_FIELD })
     const account = await createCoachAccount({ email, password, tournamentId: t(req), teamId: req.user.teamId })
     await tms.record(withMeta(req), { tournamentId: t(req), action: 'user.changed', entity: 'user', entityId: account.uid, after: { email: account.email, role: 'coach', teamId: account.teamId }, reason: 'coach account created' })
     res.status(201).json({ account })

@@ -1,7 +1,7 @@
-import { httpGet, httpPost, httpPatch, httpDelete } from '../http'
+import { httpGet, httpPost, httpPatch, httpDelete } from './http'
 
 /**
- * A missing row reads as null, matching the local implementation.
+ * A missing row reads as null.
  *
  * A 404 on a single-document read is an answer ("there is no such category"),
  * not a failure, and every call site already handles an absent row.
@@ -15,10 +15,8 @@ const orNull = async (promise) => {
   }
 }
 
-// The same surface as the local implementation, over REST. Parent ids that the
-// local keys need (a category's tournament, a competitor's category) are taken
-// and ignored where the server addresses the row directly by id — keeping one
-// signature means no call site has to know which implementation it is talking to.
+// The competition data over REST. A row that the server addresses by its own
+// id is asked for by that id alone; only a listing needs its parent.
 
 // Page and search arrive as query parameters; the server answers with the rows
 // plus how many there are in total, which is what a pager needs to draw itself.
@@ -86,28 +84,12 @@ export const tournaments = {
 }
 
 export const categories = {
-  async list(tournamentId) {
-    return everyRow(`/tournaments/${tournamentId}/categories`, 'categories')
-  },
   async page(tournamentId, options) {
     return pageOf(await httpGet(`/tournaments/${tournamentId}/categories${pageQuery(options)}`), 'categories')
-  },
-  async get(_tournamentId, id) {
-    const res = await orNull(httpGet(`/categories/${id}`))
-    return res && res.category
   },
   async find(id) {
     const res = await orNull(httpGet(`/categories/${id}`))
     return res && res.category
-  },
-  async create(tournamentId, doc) {
-    return (await httpPost(`/tournaments/${tournamentId}/categories`, doc)).category
-  },
-  async update(_tournamentId, id, patch) {
-    return (await httpPatch(`/categories/${id}`, patch)).category
-  },
-  async remove(_tournamentId, id) {
-    await httpDelete(`/categories/${id}`)
   },
 }
 
@@ -121,10 +103,10 @@ export const competitors = {
   async create(categoryId, doc) {
     return (await httpPost(`/categories/${categoryId}/competitors`, doc)).competitor
   },
-  async update(_categoryId, id, patch) {
+  async update(id, patch) {
     return (await httpPatch(`/competitors/${id}`, patch)).competitor
   },
-  async remove(_categoryId, id) {
+  async remove(id) {
     await httpDelete(`/competitors/${id}`)
   },
 }
@@ -135,10 +117,6 @@ export const matches = {
   },
   async page(categoryId, options) {
     return pageOf(await httpGet(`/categories/${categoryId}/matches${pageQuery(options)}`), 'matches')
-  },
-  async get(_categoryId, id) {
-    const res = await orNull(httpGet(`/matches/${id}`))
-    return res && res.match
   },
   async find(id) {
     const res = await orNull(httpGet(`/matches/${id}`))
@@ -167,10 +145,10 @@ export const matches = {
   async create(categoryId, doc) {
     return (await httpPost(`/categories/${categoryId}/matches`, doc)).match
   },
-  async update(_categoryId, id, patch) {
+  async update(id, patch) {
     return (await httpPatch(`/matches/${id}`, patch)).match
   },
-  async remove(_categoryId, id, reason = null) {
+  async remove(id, reason = null) {
     await httpDelete(`/matches/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`)
   },
 }

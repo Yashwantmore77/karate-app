@@ -49,12 +49,6 @@ export function withOutcome(state, rules, at = Date.now()) {
   return same ? state : { ...state, outcome }
 }
 
-export const COMMANDS = [
-  'CLOCK_START', 'CLOCK_STOP', 'CLOCK_ADJUST', 'CLOCK_SET', 'CLOCK_RESET', 'KO_TIMER',
-  'SCORE', 'DEDUCT', 'SENSHU', 'PENALTY', 'FIELD_NUMBER', 'SCOREBOARD',
-  'KIKEN', 'SHIKKAKU', 'HANTEI', 'CLEAR_DECISION', 'RULES', 'TIMEOUT', 'OVERTIME',
-]
-
 /**
  * The tournament's own kumite rules (PRD section 29), applied to a match.
  * Accepts only the values a tournament configures; anything else keeps the

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createTms, TMS_COLLECTIONS, registrationReadiness, runningEvent, registrationPath, parseDivisionKey } from './tms.js'
-import { memoryStores } from './memoryStore.js'
+import { memoryStores } from './test/memoryStore.js'
 import { evaluateOutcome, DEFAULT_RULES } from './rules.js'
 import { applyCommand, initialMatchState, rulesFrom } from './commands.js'
 import { drawPools, poolSizes, seededRandom } from './pools.js'

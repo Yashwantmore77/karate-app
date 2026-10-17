@@ -103,8 +103,6 @@ export const ROLE_PERMISSIONS = {
   public: [P.PUBLIC_VIEW],
 }
 
-export const TOURNAMENT_ADMIN_PERMISSIONS = TOURNAMENT_ADMIN
-
 export const can = (role, permission) => !!ROLE_PERMISSIONS[role]?.includes(permission)
 
 /**

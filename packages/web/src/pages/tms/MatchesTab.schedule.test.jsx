@@ -36,7 +36,7 @@ describe('scheduling a bout', () => {
     const dialog = await openSchedule(user)
     expect(within(dialog).getByLabelText('Time')).toHaveValue('2027-01-15T10:00')
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
-    expect(data.update).toHaveBeenCalledWith('c1', 'm1', expect.objectContaining({ mat: 1, scheduledAt: '2027-01-15T04:30:00.000Z' }))
+    expect(data.update).toHaveBeenCalledWith('m1', expect.objectContaining({ mat: 1, scheduledAt: '2027-01-15T04:30:00.000Z' }))
   })
 
   it('saves a time typed in as that time in the hall', async () => {
@@ -46,6 +46,6 @@ describe('scheduling a bout', () => {
     await user.clear(time)
     await user.type(time, '2027-01-15T11:15')
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
-    expect(data.update).toHaveBeenCalledWith('c1', 'm1', expect.objectContaining({ scheduledAt: '2027-01-15T05:45:00.000Z' }))
+    expect(data.update).toHaveBeenCalledWith('m1', expect.objectContaining({ scheduledAt: '2027-01-15T05:45:00.000Z' }))
   })
 })

@@ -4,7 +4,7 @@ import {
   FormControlLabel, IconButton, Alert,
 } from '@mui/material'
 import { Add, Edit, ContentCopy, SettingsBackupRestore } from '@mui/icons-material'
-import { OVERTIME_MODES, KATA_TIE_BREAKS } from '@kumite/shared/rulesets.js'
+import { OVERTIME_MODES, KATA_TIE_BREAKS, rulesetProblems } from '@kumite/shared/rulesets.js'
 import { KATA_METHODS } from '@kumite/shared/tms.js'
 import { KATA_METHOD_LABEL, KATA_TIE_BREAK_LABEL } from '@kumite/shared/kata.js'
 import { tms } from '../../data/tms'
@@ -17,6 +17,19 @@ import { HelpTitle } from '../../components/help/InfoTip'
 
 const KUMITE_NUMBERS = [['matchDurationSec', 'Bout length (seconds)'], ['pointGap', 'Winning point gap'], ['extraTimeSec', 'Extra time (seconds)'], ['penaltyCategories', 'Penalty categories (1 or 2)']]
 const KATA_NUMBERS = [['kataJudges', 'Judges'], ['kataMinScore', 'Lowest score'], ['kataMaxScore', 'Highest score'], ['kataPrecision', 'Decimals'], ['kataRounds', 'Rounds'], ['kataQualifiers', 'Qualifiers'], ['kataTechnicalWeight', 'Technical weight']]
+const POINT_LABEL = { yuko: 'Yuko points', wazaAri: 'Waza-ari points', ippon: 'Ippon points' }
+// rulesetProblems names the fields it refuses; these are the labels they wear.
+const PROBLEM_LABEL = {
+  name: 'Name',
+  ...Object.fromEntries(KUMITE_NUMBERS.map(([k, label]) => [`kumite.${k}`, label])),
+  ...Object.fromEntries(Object.entries(POINT_LABEL).map(([k, label]) => [`kumite.points.${k}`, label])),
+  'kumite.overtime': 'Tie at time',
+  'kumite.penaltyLadder': 'Penalty ladder',
+  ...Object.fromEntries(KATA_NUMBERS.map(([k, label]) => [`kata.${k}`, `Kata ${label.toLowerCase()}`])),
+  'kata.kataMethod': 'Calculation',
+  'kata.kataTieBreak': 'Tie-break',
+  'kata.score range': 'Lowest score / Highest score',
+}
 
 /**
  * PRD v1 §6, §14, §24: versioned rulesets. Editing a ruleset a tournament
@@ -27,6 +40,7 @@ export default function AdminRulesets() {
   const [rows, setRows] = useState([])
   const [all, setAll] = useState(false)
   const [edit, setEdit] = useState(null)
+  const [tried, setTried] = useState(false)
   const { loading, refreshing, wrap } = useLoading()
   const load = () => wrap(tms.rulesets(all).then(setRows).catch(() => setRows([])))
   useEffect(() => { load() }, [all])
@@ -34,19 +48,26 @@ export default function AdminRulesets() {
   const setK = (k, v) => setEdit({ ...edit, kumite: { ...edit.kumite, [k]: v } })
   const setKata = (k, v) => setEdit({ ...edit, kata: { ...edit.kata, [k]: v } })
   const numeric = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'string' && v !== '' && !Number.isNaN(Number(v)) ? Number(v) : v]))
+  const bodyOf = (e) => ({
+    name: e.name, description: e.description || null,
+    kumite: { ...numeric(e.kumite), points: numeric(e.kumite.points || {}), penaltyLadder: String(e.kumite.penaltyLadder || '').split(',').map((x) => x.trim()).filter(Boolean) },
+    kata: numeric(e.kata),
+  })
+  // The same check the server runs on save (it rejects with invalid_ruleset),
+  // so thirteen numbers do not need a round trip to find the one that is wrong.
+  const problems = edit ? rulesetProblems(bodyOf(edit)) : []
+  const bad = (key) => tried && problems.includes(key)
   const save = async () => {
-    const body = {
-      name: edit.name, description: edit.description || null,
-      kumite: { ...numeric(edit.kumite), points: numeric(edit.kumite.points || {}), penaltyLadder: String(edit.kumite.penaltyLadder || '').split(',').map((x) => x.trim()).filter(Boolean) },
-      kata: numeric(edit.kata),
-    }
+    setTried(true)
+    if (problems.length) return
+    const body = bodyOf(edit)
     const ok = await action.run(() => (edit.id ? tms.updateRuleset(edit.id, body) : tms.createRuleset(body)), (r) => `Saved ${r.name} v${r.version}`)
     if (ok) { setEdit(null); load() }
   }
-  const open = (r, copy = false) => setEdit({
+  const open = (r, copy = false) => { setTried(false); setEdit({
     ...(copy ? {} : { id: r.id }), name: copy ? `${r.name} (copy)` : r.name, description: r.description || '',
     kumite: { ...r.kumite, penaltyLadder: (r.kumite.penaltyLadder || []).join(', ') }, kata: { ...r.kata },
-  })
+  }) }
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
@@ -86,34 +107,39 @@ export default function AdminRulesets() {
         <DialogContent>
           {edit && (
             <Grid container spacing={2} sx={{ mt: 0.5 }}>
-              <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth required label="Name" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Grid>
+              {tried && problems.length > 0 && (
+                <Grid size={{ xs: 12 }}>
+                  <Alert severity="error">Check {problems.map((k) => PROBLEM_LABEL[k] || k).join(', ')}.</Alert>
+                </Grid>
+              )}
+              <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth required label="Name" error={bad('name')} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Grid>
               <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Description" value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></Grid>
               <Grid size={{ xs: 12 }}><Typography variant="h4">Kumite</Typography></Grid>
               {KUMITE_NUMBERS.map(([k, label]) => (
-                <Grid key={k} size={{ xs: 6, md: 3 }}><TextField fullWidth type="number" label={label} value={edit.kumite[k] ?? ''} onChange={(e) => setK(k, e.target.value)} /></Grid>
+                <Grid key={k} size={{ xs: 6, md: 3 }}><TextField fullWidth type="number" label={label} error={bad(`kumite.${k}`)} value={edit.kumite[k] ?? ''} onChange={(e) => setK(k, e.target.value)} /></Grid>
               ))}
               {['yuko', 'wazaAri', 'ippon'].map((k) => (
-                <Grid key={k} size={{ xs: 4, md: 2 }}><TextField fullWidth type="number" label={`${k === 'wazaAri' ? 'Waza-ari' : k[0].toUpperCase() + k.slice(1)} points`} value={edit.kumite.points?.[k] ?? ''}
+                <Grid key={k} size={{ xs: 4, md: 2 }}><TextField fullWidth type="number" label={POINT_LABEL[k]} error={bad(`kumite.points.${k}`)} value={edit.kumite.points?.[k] ?? ''}
                   onChange={(e) => setK('points', { ...edit.kumite.points, [k]: e.target.value })} /></Grid>
               ))}
               <Grid size={{ xs: 12, md: 3 }}>
-                <TextField select fullWidth label="Tie at time" value={edit.kumite.overtime || 'senshu'} onChange={(e) => setK('overtime', e.target.value)}>
+                <TextField select fullWidth label="Tie at time" error={bad('kumite.overtime')} value={edit.kumite.overtime || 'senshu'} onChange={(e) => setK('overtime', e.target.value)}>
                   {OVERTIME_MODES.map((m) => <MenuItem key={m} value={m}>{OVERTIME_LABEL[m]}</MenuItem>)}
                 </TextField>
               </Grid>
-              <Grid size={{ xs: 12, md: 3 }}><TextField fullWidth label="Penalty ladder" value={edit.kumite.penaltyLadder} onChange={(e) => setK('penaltyLadder', e.target.value)} /></Grid>
+              <Grid size={{ xs: 12, md: 3 }}><TextField fullWidth label="Penalty ladder" error={bad('kumite.penaltyLadder')} value={edit.kumite.penaltyLadder} onChange={(e) => setK('penaltyLadder', e.target.value)} /></Grid>
               <Grid size={{ xs: 12, md: 6 }}><FormControlLabel control={<Switch checked={edit.kumite.senshu !== false} onChange={(e) => setK('senshu', e.target.checked)} />} label="Senshu" /></Grid>
               <Grid size={{ xs: 12 }}><Typography variant="h4">Kata</Typography></Grid>
               {KATA_NUMBERS.map(([k, label]) => (
-                <Grid key={k} size={{ xs: 6, md: 12 / 7 }}><TextField fullWidth type="number" label={label} value={edit.kata[k] ?? ''} onChange={(e) => setKata(k, e.target.value)} /></Grid>
+                <Grid key={k} size={{ xs: 6, md: 12 / 7 }}><TextField fullWidth type="number" label={label} error={bad(`kata.${k}`) || (bad('kata.score range') && ['kataMinScore', 'kataMaxScore'].includes(k))} value={edit.kata[k] ?? ''} onChange={(e) => setKata(k, e.target.value)} /></Grid>
               ))}
               <Grid size={{ xs: 12, md: 4 }}>
-                <TextField select fullWidth label="Calculation" value={edit.kata.kataMethod || KATA_METHODS[0]} onChange={(e) => setKata('kataMethod', e.target.value)}>
+                <TextField select fullWidth label="Calculation" error={bad('kata.kataMethod')} value={edit.kata.kataMethod || KATA_METHODS[0]} onChange={(e) => setKata('kataMethod', e.target.value)}>
                   {KATA_METHODS.map((m) => <MenuItem key={m} value={m}>{KATA_METHOD_LABEL[m]}</MenuItem>)}
                 </TextField>
               </Grid>
               <Grid size={{ xs: 12, md: 4 }}>
-                <TextField select fullWidth label="Tie-break" value={edit.kata.kataTieBreak || KATA_TIE_BREAKS[0]} onChange={(e) => setKata('kataTieBreak', e.target.value)}>
+                <TextField select fullWidth label="Tie-break" error={bad('kata.kataTieBreak')} value={edit.kata.kataTieBreak || KATA_TIE_BREAKS[0]} onChange={(e) => setKata('kataTieBreak', e.target.value)}>
                   {KATA_TIE_BREAKS.map((m) => <MenuItem key={m} value={m}>{KATA_TIE_BREAK_LABEL[m]}</MenuItem>)}
                 </TextField>
               </Grid>
@@ -123,7 +149,7 @@ export default function AdminRulesets() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEdit(null)}>Cancel</Button>
-          <Button variant="contained" disabled={!edit?.name?.trim() || action.busy} onClick={save}>Save</Button>
+          <Button variant="contained" disabled={action.busy} onClick={save}>Save</Button>
         </DialogActions>
       </Dialog>
       {action.feedback}

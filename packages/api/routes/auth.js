@@ -4,6 +4,7 @@ import { issueReset, redeemReset } from '../auth/resets.js'
 import { newSecret, verifyTotp, otpauthUrl } from '../auth/totp.js'
 import { sendMail } from '../lib/mailer.js'
 import { validate } from '../lib/validate.js'
+import { PASSWORD_FIELD } from '@kumite/shared/accounts.js'
 import { signToken, signCoachToken } from '../auth/jwt.js'
 import { createSession, listSessions, revokeSession, revokeOtherSessions } from '../auth/sessions.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
@@ -131,7 +132,7 @@ export function authRoutes({ audit = async () => {} } = {}) {
   router.post('/reset', resetRequests, async (req, res) => {
     const { token, password } = validate(req.body || {}, {
       token: { type: 'string', required: true, max: 200 },
-      password: { type: 'string', required: true, min: 8, max: 200, trim: false },
+      password: PASSWORD_FIELD,
     })
     const uid = await redeemReset(token)
     if (!uid) throw badRequest('invalid_or_expired_token')

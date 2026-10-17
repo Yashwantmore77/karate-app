@@ -10,7 +10,7 @@ async function fetchFile(path, token) {
   })
 }
 
-// The same surface as ./local, over the REST API of PRD section 56.
+// The tournament service over the REST API of PRD section 56.
 
 const get = (path, opts) => request(path, opts)
 const send = (method, path, body, opts = {}) => request(path, { method, body, ...opts })
@@ -146,10 +146,13 @@ export const tms = {
     ])
     return { players, teams, groups, weights, divisions, pools, matches, results, medals }
   },
-  // Server-built PDFs (certificates, reports), downloaded with the session token.
+  // Server-built PDFs (certificates, reports), read with the session token.
+  // pdfBlob is for showing one on screen; pdf saves it to disk.
+  async pdfBlob(tid, path) {
+    return (await fetchFile(`${T(tid)}/${path}`, getToken())).blob
+  },
   async pdf(tid, path, filename) {
-    const { blob } = await fetchFile(`${T(tid)}/${path}`, getToken())
-    const url = URL.createObjectURL(blob)
+    const url = URL.createObjectURL(await tms.pdfBlob(tid, path))
     const a = document.createElement('a')
     a.href = url
     a.download = filename

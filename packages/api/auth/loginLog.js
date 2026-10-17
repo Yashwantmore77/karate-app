@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { isMongoConfigured, getDb } from '../db/mongo.js'
 import { clientIp, edgeGeo, lookupGeo, userAgent } from '../lib/requestMeta.js'
+import { normalizeEmail } from './users.js'
 
 /**
  * An append-only record of who tried to sign in, from where, and whether it
@@ -32,7 +33,8 @@ const ttlSeconds = () => {
   return Number.isFinite(days) && days > 0 ? Math.round(days * 86_400) : null
 }
 
-const normalizeEmail = (email) => String(email || '').trim().toLowerCase().slice(0, 200) || null
+// A log row caps the address and records a blank one as absent.
+const logEmail = (email) => normalizeEmail(email).slice(0, 200) || null
 
 /**
  * Coordinates the browser reported about itself.
@@ -68,7 +70,7 @@ async function buildEntry({ req, email, user, outcome, coords }) {
     id: randomUUID(),
     at: new Date(),
     outcome,
-    email: normalizeEmail(email ?? user?.email),
+    email: logEmail(email ?? user?.email),
     uid: user?.uid ?? null,
     role: user?.role ?? null,
     ip,
@@ -158,7 +160,7 @@ export async function listLogins({ limit, email, outcome, page = 1 } = {}) {
   const skip = (Math.max(1, page) - 1) * size
 
   const filter = {}
-  if (email) filter.email = normalizeEmail(email)
+  if (email) filter.email = logEmail(email)
   if (outcome && OUTCOMES.includes(outcome)) filter.outcome = outcome
 
   if (!isMongoConfigured()) {

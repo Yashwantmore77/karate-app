@@ -164,7 +164,7 @@ Set up the tournament a few weeks before the event; it takes about an hour. You 
 2. Fill in the four boxes:
    - **Tournament Name** (1), for example "Pune District Open 2026".
    - **Location** (2): the city or the venue.
-   - **Tournament Date** (3): click the calendar icon and pick the first day. The box shows the date as month/day/year.
+   - **Tournament Date** (3): the first day of the tournament. Type it, or use the small calendar button in the box.
    - **Tournament type** (4): Kata, Kumite, or Kata + Kumite.
 3. Click **Create Tournament** (5).
 

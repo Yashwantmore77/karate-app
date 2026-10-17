@@ -29,16 +29,16 @@ export const STATES = {
   ],
 }
 
-const fold = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
+const looseName = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
 
 /** The master spelling of a country, or null when it is not one. */
-export const findCountry = (value) => COUNTRIES.find((c) => fold(c) === fold(value)) || null
+export const findCountry = (value) => COUNTRIES.find((c) => looseName(c) === looseName(value)) || null
 
 /** The master spelling of a state in a country with a master list; null when unknown. */
 export function findState(country, value) {
   const list = STATES[findCountry(country)]
   if (!list) return value ? String(value).trim() : null
-  return list.find((s) => fold(s) === fold(value)) || null
+  return list.find((s) => looseName(s) === looseName(value)) || null
 }
 
 export const statesOf = (country) => STATES[findCountry(country)] || []

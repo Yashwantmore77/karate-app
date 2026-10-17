@@ -2,6 +2,7 @@ import { scrypt, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import { isMongoConfigured, getDb } from '../db/mongo.js'
 import { validate } from '../lib/validate.js'
+import { PASSWORD_FIELD } from '@kumite/shared/accounts.js'
 import { conflict, notFound, badRequest } from '../lib/errors.js'
 
 const scryptAsync = promisify(scrypt)
@@ -20,7 +21,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 // produce passwords taped to a laptop.
 const USER_SCHEMA = {
   email: { type: 'string', required: true, max: 200, lowercase: true, pattern: EMAIL_PATTERN },
-  password: { type: 'string', required: true, min: 8, max: 200, trim: false },
+  password: PASSWORD_FIELD,
   role: { type: 'enum', values: ROLES, required: true },
   seat: { type: 'integer', min: 1, max: 99, nullable: true },
   // PRD section 4: the tournaments this account may work. Empty or absent
@@ -51,7 +52,7 @@ function cleanTournamentRoles(value) {
   return Object.keys(out).length ? out : null
 }
 
-const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
+export const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
 
 export const hashPassword = async (password, salt = randomBytes(16).toString('hex')) => {
   const derived = await scryptAsync(password, salt, KEY_LEN)

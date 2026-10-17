@@ -20,12 +20,12 @@ export const REPORT_FILTERS = ['gender', 'ageGroupId', 'divisionKey', 'club', 'd
 export function filterReportData(data, filters = {}) {
   const f = Object.fromEntries(Object.entries(filters || {}).filter(([k, v]) => REPORT_FILTERS.includes(k) && v))
   if (!Object.keys(f).length) return data
-  const fold = (v) => String(v || '').trim().toLowerCase()
+  const trimLower = (v) => String(v || '').trim().toLowerCase()
   const players = data.players.filter((p) => (!f.gender || p.gender === f.gender)
     && (!f.event || (p.events || []).includes(f.event))
     && (!f.ageGroupId || Object.values(p.entries || {}).some((e) => e.ageGroupId === f.ageGroupId))
     && (!f.divisionKey || Object.values(p.entries || {}).some((e) => e.divisionKey === f.divisionKey))
-    && ['club', 'district', 'state'].every((k) => !f[k] || fold(p[k]) === fold(f[k])))
+    && ['club', 'district', 'state'].every((k) => !f[k] || trimLower(p[k]) === trimLower(f[k])))
   const ids = new Set(players.map((p) => p.id))
   return {
     ...data,

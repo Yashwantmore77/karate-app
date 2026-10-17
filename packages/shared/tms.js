@@ -3616,13 +3616,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, drawImpact, setQualifiers, decideSingleEntry,
     // matches and results
-    generateMatches, listMatches, correctResult, uncategorizedPlayers, attention, swapCorners, callMatch, setRunningEvent, inProgress, overrideMedals, recordLiveEvent, liveEvents,
+    generateMatches, listMatches, correctResult, attention, swapCorners, callMatch, setRunningEvent, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket, arrangeBracket, listBrackets,
     publishResults, verifyResult, assertResultEditable, setDivisionLock, coachCertificates, generatePasses, listPasses, checkIn, issueCustomCertificate, verifyCertificate, publicCertificates, setWeighInClosed, previewMasterDateChange, listMedals, tally, generateCertificates, listCertificates,
     // rulesets and locks
-    listRulesets, resolveRuleset, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
+    listRulesets, createRuleset, updateRuleset, restoreStandard, setRulesetActive, applyRuleset, setSoftLock, registrationWindow,
     // links and coaches
     getLink, saveLink, linkInfo, openLink, assertLinkSession, coachOverview,
     // public, dashboard, audit

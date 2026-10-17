@@ -15,12 +15,12 @@ import {
 } from '../../data/domain'
 import { isExpired } from '../../utils/dateUtils'
 import { localInputToIso, isoToLocalInput, formatSlotTime, describeClashes } from '../../utils/scheduleTime'
-import { downloadCSV } from '../../utils/csvExport'
+import { downloadCsv } from '../../components/tms/download'
 import StandingsTable from '../../components/StandingsTable'
 import * as users from '../../data/users'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
-import { describeError } from '../../data/tms'
+import { errorMessage } from '../../data/tms'
 
 // Used until a tournament says otherwise; matches the server's own default.
 const DEFAULT_JUDGE_COUNT = 4
@@ -51,7 +51,7 @@ const MESSAGES = {
   // is only the headline above it.
   schedule_conflict: 'Somebody on this bout, or the mat, is already busy at that time.',
 }
-const messageFor = (err) => MESSAGES[err?.code] || (err?.code && err.code !== 'error' ? describeError(err) : 'Could not save that. Try again.')
+const messageFor = (err) => errorMessage(err, MESSAGES, 'Could not save that. Try again.')
 
 const drawMessage = (err) => {
   if (err?.code === 'too_many_for_round_robin') {
@@ -156,7 +156,7 @@ export default function RefereeMatchList({ uid, profile }) {
           // A patch sends null to clear, where a create simply omits: the two
           // mean different things to the API, and clearing a panel has to be
           // possible once one has been set.
-          await matchStore.update(categoryId, editingMatch.id, {
+          await matchStore.update(editingMatch.id, {
             redId: values.redId,
             blueId: values.blueId,
             refereeId: values.refereeId || null,
@@ -261,7 +261,7 @@ export default function RefereeMatchList({ uid, profile }) {
 
   const handleDeleteMatch = async (matchId) => {
     try {
-      await matchStore.remove(categoryId, matchId, deleteReason.trim() || null)
+      await matchStore.remove(matchId, deleteReason.trim() || null)
       setError(null)
       await Promise.all([refresh(), loadAllMatches()])
     } catch (err) {
@@ -293,21 +293,15 @@ export default function RefereeMatchList({ uid, profile }) {
   }
 
   const handleExportResults = () => {
-    downloadCSV(
-      `${category?.name || 'category'}-results.csv`,
-      [
-        { label: 'Red Bib', value: (m) => getCompetitor(m.redId)?.bib },
-        { label: 'Red Name', value: (m) => getCompetitor(m.redId)?.name },
-        { label: 'Blue Bib', value: (m) => getCompetitor(m.blueId)?.bib },
-        { label: 'Blue Name', value: (m) => getCompetitor(m.blueId)?.name },
-        { label: 'Status', value: (m) => m.status },
-        { label: 'Winner', value: (m) => m.winner || '' },
-        { label: 'Red Avg Score', value: (m) => m.avgRed ?? '' },
-        { label: 'Blue Avg Score', value: (m) => m.avgBlue ?? '' },
-      ],
-      // The whole category, not the page on screen.
-      allMatches
-    )
+    // The whole category, not the page on screen.
+    downloadCsv(`${category?.name || 'category'}-results.csv`, [
+      ['Red Bib', 'Red Name', 'Blue Bib', 'Blue Name', 'Status', 'Winner', 'Red Avg Score', 'Blue Avg Score'],
+      ...allMatches.map((m) => [
+        getCompetitor(m.redId)?.bib, getCompetitor(m.redId)?.name,
+        getCompetitor(m.blueId)?.bib, getCompetitor(m.blueId)?.name,
+        m.status, m.winner || '', m.avgRed ?? '', m.avgBlue ?? '',
+      ]),
+    ])
   }
 
   const tournamentExpired = tournament && isExpired(tournament.date)

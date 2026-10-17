@@ -1,7 +1,7 @@
-import { searchRows } from './query.js'
+import { searchRows } from '../query.js'
 
-// The store contract over a Map. Used by the tests here and by any caller that
-// needs a throwaway store; the API keeps its own (with Mongo beside it).
+// The store contract over a Map, for the tests in this package. The API keeps
+// its own (with Mongo beside it); this one never ships.
 
 const matches = (row, filter) => Object.entries(filter).every(([k, v]) => row[k] === v)
 let counter = 0

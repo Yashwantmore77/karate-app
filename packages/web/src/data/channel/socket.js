@@ -17,7 +17,6 @@ const offsetListeners = new Set()
 const statusListeners = new Set()
 let status = 'offline'
 
-export const getConnectionStatus = () => status
 export const onConnectionStatus = (cb) => {
   statusListeners.add(cb)
   cb(status)
