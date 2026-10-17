@@ -3,15 +3,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 // The suite otherwise runs with no server configured, which is what keeps every
 // other test on local storage. This file is about the other half of the switch,
 // so the session is stubbed into API mode.
-vi.mock('../session', () => ({
+vi.mock('./session', () => ({
   apiUrl: (path) => `http://api.test/api/v1${path}`,
   getToken: () => 'test-token',
   clearSession: vi.fn(),
   serverUrl: () => 'http://api.test',
 }))
 
-const { tournaments, categories, competitors, matches } = await import('./api')
-const { HttpError } = await import('../http')
+const { tournaments, categories, competitors, matches } = await import('./domain')
+const { HttpError } = await import('./http')
 
 let calls
 
@@ -92,26 +92,14 @@ describe('api domain adapter', () => {
     })
   })
 
-  it('nests categories under their tournament for listing and creating', async () => {
-    respondWith({ categories: [] })
-    await categories.list('t1')
-    expect(lastCall().url).toBe('http://api.test/api/v1/tournaments/t1/categories?page=1&limit=100')
+  it('pages categories under their tournament and reads one by its own id', async () => {
+    respondWith({ categories: [], page: 1, total: 0, pages: 0 })
+    await categories.page('t1', { page: 1, limit: 25 })
+    expect(lastCall().url).toBe('http://api.test/api/v1/tournaments/t1/categories?page=1&limit=25')
 
-    respondWith({ category: { id: 'c1' } })
-    await categories.create('t1', { name: 'U14 Boys' })
-    expect(lastCall()).toMatchObject({
-      url: 'http://api.test/api/v1/tournaments/t1/categories', method: 'POST',
-    })
-  })
-
-  it('addresses a category directly by id, ignoring the parent the local keys need', async () => {
     respondWith({ category: { id: 'c1', name: 'U14 Boys' } })
-    expect(await categories.get('t1', 'c1')).toMatchObject({ name: 'U14 Boys' })
+    expect(await categories.find('c1')).toMatchObject({ name: 'U14 Boys' })
     expect(lastCall().url).toBe('http://api.test/api/v1/categories/c1')
-
-    respondWith(null, { status: 204 })
-    await categories.remove('t1', 'c1')
-    expect(lastCall()).toMatchObject({ url: 'http://api.test/api/v1/categories/c1', method: 'DELETE' })
   })
 
   it('nests competitors under their category', async () => {
@@ -134,7 +122,7 @@ describe('api domain adapter', () => {
     expect(lastCall().url).toBe('http://api.test/api/v1/categories/c1/matches?page=1&limit=100')
 
     respondWith({ match: { id: 'm1', winner: 'aka' } })
-    await matches.update('c1', 'm1', { winner: 'aka' })
+    await matches.update('m1', { winner: 'aka' })
     expect(lastCall()).toMatchObject({
       url: 'http://api.test/api/v1/matches/m1', method: 'PATCH', body: { winner: 'aka' },
     })

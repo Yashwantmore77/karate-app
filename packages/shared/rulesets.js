@@ -2,9 +2,6 @@
 // tournament points at one; a change to a ruleset that tournaments already
 // use becomes a new version, so a finished event keeps the rules it ran under.
 
-export const RULESET_KUMITE_KEYS = ['matchDurationSec', 'pointGap', 'points', 'senshu', 'overtime', 'extraTimeSec', 'penaltyCategories', 'penaltyLadder']
-export const RULESET_KATA_KEYS = ['kataJudges', 'kataMethod', 'kataMinScore', 'kataMaxScore', 'kataPrecision', 'kataRounds', 'kataQualifiers', 'kataComponents', 'kataTechnicalWeight', 'kataTieBreak']
-
 export const OVERTIME_MODES = ['none', 'senshu', 'extra_time', 'golden_score', 'hantei']
 export const KATA_TIE_BREAKS = ['total_then_best', 'technical_first', 'lowest_kept', 'shared']
 

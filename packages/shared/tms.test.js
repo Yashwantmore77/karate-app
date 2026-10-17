@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createTms, TMS_COLLECTIONS, divisionKey } from './tms.js'
-import { memoryStores } from './memoryStore.js'
+import { memoryStores } from './test/memoryStore.js'
 import { poolSizes, drawPools, roundRobin, poolName, seededRandom } from './pools.js'
 import { poolStandings, buildBracket, seedOrder, bracketMedals, medalTally, qualifierSeeds } from './results.js'
 import { validatePlayer, parseCsv, validateBulkRows, publicPlayer, normalizeForm, DEFAULT_FIELDS } from './registration.js'

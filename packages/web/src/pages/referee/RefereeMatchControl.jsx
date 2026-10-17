@@ -74,7 +74,7 @@ export default function RefereeMatchControl() {
   // How a bout ended is the one record that has to outlive this device, so it
   // goes to the server rather than staying in the console.
   const updateMatchRecord = (updates) =>
-    matchStore.update(match.categoryId, matchId, updates)
+    matchStore.update(matchId, updates)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, bgcolor: 'background.default' }}>

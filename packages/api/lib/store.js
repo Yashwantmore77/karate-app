@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { isMongoConfigured, getDb } from '../db/mongo.js'
 import { TMS_COLLECTIONS } from '@kumite/shared/tms.js'
-import { searchRows, toMongo } from '@kumite/shared/query.js'
+import { searchRows, toMongo, escapeRegex } from '@kumite/shared/query.js'
 
 // One document store, two backends, chosen the same way the user store already
 // chooses: MONGODB_URI present means Mongo, absent means memory. Routes are
@@ -38,11 +38,6 @@ const applyOptions = (list, { sort, skip = 0, limit } = {}) => {
   }
   return limit ? out.slice(skip, skip + limit) : out.slice(skip)
 }
-
-// A search term goes into a regex on the Mongo side, so every character that
-// means something to a regex engine is neutered first. Without this, a search
-// for "(a+)+b" is a denial of service that needs no credentials.
-const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const matchesSearch = (row, q, fields) => {
   if (!q || fields.length === 0) return true

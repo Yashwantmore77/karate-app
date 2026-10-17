@@ -94,7 +94,7 @@ describe('standings', () => {
     await user.type(dialog.getByLabelText(/Reason/), 'Entered twice')
     await user.click(dialog.getByRole('button', { name: 'Delete' }))
 
-    expect(store.matches.remove).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'Entered twice')
+    expect(store.matches.remove).toHaveBeenCalledWith(expect.anything(), 'Entered twice')
     expect(store.matches.list).toHaveBeenCalledTimes(2)
     // m1 is gone, so Aarav has played one.
     await vi.waitFor(async () => {

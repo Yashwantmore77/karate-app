@@ -2,17 +2,12 @@ import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import dayjs from 'dayjs'
 import { Container, Box, Alert, Toolbar, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel, Grid, Paper, FormHelperText, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Stack } from '@mui/material'
-import { DatePicker } from '@mui/x-date-pickers/DatePicker'
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { Edit, Delete, Visibility, Add } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
 import { tournaments as tournamentStore } from '../../data/domain'
-import { formatDate } from '../../utils/dateUtils'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { describeError } from '../../data/tms'
@@ -31,7 +26,7 @@ export const typeLabel = (t) => (TOURNAMENT_TYPES.find(([v]) => v === (t.type ||
 const validationSchema = Yup.object({
   name: Yup.string().required('Tournament name required').min(3, 'Name too short'),
   location: Yup.string().required('Location required'),
-  date: Yup.date().nullable().required('Date required'),
+  date: Yup.string().required('Date required'),
   type: Yup.string().oneOf(TOURNAMENT_TYPES.map(([v]) => v)).required('Tournament type required'),
 })
 
@@ -61,7 +56,8 @@ export default function AdminTournamentList({ uid, profile = null, basePath = '/
     initialValues: {
       name: editingTournament?.name || '',
       location: editingTournament?.location || '',
-      date: editingTournament?.date ? dayjs(editingTournament.date) : null,
+      // A date input speaks 'YYYY-MM-DD'; a stored ISO timestamp is cut to its day.
+      date: String(editingTournament?.date || '').slice(0, 10),
       // An older tournament with no type holds both events.
       type: editingTournament?.type || 'kata_kumite',
     },
@@ -75,7 +71,7 @@ export default function AdminTournamentList({ uid, profile = null, basePath = '/
       const fields = {
         name: values.name,
         location: values.location,
-        date: formatDate(values.date),
+        date: values.date,
         type: values.type,
         // The scoring app's own field: kata scores by panel, everything else as bouts.
         template: values.type === 'kata' ? 'kata' : 'kumite',
@@ -269,22 +265,19 @@ export default function AdminTournamentList({ uid, profile = null, basePath = '/
               placeholder="E.g., New York"
             />
 
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <DatePicker
-                label="Tournament Date"
-                value={formik.values.date}
-                onChange={(newValue) => formik.setFieldValue('date', newValue)}
-                onBlur={() => formik.setFieldTouched('date', true)}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    margin: 'normal',
-                    error: !!formik.errors.date,
-                    helperText: formik.errors.date || ' '
-                  }
-                }}
-              />
-            </LocalizationProvider>
+            <TextField
+              fullWidth
+              type="date"
+              name="date"
+              label="Tournament Date"
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={formik.values.date}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={!!formik.errors.date}
+              helperText={formik.errors.date || ' '}
+              margin="normal"
+            />
 
             <FormControl fullWidth margin="normal" error={!!formik.errors.type}>
               <InputLabel>Tournament type</InputLabel>

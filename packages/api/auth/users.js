@@ -51,7 +51,7 @@ function cleanTournamentRoles(value) {
   return Object.keys(out).length ? out : null
 }
 
-const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
+export const normalizeEmail = (email) => String(email || '').trim().toLowerCase()
 
 export const hashPassword = async (password, salt = randomBytes(16).toString('hex')) => {
   const derived = await scryptAsync(password, salt, KEY_LEN)

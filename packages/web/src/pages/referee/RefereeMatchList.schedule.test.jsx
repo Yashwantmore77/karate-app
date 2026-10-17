@@ -256,7 +256,7 @@ describe('assigning a panel to a bout that already exists', () => {
     await user.click(within(dialog).getByRole('button', { name: /save changes/i }))
 
     expect(store.matches.create).not.toHaveBeenCalled()
-    const [, matchId, patch] = store.matches.update.mock.calls[0]
+    const [matchId, patch] = store.matches.update.mock.calls[0]
     expect(matchId).toBe('m-1')
     expect(patch.refereeId).toBe('ref-uid-001')
   })
@@ -271,7 +271,7 @@ describe('assigning a panel to a bout that already exists', () => {
     await user.keyboard('{Escape}')
     await user.click(within(dialog).getByRole('button', { name: /save changes/i }))
 
-    expect(store.matches.update.mock.calls[0][2].judgeIds).toEqual(['judge1-uid'])
+    expect(store.matches.update.mock.calls[0][1].judgeIds).toEqual(['judge1-uid'])
   })
 
   it('pre-fills the panel already on the bout', async () => {
@@ -305,7 +305,7 @@ describe('assigning a panel to a bout that already exists', () => {
     await user.click(within(dialog).getByRole('button', { name: /save changes/i }))
 
     // Omitting the field would leave the old referee in place; null removes it.
-    expect(store.matches.update.mock.calls[0][2].refereeId).toBeNull()
+    expect(store.matches.update.mock.calls[0][1].refereeId).toBeNull()
   })
 
   it('reports a clash on an edit the same way it does on a create', async () => {
@@ -386,6 +386,6 @@ describe('the mat field', () => {
     await user.clear(field)
     await user.click(within(dialog).getByRole('button', { name: /save changes/i }))
     // null clears it; leaving it out would keep mat 4.
-    expect(store.matches.update.mock.calls[0][2].mat).toBeNull()
+    expect(store.matches.update.mock.calls[0][1].mat).toBeNull()
   })
 })

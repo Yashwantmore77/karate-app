@@ -12,7 +12,7 @@ import {
   categories as categoryStore,
   competitors as competitorStore,
 } from '../../data/domain'
-import { downloadCSV } from '../../utils/csvExport'
+import { downloadCsv } from '../../components/tms/download'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { describeError } from '../../data/tms'
@@ -45,7 +45,7 @@ export default function AdminCategoryDetail({ uid, basePath = '/admin' }) {
     let alive = true
     Promise.all([
       tournamentStore.get(tournamentId),
-      categoryStore.get(tournamentId, categoryId),
+      categoryStore.find(categoryId),
     ]).then(([t, c]) => {
       if (!alive) return
       setTournament(t)
@@ -71,7 +71,7 @@ export default function AdminCategoryDetail({ uid, basePath = '/admin' }) {
       // Age arrives from a text field as a string; the store and the API both
       // want the number it represents.
       const fields = { name: values.name, bib: values.bib, age: Number(values.age) }
-      if (editingId) await competitorStore.update(categoryId, editingId, fields)
+      if (editingId) await competitorStore.update(editingId, fields)
       else {
         await competitorStore.create(categoryId, fields)
         await reset()
@@ -101,7 +101,7 @@ export default function AdminCategoryDetail({ uid, basePath = '/admin' }) {
 
   const handleDelete = async (id) => {
     try {
-      await competitorStore.remove(categoryId, id)
+      await competitorStore.remove(id)
       setDeleteError(null)
       await refresh()
     } catch (err) {
@@ -114,15 +114,10 @@ export default function AdminCategoryDetail({ uid, basePath = '/admin' }) {
     // The whole roster, not the page on screen: an export that silently
     // stopped at 25 rows would be worse than no export at all.
     const everyone = await competitorStore.list(categoryId)
-    downloadCSV(
-      `${category?.name || 'category'}-competitors.csv`,
-      [
-        { label: 'Bib', value: (c) => c.bib },
-        { label: 'Name', value: (c) => c.name },
-        { label: 'Age', value: (c) => c.age },
-      ],
-      everyone
-    )
+    downloadCsv(`${category?.name || 'category'}-competitors.csv`, [
+      ['Bib', 'Name', 'Age'],
+      ...everyone.map((c) => [c.bib, c.name, c.age]),
+    ])
   }
 
   if (loading) return <PageLoader label="Loading category…" />

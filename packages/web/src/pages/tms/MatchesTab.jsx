@@ -218,7 +218,7 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
             try {
               // Through the match API, which gives the bout its slot and refuses to
               // book anyone into two bouts at once. The time field is the local clock.
-              await matchStore.update(s.categoryId, s.id, { mat: s.mat, scheduledAt: localInputToIso(s.scheduledAt), refereeId: s.refereeId || null, judgeIds: s.judgeIds || [] })
+              await matchStore.update(s.id, { mat: s.mat, scheduledAt: localInputToIso(s.scheduledAt), refereeId: s.refereeId || null, judgeIds: s.judgeIds || [] })
               setSchedule(null)
               action.notify({ severity: 'success', text: 'Match scheduled' })
               load()

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createTms, TMS_COLLECTIONS } from './tms.js'
-import { memoryStores } from './memoryStore.js'
+import { memoryStores } from './test/memoryStore.js'
 import { createKeyedLock } from './lock.js'
 
 // On event day several people press at the same moment: two referees confirm

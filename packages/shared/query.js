@@ -12,13 +12,13 @@
 //   { $and: [query, query] }         all of
 
 const valueAt = (row, path) => path.split('.').reduce((v, key) => (v == null ? undefined : v[key]), row)
-const fold = (v) => String(v ?? '').toLowerCase()
+const lower = (v) => String(v ?? '').toLowerCase()
 
 function matchesCondition(value, cond) {
   if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
     if ('$in' in cond) return cond.$in.some((x) => (Array.isArray(value) ? value.includes(x) : value === x))
-    if ('$ieq' in cond) return fold(value) === fold(cond.$ieq)
-    if ('$contains' in cond) return fold(value).includes(fold(cond.$contains))
+    if ('$ieq' in cond) return lower(value) === lower(cond.$ieq)
+    if ('$contains' in cond) return lower(value).includes(lower(cond.$contains))
     if ('$missing' in cond) return (value == null) === !!cond.$missing
     return false
   }
@@ -34,7 +34,8 @@ export function matchesQuery(row, query = {}) {
   })
 }
 
-const escapeRegex = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** Neutralises every character a regex engine would act on, so a search term cannot become a pattern. */
+export const escapeRegex = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /** The same query for MongoDB. Text is escaped before it reaches a regex. */
 export function toMongo(query = {}) {

@@ -17,9 +17,6 @@ export const SYSTEM_SOURCES = { playerNumber: 'Player ID', registrationStatus: '
 /** Fields whose value the system supplies. */
 export const isComputedField = (f) => f.generated || f.type === 'calculated' || f.type === 'system'
 
-export const GENDERS = ['M', 'F']
-export const EVENT_CHOICES = ['kata', 'kumite']
-
 /**
  * Section 12's defaults. `key` is where the value lives on a player; built-in
  * keys are first-class player fields, anything an admin adds lands in

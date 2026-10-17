@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isExpired, formatDate } from './dateUtils'
+import { isExpired } from './dateUtils'
 
 describe('dateUtils', () => {
   describe('isExpired', () => {
@@ -25,24 +25,4 @@ describe('dateUtils', () => {
     })
   })
 
-  describe('formatDate', () => {
-    it('formats a dayjs-like object via its format method', () => {
-      const dayjsLike = { format: (fmt) => '2026-05-01' }
-      expect(formatDate(dayjsLike)).toBe('2026-05-01')
-    })
-
-    it('formats a native Date object to YYYY-MM-DD', () => {
-      const date = new Date('2026-05-01T00:00:00.000Z')
-      expect(formatDate(date)).toBe('2026-05-01')
-    })
-
-    it('formats a date string to YYYY-MM-DD', () => {
-      expect(formatDate('2026-05-01T12:00:00.000Z')).toBe('2026-05-01')
-    })
-
-    it('returns null for falsy input', () => {
-      expect(formatDate(null)).toBeNull()
-      expect(formatDate(undefined)).toBeNull()
-    })
-  })
 })

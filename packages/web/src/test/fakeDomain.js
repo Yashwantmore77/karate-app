@@ -1,7 +1,7 @@
 /**
  * An in-memory stand-in for data/domain, for page tests.
  *
- * Same methods and signatures as data/domain/api.js, so a page under test
+ * Same methods and signatures as data/domain.js, so a page under test
  * cannot tell the difference. It is deliberately not a second server: it keeps
  * rows and pages them, and does none of the API's validation. A test that is
  * about what the server refuses should make the call reject with an HttpError
@@ -104,15 +104,11 @@ export const tournaments = {
 }
 
 export const categories = {
-  async list(tournamentId) { return db.categories.filter((c) => c.tournamentId === tournamentId).map(clone) },
   async page(tournamentId, options) {
     return pageOf(db.categories.filter((c) => c.tournamentId === tournamentId), options, ['name', 'ageGroup', 'division'])
   },
-  async get(_tournamentId, id) { return byId('categories', id) },
   async find(id) { return byId('categories', id) },
   async create(tournamentId, doc) { return insert('categories', { ...doc, tournamentId }) },
-  async update(_tournamentId, id, changes) { return patch('categories', id, changes) },
-  async remove(_tournamentId, id) { removeCategory(id) },
 }
 
 export const competitors = {
@@ -121,8 +117,8 @@ export const competitors = {
     return pageOf(db.competitors.filter((c) => c.categoryId === categoryId), options, ['name', 'bib'])
   },
   async create(categoryId, doc) { return insert('competitors', { ...doc, categoryId }) },
-  async update(_categoryId, id, changes) { return patch('competitors', id, changes) },
-  async remove(_categoryId, id) { drop('competitors', (c) => c.id !== id) },
+  async update(id, changes) { return patch('competitors', id, changes) },
+  async remove(id) { drop('competitors', (c) => c.id !== id) },
 }
 
 const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`)
@@ -132,11 +128,10 @@ export const matches = {
   async page(categoryId, options) {
     return pageOf(db.matches.filter((m) => m.categoryId === categoryId), options, ['status', 'winner'])
   },
-  async get(_categoryId, id) { return byId('matches', id) },
   async find(id) { return byId('matches', id) },
   async create(categoryId, doc) { return insert('matches', { status: 'open', ...doc, categoryId }) },
-  async update(_categoryId, id, changes) { return patch('matches', id, changes) },
-  async remove(_categoryId, id) { drop('matches', (m) => m.id !== id) },
+  async update(id, changes) { return patch('matches', id, changes) },
+  async remove(id) { drop('matches', (m) => m.id !== id) },
 
   /** Every missing pair, in entry order. The ordering rules live on the server. */
   async draw(categoryId) {
