@@ -16,6 +16,7 @@ import { openStoredFile } from '../../components/tms/download'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { teamProblems } from '@kumite/shared/tms.js'
+import { passwordProblem } from '@kumite/shared/accounts.js'
 import TeamMembers from '../../components/tms/TeamMembers'
 import { paymentsEnabled } from '@kumite/shared/features.js'
 
@@ -305,7 +306,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAccount(null)}>Cancel</Button>
-          <Button variant="contained" disabled={!account?.email || (account?.password || '').length < 8} onClick={async () => {
+          <Button variant="contained" disabled={!account?.email || !!passwordProblem(account?.password)} onClick={async () => {
             const ok = await action.run(() => tms.coach.createAccount(session, account), 'Login created. Use it on the sign-in page.')
             if (ok) setAccount(null)
           }}>Create login</Button>

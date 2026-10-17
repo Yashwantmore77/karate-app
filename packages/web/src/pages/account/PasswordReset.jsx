@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { Container, Paper, Typography, TextField, Button, Alert, Stack, Link } from '@mui/material'
 import { request } from '../../data/http'
+import { PASSWORD_MIN, passwordProblem } from '@kumite/shared/accounts.js'
 
 /**
  * PRD section 4: forgot password and reset. One screen: without a token it
@@ -21,7 +22,8 @@ export default function PasswordReset() {
     setBusy(true)
     try {
       if (token) {
-        if (password.length < 8) throw Object.assign(new Error(), { code: 'short' })
+        const problem = passwordProblem(password)
+        if (problem) throw Object.assign(new Error(), { code: 'short', problem })
         if (password !== confirm) throw Object.assign(new Error(), { code: 'mismatch' })
         await request('/auth/reset', { method: 'POST', body: { token, password }, anonymous: true })
         setState({ severity: 'success', text: 'Password changed. You can sign in with it now.' })
@@ -31,7 +33,7 @@ export default function PasswordReset() {
       }
     } catch (err) {
       const text = {
-        short: 'Use at least 8 characters.',
+        short: err.problem,
         mismatch: 'The two passwords do not match.',
         invalid_or_expired_token: 'This link has expired or was already used. Ask for a new one.',
         too_many_attempts: 'Too many attempts. Wait a few minutes and try again.',
@@ -50,7 +52,7 @@ export default function PasswordReset() {
           {state && <Alert severity={state.severity}>{state.text}</Alert>}
           {token ? (
             <>
-              <TextField type="password" label="New password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" helperText="At least 8 characters" />
+              <TextField type="password" label="New password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" helperText={`At least ${PASSWORD_MIN} characters`} />
               <TextField type="password" label="Repeat new password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
             </>
           ) : (

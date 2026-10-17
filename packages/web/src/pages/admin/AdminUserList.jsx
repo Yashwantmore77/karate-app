@@ -14,6 +14,7 @@ import { usePagedList } from '../../components/usePagedList'
 import PageBar from '../../components/PageBar'
 import * as organizations from '../../data/organizations'
 import { ROLE_LABEL } from '@kumite/shared/permissions.js'
+import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem } from '@kumite/shared/accounts.js'
 import * as users from '../../data/users'
 import { tournaments as tournamentStore } from '../../data/domain'
 import { PageLoader } from '../../components/Loader'
@@ -22,11 +23,19 @@ import { errorMessage } from '../../data/tms'
 
 // Only on create: an existing account keeps its password unless a new one is
 // typed, so the field is optional when editing.
+// The password rule itself lives in shared/accounts.js, so this form can never
+// allow a password the API refuses, nor name a limit the API does not keep.
+const password = Yup.string().test('password', function (value) {
+  const problem = passwordProblem(value)
+  return problem ? this.createError({ message: problem }) : true
+})
 const schemaFor = (editing) => Yup.object({
   email: Yup.string().email('Enter a valid email address').required('Email required'),
-  password: editing
-    ? Yup.string().min(8, 'Password must be at least 8 characters')
-    : Yup.string().min(8, 'Password must be at least 8 characters').required('Password required'),
+  // Editing keeps the existing password unless a new one is typed.
+  password: editing ? Yup.string().notRequired().test('password', function (value) {
+    const problem = value ? passwordProblem(value) : null
+    return problem ? this.createError({ message: problem }) : true
+  }) : password.required('Password required'),
   role: Yup.string().oneOf(users.ROLES).required('Role required'),
   seat: Yup.number().integer('Seat must be a whole number').min(1, 'Seat must be 1 or more').nullable(),
 })
@@ -35,7 +44,7 @@ const schemaFor = (editing) => Yup.object({
 const MESSAGES = {
   email_taken: 'That address already has an account.',
   invalid_email: 'Enter a valid email address.',
-  invalid_password: 'Password must be at least 8 characters.',
+  invalid_password: `Use between ${PASSWORD_MIN} and ${PASSWORD_MAX} characters.`,
   invalid_role: 'Pick one of the available roles.',
   invalid_seat: 'Seat must be a whole number of 1 or more.',
   cannot_delete_self: 'You cannot delete the account you are signed in with.',
