@@ -1,6 +1,6 @@
 # Karate Tournament App — User Guide
 
-_Last updated 9 October 2026._
+_Last updated 20 October 2026._
 
 New to the app? Start with the [operator handbook](../operator-handbook/README.md), which walks through every job click by click.
 
@@ -949,7 +949,9 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | This weight class overlaps another one in the same age group. | Change the limits so the classes meet without overlapping |
 | The organiser has not opened registration yet. | Coach: wait for the organiser. Admin: move the tournament to Registration open |
 | Registration is not open for this tournament. | Check the stage, the registration dates and the entry locks |
-| This registration link has expired / has been disabled / does not exist. | Admin: set a new expiry, turn Enabled on, or send the current link |
+| This registration link has expired. | Admin: set a new expiry in the link settings, or send the current link |
+| This registration link has been disabled. | Admin: turn Enabled on in the link settings |
+| This registration link does not exist. | Ask the organiser for the current link |
 | Wrong password. | Ask the organiser for the registration link password |
 | Accept the terms and conditions to register. | Tick "I have read and accept" before Register team |
 | A team with that name is already registered. | Use the existing team, or a different name |
@@ -960,6 +962,30 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Give a reason for the rejection. | Type why the entry is rejected; the coach sees it |
 | Entries are locked. Unlock entries (with a reason) to change this. | Admin: Dashboard → Unlock entries, with a reason (not possible after the draw is locked) |
 | The file has errors. Fix them and upload again; nothing was imported. | Fix the rows listed in the preview and upload again |
+| Some tournament details are not valid. | Correct the fields named after the message, then save again |
+| Tournament not found. | It was deleted, or the link is wrong; open it from the Tournaments list |
+| This tournament does not hold that event. | Choose an event the tournament holds (its type: Kata, Kumite or both) |
+| Players have already entered an event this type would drop. Move or remove those entries first, or keep Kata + Kumite. | Keep Kata + Kumite, or move or remove those entries first |
+| Changing the Master Age Date re-ages players. Review the preview and confirm. | Check the preview of players whose age group changes, then confirm |
+| That category set is not available. | Choose one of the sets offered under Load standard categories |
+| This category is run by the tournament draw. Change it from the tournament screen (Draw / Pools), not here. | Make the change on the tournament's Draw / Pools tab |
+| Bouts in this category have results, so it cannot be deleted. | Keep the category; correct individual results instead |
+| This competitor has bouts with results, so they cannot be removed. | Withdraw the player instead (Registrations, walking figure) |
+| This team still has players. Remove them first. | Remove or move the team's players, then delete the team |
+| Someone with that name is already listed for this team. | Edit the existing team member instead of adding them again |
+| Pick at least one role: Team Manager, Coach, Judge or Referee. | Tick at least one role for the team member |
+| Enter a valid email address. | Check the address for typing mistakes (name@domain) |
+| Enter a valid mobile number (digits, spaces or dashes, optionally starting with +). | Use only digits, spaces or dashes, with an optional + at the start |
+| This player (same name and DOB) is already registered. | Check Possible duplicates; if it is a different person, confirm and save |
+| That player belongs to another team. | Coach: you can change only your own team's players |
+| Your team is already registered. | Coach: open your team panel instead of registering again |
+| This tournament is completed. Nothing new can be added to it. | Admin with the reopen privilege: move it back to Live first, with a reason |
+| This tournament is archived and read-only. | Nothing can change; it is kept as history |
+| This tournament is live. Complete it before deleting it. | Move it to Completed first, or keep it |
+| A standard ruleset cannot be switched off. Edit it, or restore it as shipped. | Edit the standard ruleset, or restore it, instead of switching it off |
+| That ruleset is switched off. | Switch the ruleset on in Rulesets, or choose another |
+| A newer version of this ruleset exists; edit that one, or restore the standard first. | Open the newest version in Rulesets and edit that |
+| That API key is not valid. | Partner system: use the current key. Admin: issue a new one in Settings → Partner API |
 
 ### Weigh-in, draw and bracket messages
 
@@ -977,7 +1003,25 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | The player is already drawn into a pool; unlock the draw to change their category. | Unlock the draw first |
 | Every pool match must be finished first. | Finish or record every pool bout, then Generate final stage |
 | The first bout of this bracket has started, so the draw can no longer be rearranged. | Leave the arrangement; record results instead |
-| Every first-round bout needs at least one player. | Move a player into the empty bout |
+| Every first-round bout needs at least one player. Move a player into the empty bout. | Drag a player into the empty bout on the bracket board |
+| Generate pools first. | Draw / Pools tab → Generate pools |
+| Generate matches first. | Lock the draw, then Generate matches |
+| That category no longer exists. | It was deleted or merged; reload the page |
+| That player is already in this pool. | Choose another pool |
+| That pool is full. | Choose another pool, or move a player out first |
+| Players can only move between pools of the same category. | Change the player's category on Registrations first (with the draw unlocked) |
+| At least two players are needed. | Decide a single entry on the Results tab instead of drawing it |
+| This category has more than one player. | Draw it; only a category with one player is decided as a single entry |
+| This player has withdrawn. | Nothing more for this player; their remaining bouts go to their opponents |
+| Too many players for one round robin. | A round robin takes at most 32 players; split the category or use a knockout |
+| Seeded draws are switched off in Settings. | Turn on Allow seeding in Settings, or draw without seeds |
+| Redrawing needs the draw-regeneration privilege. | Ask an admin who has the privilege |
+| Choose the qualifiers of every pool first. | Mark the qualifiers in each pool, then Generate final stage |
+| Not enough qualifiers for a final stage. | Raise the number of qualifiers per pool, or let the pool standings decide |
+| A single pool is decided by its standings; no bracket is needed. | Nothing to do: the pool standings give the medals |
+| The final stage has already been generated. | Use the existing bracket |
+| This category has no bracket yet. | Generate the final stage (or the bracket) first |
+| Every player must be placed exactly once. | On the bracket board, put each player in exactly one slot |
 
 ### Competition day messages
 
@@ -986,7 +1030,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Time clash: … Pick another time or mat. | Choose another time, mat, referee or judge; the message names who clashes |
 | The referee cannot also sit on the judging panel. | Pick a different referee or remove them from the judges |
 | Only a referee (or admin) who works this tournament can referee a bout. / Only judge accounts that work this tournament can sit on the panel. | Pick someone from the list, or an Admin ticks this tournament on their account (Accounts) |
-| This official is still on N unfinished bouts. | Put someone else on those bouts (Matches tab) first |
+| This official is still on unfinished bouts. Put someone else on them first. | Put someone else on those bouts (Matches tab) first; the message usually gives the number of bouts |
 | That event is not on the mats now. Switch the session first. | Use Switch to Kata / Switch to Kumite at the top, when the other event is finished |
 | Finish what is under way before switching the session. | Finish or send back the called and live bouts, or complete the open kata round |
 | This bout has started; corners can no longer be swapped. | Swap only before the bout starts |
@@ -994,11 +1038,22 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Another device is running this mat | If that device is gone or wrong, press **Take over** |
 | Give a finish reason for a walkover, no-show, kiken, disqualification or override. | Type what happened, for example "AO did not report after three calls" |
 | Changing a completed result needs a reason (Rule 6). | Type the reason; the change goes to the audit log |
-| Only someone with the score-correction privilege can change or remove a finished bout. | Ask a tournament admin |
+| Correcting a decided bout needs the score-correction privilege. | Ask a tournament admin |
 | The round has not started yet. The admin starts it once judges are assigned. | Judge: wait. Admin: seat the judges and press Start round |
-| Your account has no judge seat on this panel. | Admin: give the judge a seat (Accounts or the Kata panel) |
+| Your account has no judge seat on this panel. Ask the admin to set one. | Admin: give the judge a seat (Accounts or the Kata panel) |
 | Every judge must score every performer first. | Collect the missing scores before completing the round |
 | A kata score is 5.0 to 10.0, in steps of 0.1. | Enter a score in range with one decimal |
+| Someone on this bout is already booked at that time. | Choose another time, mat, referee or judge |
+| More judges than this tournament seats on a panel. | Remove a judge; the panel size comes from the tournament's competition rules |
+| One judge cannot sit in two seats. | Choose a different judge for one of the seats |
+| You are not assigned to a seat on this kata round. | Admin: seat the judge on the Kata panel |
+| That seat has already scored; its judge cannot be changed. | Keep the judge; an admin can override the score if needed |
+| Finish the current round first. | Complete the open round before opening another |
+| This round has already started. | Score the round that is running |
+| This round is closed. | Nothing more can be scored; an admin can override a score |
+| The final has been completed. | This kata category is finished; see the Results tab |
+| This tournament is completed or archived, so no more scoring is accepted. | Admin with the reopen privilege: move a completed tournament back to Live, with a reason |
+| Attendance is switched off for this tournament (Settings). | Turn on Mark attendance when calling bouts in Settings |
 
 ### Results and account messages
 
@@ -1016,6 +1071,15 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | An account with that email already exists. | Use the existing account or another email |
 | You cannot change your own role. Ask another administrator. | Another admin changes it |
 | Only a super admin can create or change a Super Admin account. | Ask a Super Admin; an admin cannot make, change or remove one |
+| Only a super admin can create that role. | Ask a Super Admin |
+| Overriding a result needs the result-override privilege. | Ask a tournament admin who has the privilege |
+| Only an administrator with the reopen privilege can move the tournament back. | Ask an admin who has the reopen privilege |
+| This category has no decided result yet. | Finish its bouts or rounds first |
+| Certificates are not published for this tournament. | Organiser: turn on Players can download certificates from the public page in Settings |
+| No certificate with this ID was issued. | Check the ID or QR code; a certificate this check does not find was not issued by the app |
+| That account belongs to another organisation. | Work only with your own organisation's accounts and tournaments |
+| This organisation still has tournaments or accounts. | Super Admin: move or delete them first, then delete the organisation |
+| That short name is already used. | Choose another short name |
 
 ## 14. Karate terms on screen
 

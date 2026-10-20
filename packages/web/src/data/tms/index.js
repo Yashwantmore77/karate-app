@@ -58,7 +58,7 @@ const COUNTED = {
   reason_required: (n) => `This team has ${n} player${n === 1 ? '' : 's'}, who will be deleted too. Give a reason.`,
 }
 
-const ERROR_TEXT = {
+export const ERROR_TEXT = {
   overlapping_age_group: 'This age group overlaps another one for the same gender.',
   overlapping_weight_category: 'This weight class overlaps another one in the same age group.',
   unknown_preset: 'That category set is not available.',
@@ -82,7 +82,6 @@ const ERROR_TEXT = {
   team_has_players: 'This team still has players. Remove them first.',
   invalid_email: 'Enter a valid email address.',
   invalid_mobile: 'Enter a valid mobile number (digits, spaces or dashes, optionally starting with +).',
-  score_correction_forbidden: 'Only someone with the score-correction privilege can change or remove a finished bout.',
   entries_locked: 'Entries are locked. Unlock entries (with a reason) to change this.',
   entries_not_locked: 'Lock entries before generating pools.',
   draw_locked: 'The draw is locked. Unlock it (with a reason) to change pools.',
@@ -178,7 +177,6 @@ const ERROR_TEXT = {
   session_revoked: 'This session was signed out. Sign in again.',
   team_inactive: 'This team is inactive and cannot add players.',
   team_required: 'Register your team first.',
-  tournament_archived: 'This tournament is archived and read-only.',
   tournament_incomplete: 'Fill in the required tournament details first (Settings).',
   tournament_not_found: 'Tournament not found.',
   weighin_closed: 'Weigh-in is closed. An override needs the privilege and a reason in Notes.',
