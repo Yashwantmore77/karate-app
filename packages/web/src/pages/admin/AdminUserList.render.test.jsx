@@ -49,6 +49,12 @@ describe('AdminUserList', () => {
     expect(screen.getAllByText('—')).toHaveLength(2)
   })
 
+  it('says the page lists everyone who can sign in, not only officials', async () => {
+    renderPage()
+    expect(await screen.findByText('Everyone who can sign in, and their role')).toBeInTheDocument()
+    expect(screen.queryByText(/Referees and judges who can sign in/)).not.toBeInTheDocument()
+  })
+
   it('creates an account from the dialog', async () => {
     const user = userEvent.setup()
     renderPage()
