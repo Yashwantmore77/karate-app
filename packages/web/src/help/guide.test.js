@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { HELP, TAB_GUIDE, WORKFLOW, workflowState } from './guide'
+import { HELP, ROLE_GUIDE, TAB_GUIDE, WORKFLOW, workflowState } from './guide'
 import { TABS } from '../pages/tms/TournamentManager'
 
 const SRC = path.resolve(__dirname, '..')
@@ -19,6 +19,12 @@ describe('help texts', () => {
     expect(used.size).toBeGreaterThan(40)
     const missing = [...used].filter((id) => !HELP[id]?.text)
     expect(missing).toEqual([])
+  })
+
+  it("names the referee's match button by the hover text it really has", () => {
+    const list = fs.readFileSync(path.join(SRC, 'pages/referee/RefereeMatchList.jsx'), 'utf8')
+    expect(list).toContain('title="Control Match"')
+    expect(ROLE_GUIDE.referee.join(' ')).toContain('"Control Match"')
   })
 
   it('every tournament tab says what it is for, and links only to real tabs', () => {
