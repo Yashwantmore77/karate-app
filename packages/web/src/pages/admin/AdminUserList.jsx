@@ -161,7 +161,7 @@ export default function AdminUserList({ uid }) {
           <Box sx={{ flexGrow: 1 }}>
             <HelpTitle id="admin.accounts" variant="h6">Accounts</HelpTitle>
             <Typography variant="caption" sx={{ opacity: 0.9 }}>
-              Referees and judges who can sign in
+              Everyone who can sign in, and their role
             </Typography>
           </Box>
         </Toolbar>

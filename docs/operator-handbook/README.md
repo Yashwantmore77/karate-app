@@ -1,6 +1,6 @@
 # Karate Tournament App — Operator Handbook
 
-_Last updated 17 October 2026._
+_Last updated 20 October 2026._
 
 **Download:** [Operator-Handbook.pdf](Operator-Handbook.pdf), to print or to send to the person running the tournament.
 
