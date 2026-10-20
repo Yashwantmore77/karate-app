@@ -1,6 +1,6 @@
 # Karate Tournament App — User Guide
 
-_Last updated 9 October 2026._
+_Last updated 20 October 2026._
 
 New to the app? Start with the [operator handbook](../operator-handbook/README.md), which walks through every job click by click.
 
@@ -728,9 +728,9 @@ Admins manage staff accounts and watch sign-ins. The super admin also takes back
 
 ### System (super admin)
 
-- **Download backup** saves everything as one JSON file, accounts included. Password hashes stay hashed, and two-step sign-in secrets are left out.
+- **Download backup** saves everything as one JSON file, accounts included. Password hashes stay hashed, and two-step sign-in secrets are left out. The file holds every organisation's data, so an account that belongs to an organisation cannot take one; a Super Admin, or an Admin outside every organisation, can.
 - To restore, run `npm run restore -- <file>.json` on the server. It refuses a database that already has data unless `--replace` is added. Schedule `npm run backup` for automatic backups.
-- The audit trail here lists system events outside tournaments (accounts, sign-ins, backups).
+- The audit trail here lists system events outside tournaments (accounts, sign-ins, backups). An organisation's Admin sees only their own organisation's: what its accounts did, what was done to them, and changes to the organisation.
 
 ![System: backup, and the audit trail outside tournaments.](images/system.webp)
 
