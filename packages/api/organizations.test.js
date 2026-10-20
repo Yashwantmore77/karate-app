@@ -65,4 +65,34 @@ describe('organisations (PRD point 33)', () => {
     expect((await call('DELETE', `/organizations/${a.id}`, undefined, root)).status).toBe(409)
     expect((await call('GET', '/organizations/mine', undefined, adminA)).body.organization.name).toBe('Maharashtra KA')
   })
+
+  it('keeps the backup and the system audit trail inside the organisation', async () => {
+    const stamp = Date.now()
+    await createUser({ email: `root${stamp}@x.local`, password: 'password1', role: 'super_admin' })
+    const root = await login(`root${stamp}@x.local`, 'password1')
+    const admin = await login('admin@kata.local')
+    const a = (await call('POST', '/organizations', { name: 'Maharashtra KA', slug: `mka-${stamp}` }, root)).body.organization
+    const b = (await call('POST', '/organizations', { name: 'Goa KA', slug: `gka-${stamp}` }, root)).body.organization
+    const userA = (await call('POST', '/users', { email: `a${stamp}@x.local`, password: 'password1', role: 'admin', organizationId: a.id }, root)).body.user
+    const userB = (await call('POST', '/users', { email: `b${stamp}@x.local`, password: 'password1', role: 'admin', organizationId: b.id }, root)).body.user
+    const adminA = await login(`a${stamp}@x.local`, 'password1')
+    const adminB = await login(`b${stamp}@x.local`, 'password1')
+    await call('POST', '/users', { email: `rb${stamp}@x.local`, password: 'password1', role: 'referee' }, adminB)
+
+    // the whole installation's backup holds every organisation's data
+    expect((await call('GET', '/system/backup', undefined, adminA)).status).toBe(403)
+    expect((await call('GET', '/system/backup', undefined, admin)).status).toBe(200)
+    expect((await call('GET', '/system/backup', undefined, root)).status).toBe(200)
+
+    const trail = async (token) => (await call('GET', '/system/audit?limit=100', undefined, token)).body.audit
+    const seenByA = await trail(adminA)
+    expect(seenByA.some((row) => row.entityId === userA.uid)).toBe(true)
+    expect(seenByA.some((row) => row.entityId === a.id)).toBe(true)
+    expect(seenByA.some((row) => row.entityId === userB.uid || row.entityId === b.id || row.actorId === userB.uid)).toBe(false)
+    expect(seenByA.some((row) => row.action === 'system.backup')).toBe(false)
+    // outside every organisation, the whole trail
+    const seenByRoot = await trail(root)
+    expect(seenByRoot.some((row) => row.actorId === userB.uid)).toBe(true)
+    expect(seenByRoot.some((row) => row.action === 'system.backup')).toBe(true)
+  })
 })
