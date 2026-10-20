@@ -21,7 +21,9 @@ const dataUrl = (file) => `data:image/${path.extname(file).slice(1).replace('svg
 
 function buildHtml() {
   let md = fs.readFileSync(path.join(HANDBOOK, 'README.md'), 'utf8')
-  const updated = md.match(/^_Last updated (.+?)\._$/m)[1]
+  const dated = md.match(/^_Last updated (.+?)\._$/m)
+  if (!dated) throw new Error('README.md needs a "_Last updated <date>._" line under its title: the PDF cover prints that date.')
+  const updated = dated[1]
   // The cover and the contents page replace the title, byline, download line and contents list.
   md = md.replace(/^# .+\n+_Last updated .+\n+/, '')
   md = md.replace(/^\*\*Download:\*\*.*\n+/m, '')
