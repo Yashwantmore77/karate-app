@@ -26,9 +26,9 @@ After a PR for a Jira ticket (project KAN) is merged:
    what changed, what to set up first, then a table of steps with what to do
    and what to expect, and the automated test that covers it. If only part of
    the ticket is fixed, say which part, and list what is still open.
-2. When the whole ticket is fixed, move it to **In Review**, which this project
-   uses as "Ready for QA" (KAN has no separate Ready for QA status). A ticket
-   that is only partly fixed keeps its status until its last part is merged.
+2. Move the ticket to **In Review**, which this project uses as "Ready for QA"
+   (KAN has no separate Ready for QA status). Do this for a partly fixed ticket
+   too: its comment says which part to test and what is still open.
 
 ## Keep the operator handbook and its PDF in step with the app
 
