@@ -76,11 +76,24 @@ const MENUS = {
     { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
   viewer: [
-    { label: 'Tournaments', to: '/viewer' },
-    { label: 'Analytics', to: '/viewer/analytics' },
+    { label: 'Tournaments', to: '/viewer', tip: 'Every tournament you can see. Open one to follow its progress (read-only).' },
+    { label: 'Analytics', to: '/viewer/analytics', tip: 'Results across tournaments: clubs, athletes and medals.' },
     { label: 'Live board', to: '/live', tip: 'Every mat: the bout on it and what comes next, for a screen in the hall.' },
     { label: 'Public site', to: '/tournaments', tip: 'The public website: tournaments, draws, live bouts and results.' },
   ],
+}
+
+/**
+ * The menu a role sees: an administrator's menu plus the one thing only a super
+ * admin has, organisations (rulesets and backups are an administrator's too, so
+ * they sit in that menu rather than being added here), then My account for
+ * every staff role.
+ */
+export function menuFor(role) {
+  const base = role === 'super_admin'
+    ? [...MENUS.admin.slice(0, 3), { label: 'Organisations', to: '/admin/organizations', tip: 'The associations that each run their own tournaments and staff accounts.' }, ...MENUS.admin.slice(3)]
+    : MENUS[role] || []
+  return base.length && role !== 'coach' ? [...base, { label: 'My account', to: '/account', tip: 'Your password, two-step sign-in and the devices signed in as you.' }] : base
 }
 
 const covers = (to, pathname) => pathname === to || pathname.startsWith(`${to}/`)
@@ -115,13 +128,7 @@ export default function AppNav({ user, profile }) {
   const { status } = useConnection()
   const connection = CONNECTION[status]
 
-  // An administrator's menu, plus the one thing only a super admin has:
-  // organisations. Rulesets and backups are an administrator's too, so they
-  // sit in that menu rather than being added here.
-  const base = profile?.role === 'super_admin'
-    ? [...MENUS.admin.slice(0, 3), { label: 'Organisations', to: '/admin/organizations' }, ...MENUS.admin.slice(3)]
-    : MENUS[profile?.role] || []
-  const items = base.length && profile?.role !== 'coach' ? [...base, { label: 'My account', to: '/account' }] : base
+  const items = menuFor(profile?.role)
   const onPublicScreen = ['/display', '/login', '/live'].includes(location.pathname)
   if (!user || !profile || onPublicScreen || items.length === 0) return null
 
