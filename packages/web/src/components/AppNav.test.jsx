@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
-import AppNav, { activeItem } from './AppNav'
+import { ROLE_LABEL } from '@kumite/shared/permissions.js'
+import AppNav, { activeItem, menuFor } from './AppNav'
 
 // Signing out goes through the session, which these tests are not about.
 const session = vi.hoisted(() => ({ logout: vi.fn() }))
@@ -25,6 +26,14 @@ const renderNav = ({ role = 'admin', at = '/admin', user = USER } = {}) =>
 // The nav renders both a desktop row and a drawer list, so a label can legitimately
 // appear more than once; the visible row is the first.
 const navButton = (name) => screen.getAllByRole('button', { name })[0]
+
+describe('menuFor', () => {
+  it('gives every menu item of every role a tooltip', () => {
+    const untipped = Object.keys(ROLE_LABEL).flatMap((role) => menuFor(role).filter((item) => !item.tip).map((item) => `${role}: ${item.label}`))
+    expect(untipped).toEqual([])
+    expect(menuFor('super_admin').map((item) => item.label)).toContain('Organisations')
+  })
+})
 
 describe('activeItem', () => {
   const items = [
