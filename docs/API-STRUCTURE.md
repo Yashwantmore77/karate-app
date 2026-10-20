@@ -8,7 +8,7 @@ The API is an Express 5 and Socket.IO service. REST endpoints use `/api/v1`; `/h
 
 ```text
 React app
-  ├─ data/domain/api.js ───────────────┐
+  ├─ data/domain.js ───────────────────┐
   ├─ data/tms/api.js ──────────────────┤ HTTP /api/v1
   └─ data/channel/socket.js ───────────┤ Socket.IO
                                        ▼
@@ -23,7 +23,7 @@ packages/api/index.js
 
 `@kumite/shared` contains the tournament domain service, permission table, lifecycle rules, kata/pool/result logic, query helpers, and the live scoring reducer. Routes validate HTTP inputs and check access; they pass domain operations to the shared service rather than implementing tournament rules a second time. The legacy category, competitor, and match routes use stores more directly.
 
-The web-side API wrappers are [domain/api.js](../packages/web/src/data/domain/api.js), [tms/api.js](../packages/web/src/data/tms/api.js), and [socket.js](../packages/web/src/data/channel/socket.js). Server mounting, shared middleware, and Socket.IO handlers are in [index.js](../packages/api/index.js).
+The web-side API wrappers are [domain.js](../packages/web/src/data/domain.js), [tms/api.js](../packages/web/src/data/tms/api.js), and [socket.js](../packages/web/src/data/channel/socket.js). Server mounting, shared middleware, and Socket.IO handlers are in [index.js](../packages/api/index.js).
 
 ## 2. Calling conventions
 

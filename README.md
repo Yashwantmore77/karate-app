@@ -32,8 +32,10 @@ packages/
 
 The API is the source of truth for everything, including a live bout: it
 applies each referee command and pushes the result to every device on that
-match over Socket.IO. The front end has no offline or local mode; with no API
-there is nothing to sign in against.
+match over Socket.IO. Signing in and nearly every screen need the API. The one
+exception is the referee's scoring console: if the connection drops during a
+bout, it keeps scoring on the device and sends the commands when the connection
+returns (its limits are in `FUTURE-BACKLOG.md`, section 4).
 
 REST lives under `/api/v1`. `/health` sits outside it for uptime checks.
 
@@ -98,7 +100,7 @@ and `npm run restore` are kept for recovery (see [COMMANDS.md](COMMANDS.md)).
 ### Test tournaments (in memory only)
 
 ```bash
-SEED_SCENARIOS=true npm run server         # no database: load the 10 test tournaments into memory at start
+SEED_SCENARIOS=true npm run server         # no database: load the 12 test tournaments into memory at start
 ```
 
 They exist only in that server's memory and are never written to a database;
@@ -122,6 +124,8 @@ screenshots are taken from these tournaments.
 | 08 | State Championship | Live | Bouts scheduled, called, called twice, ready, open, live, paused, cancelled; results by points, senshu, hantei, 8-point gap, walkover, no-show, kiken, disqualification, manual override; an official correction; a withdrawal after the draw; single entries awarded / no competition; category results provisional (medals set by hand), verified, published, locked; knockout in progress; kata final half scored; 70% checked in |
 | 09 | Diwali Karate Cup | Completed | Everything fought, published and locked; medal, participation and special-award certificates |
 | 10 | Winter Open 2025 | Archived | Read-only history |
+| 11 | School Kata Championship | Registration open | Kata-only tournament; SGFI categories loaded in one step; approved, rejected and waiting entries; an age group with no entries and one with a single entry |
+| 12 | Junior Kumite League | Live | Kumite-only tournament; knockout brackets arranged by hand on the bracket board; quarter-finals done, byes, a walkover, a finished category with a third-place bout, one category still in pools |
 
 ### Rehearsal and load test (in memory only)
 
