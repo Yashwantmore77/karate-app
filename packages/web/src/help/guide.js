@@ -298,7 +298,7 @@ export const HELP = {
   },
   'setup.partner': {
     title: 'Partner API',
-    text: 'Keys that let another system (for example a federation database) send entries straight into this tournament. Only needed if you use such a system.',
+    text: 'Keys that let another system (for example a federation database) send entries straight into this tournament. It may send them only when coaches can register: while registration is open and before the soft lock. Only needed if you use such a system.',
   },
 
   'categories.age': {

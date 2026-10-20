@@ -2,12 +2,13 @@ import { Router } from 'express'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { validate } from '../lib/validate.js'
 import { rateLimit } from '../lib/rateLimit.js'
-import { unauthorized, notFound } from '../lib/errors.js'
+import { unauthorized, notFound, conflict } from '../lib/errors.js'
 import { playerBody } from './tms.js'
 
 // PRD v1 §7 "Optional partner API import": a federation or club system pushes
 // entries with the tournament's API key. Same validation, duplicate review
-// and audit as any other entry; the key can be revoked at any time.
+// and audit as any other entry, and the same registration window as a coach;
+// the key can be revoked at any time.
 
 const hash = (key) => createHash('sha256').update(String(key)).digest()
 
@@ -31,6 +32,10 @@ export function partnerRoutes(tms, stores) {
 
   router.post('/tournaments/:tid/players', limit, async (req, res) => {
     const t = await authorise(req)
+    // A partner sends entries on the same terms as a coach: only while
+    // registration is open, inside its dates, and before the soft lock.
+    const { registrationOpen, closedReason } = tms.coachWindow(t)
+    if (!registrationOpen) throw conflict(closedReason)
     const actor = { uid: `partner:${t.id}`, role: 'partner', meta: { ip: req.ip } }
     const { team, players, confirmDuplicates } = validate(req.body, {
       team: { type: 'object', required: true },

@@ -828,6 +828,7 @@ The app checks every action on the server, so a rule cannot be skipped from any 
 | Age for a coach entry | Must fit an age group (once age groups exist). The office may enter the player anyway and sees a notice |
 | Possible duplicate | Same name + date of birth (+ club), or same Federation ID: must be confirmed |
 | Coach entries | Only while Registration open, inside the registration window, before the soft lock or the "coach entries lock at" time, with entries not locked |
+| Partner API entries | The same times as coach entries; outside them the whole import is refused and nothing is added |
 | Office entries | Allowed until entries are locked |
 | Reject, request correction | Need a reason |
 | Approve a rejected player | Needs a reason |
