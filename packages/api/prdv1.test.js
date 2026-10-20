@@ -80,6 +80,31 @@ describe('partner API import (PRD v1 §7)', () => {
     expect((await call('DELETE', `/tournaments/${t}/partner-key`, undefined, tokens.admin)).status).toBe(204)
     expect((await call('POST', `/partner/tournaments/${t}/players`, body, null, { 'x-api-key': issued.body.key })).status).toBe(401)
   })
+
+  it('takes entries only when a coach could send them', async () => {
+    const body = { team: { name: 'Federation Dojo' }, players: [{ name: 'Ravi Kumar', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }] }
+    const send = (t, key) => call('POST', `/partner/tournaments/${t}/players`, body, null, { 'x-api-key': key })
+    const keyFor = async (t) => (await call('POST', `/tournaments/${t}/partner-key`, {}, tokens.admin)).body.key
+    const teams = async (t) => (await call('GET', `/tournaments/${t}/teams`, undefined, tokens.admin)).body.teams
+
+    // still in Draft
+    const draft = (await call('POST', '/tournaments', { name: 'Draft Open', location: 'Pune', date: '2027-01-15', template: 'kumite', masterAgeDate: '2027-01-01', type: 'kata_kumite', slug: 'partner-draft', ...READY }, tokens.admin)).body.tournament.id
+    const refused = await send(draft, await keyFor(draft))
+    expect(refused).toMatchObject({ status: 409, body: { error: 'tournament_not_open' } })
+    expect(await teams(draft)).toEqual([])
+
+    // coaches soft-locked out
+    const t = await tournament('partner-soft')
+    const key = await keyFor(t)
+    await call('POST', `/tournaments/${t}/locks/soft`, { locked: true, reason: 'checking entries' }, tokens.admin)
+    expect(await send(t, key)).toMatchObject({ status: 409, body: { error: 'entries_soft_locked' } })
+    await call('POST', `/tournaments/${t}/locks/soft`, { locked: false, reason: 'checked' }, tokens.admin)
+    expect((await send(t, key)).status).toBe(201)
+
+    // after the closing date
+    await call('PATCH', `/tournaments/${t}`, { registrationStart: '2020-01-01', registrationClose: '2020-06-30' }, tokens.admin)
+    expect(await send(t, key)).toMatchObject({ status: 409, body: { error: 'registration_closed' } })
+  })
 })
 
 describe('coach accounts (PRD v1 §7)', () => {
