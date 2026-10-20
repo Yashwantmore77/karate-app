@@ -63,7 +63,7 @@ export async function loginToServer(email, password, coords = null, code = null)
   const url = apiUrl('/auth/login')
   // The app has no other way to sign anyone in, so a missing setting is said
   // plainly instead of the button appearing to do nothing.
-  if (!url) throw new Error('VITE_SERVER_URL is not set, so there is no API to sign in against.')
+  if (!url) throw Object.assign(new Error('VITE_SERVER_URL is not set, so there is no API to sign in against.'), { code: 'no_server_url' })
 
   const res = await fetch(url, {
     method: 'POST',

@@ -117,6 +117,13 @@ describe('Login', () => {
     expect(screen.queryByText('Wrong email or password')).not.toBeInTheDocument()
   })
 
+  it('says the server address is missing, not that the connection is down', async () => {
+    session.loginToServer.mockRejectedValue(Object.assign(new Error('VITE_SERVER_URL is not set'), { code: 'no_server_url' }))
+    await signIn()
+    expect(await screen.findByText(/set up without a server address \(VITE_SERVER_URL\)/i)).toBeInTheDocument()
+    expect(screen.queryByText(/could not reach the sign-in service/i)).not.toBeInTheDocument()
+  })
+
   it('stays on the form after a failure, ready to try again', async () => {
     failWith(401)
     await signIn()
