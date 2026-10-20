@@ -1,5 +1,18 @@
 # Notes for working on this repo
 
+## Ship every change as its own small PR
+
+Each fix or change goes on its own branch, cut from the latest `main` and named
+`claude/<ticket>-<short-name>` (for example `claude/kan-391-partner-window`),
+and goes out as its own pull request. Open the PR without waiting to be asked.
+
+- One ticket, or one part of a ticket, per PR. Split a larger ticket into
+  several PRs rather than bundling it.
+- Never stack new work on a branch whose PR is open or merged; start a fresh
+  branch from `main`.
+- The PR description says what was wrong, what changed, how it was tested, and
+  whether the docs needed updating (see below).
+
 ## Keep the operator handbook and its PDF in step with the app
 
 `docs/operator-handbook/` walks the person who runs a tournament through the app,
