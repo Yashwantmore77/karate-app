@@ -1009,6 +1009,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Results are locked. Move the tournament back to Live (with a reason) to change them. | Admin with the reopen privilege: Completed → Live, then correct |
 | Publish the results first. | Results tab → Publish results |
 | Wrong email or password. | Check both; use Forgot password if needed |
+| This copy of the app was set up without a server address (VITE_SERVER_URL), so nobody can sign in. | Not something you can fix from the sign-in page: whoever set up the website must set `VITE_SERVER_URL` and rebuild it |
 | Too many attempts | Wait one minute, then try again |
 | Too many requests from this device in the last minute. Wait a minute, then try again. | Wait a minute. The device sent more requests in a minute than the limit allows (Request limits, section 12) |
 | Enter the code from your authenticator app. / That code did not match. | Enter the current 6-digit code; check the phone's clock |

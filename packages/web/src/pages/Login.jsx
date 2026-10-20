@@ -46,6 +46,8 @@ const fieldSx = {
 const signInFailure = (err) => {
   if (err?.status === 401) return 'Wrong email or password'
   if (err?.status === 429) return 'Too many attempts. Wait a few minutes, then try again.'
+  // A build made without VITE_SERVER_URL has no server to ask; no connection fixes that.
+  if (err?.code === 'no_server_url') return 'This copy of the app was set up without a server address (VITE_SERVER_URL), so nobody can sign in. Tell whoever set it up.'
   return 'Could not reach the sign-in service. Check the connection and try again.'
 }
 
