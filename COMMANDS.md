@@ -84,7 +84,7 @@ The app comes with **no accounts**. Choose one of these two:
   BOOTSTRAP_ADMIN_EMAIL=you@example.com
   BOOTSTRAP_ADMIN_PASSWORD=at-least-8-characters
   ```
-- **Ten test tournaments and a full set of test accounts.** Start the API like this instead:
+- **Twelve test tournaments and a full set of test accounts.** Start the API like this instead:
   ```
   set "SEED_SCENARIOS=true" && npm run server
   ```
@@ -138,7 +138,7 @@ None of these put test data in a database. With `MONGODB_URI` set,
 `SEED_SCENARIOS` is ignored, and `mock` and `loadtest` run in memory anyway
 and keep nothing.
 
-**Ten test tournaments on your computer** (see section 2 for the test accounts):
+**Twelve test tournaments on your computer** (see section 2 for the test accounts):
 
 ```
 set "SEED_SCENARIOS=true" && npm run server
