@@ -64,7 +64,20 @@ describe('workflow progress', () => {
     const state = Object.fromEntries(flow.steps.map((s) => [s.id, s.state]))
     expect(state).toMatchObject({ categories: 'done', open: 'done', approve: 'done', close: 'done', weighin: 'done', lock: 'done', kata: 'skip' })
     expect(flow.next.id).toBe('draw')
-    expect(flow.total).toBe(WORKFLOW.length - 1)
+    expect(flow.total).toBe(WORKFLOW.length - 2) // kata skipped; passes optional and not done
+  })
+
+  it('a finished tournament that printed no passes reads every step done', () => {
+    const t = {
+      ...base, organizer: 'KAI', venue: 'Pune', startDate: '2026-11-01', endDate: '2026-11-02', masterAgeDate: '2026-11-01',
+      registrationStart: '2026-10-01', registrationClose: '2026-10-25', type: 'kumite', contactMobile: '9999999999', contactEmail: 'a@b.in',
+      lifecycleStatus: 'COMPLETED', entriesLocked: true, drawLocked: true, weighInClosed: true, resultsPublished: true,
+    }
+    const stats = { ageGroups: 1, players: 1, pendingVerification: 0, kumitePlayers: 1, pendingWeighIn: 0, kataPlayers: 0, pools: 1, matches: 1, scheduledMatches: 1, pendingMatches: 0, certificates: 1, passes: 0 }
+    const flow = workflowState(t, stats)
+    expect(flow.next).toBeNull()
+    expect(flow.doneCount).toBe(flow.total)
+    expect(workflowState(t, { ...stats, passes: 3 }).total).toBe(flow.total + 1) // printed passes count once done
   })
 
   it('an optional step never becomes "the next step"', () => {

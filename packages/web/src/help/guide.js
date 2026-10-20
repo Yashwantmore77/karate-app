@@ -124,7 +124,9 @@ export function workflowState(tournament, stats) {
   // The next thing to do: the first required step still open.
   const next = steps.find((st) => st.state === 'todo' && !st.optional) || null
   const doneCount = steps.filter((st) => st.state === 'done').length
-  const total = steps.filter((st) => st.state !== 'skip').length
+  // An optional step counts once it is done, so a finished tournament that
+  // skipped it reads "N of N" beside "All done".
+  const total = steps.filter((st) => st.state !== 'skip' && !(st.optional && st.state === 'todo')).length
   return { steps, next, doneCount, total }
 }
 
