@@ -107,6 +107,7 @@ const ERROR_TEXT = {
   team_already_registered: 'Your team is already registered.',
   no_pools: 'Generate pools first.',
   forbidden: 'You do not have permission to do that.',
+  too_many_requests: 'Too many requests from this device in the last minute. Wait a minute, then try again.',
   schedule_conflict: 'Someone on this bout is already booked at that time.',
   no_weight_category: 'No weight class covers this weight. Add one in Categories first.',
   event_not_running: 'That event is not on the mats now. Switch the session first.',

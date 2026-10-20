@@ -1,6 +1,6 @@
 # Karate Tournament App — User Guide
 
-_Last updated 9 October 2026._
+_Last updated 20 October 2026._
 
 New to the app? Start with the [operator handbook](../operator-handbook/README.md), which walks through every job click by click.
 
@@ -1009,6 +1009,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Publish the results first. | Results tab → Publish results |
 | Wrong email or password. | Check both; use Forgot password if needed |
 | Too many attempts | Wait one minute, then try again |
+| Too many requests from this device in the last minute. Wait a minute, then try again. | Wait a minute. The device sent more requests in a minute than the limit allows (Request limits, section 12) |
 | Enter the code from your authenticator app. / That code did not match. | Enter the current 6-digit code; check the phone's clock |
 | This session was signed out. Sign in again. | Your session was ended on another device, or your role or password changed; sign in again |
 | Your account is not assigned to this tournament. | Admin: add the tournament to your account (Accounts) |
