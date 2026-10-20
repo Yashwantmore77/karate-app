@@ -691,8 +691,8 @@ Admins manage staff accounts and watch sign-ins. The super admin also takes back
 
 1. Open **Accounts** and press **New account**.
 2. Enter the email and a password (8 to 200 characters), and choose the role.
-3. For a judge, give the seat number (1 to 99). Optionally limit the account to some tournaments (empty means all), or give it a different role inside one tournament.
-4. Press Save, then give the person their email and password.
+3. For a judge, give the seat number (1 to 99). Under **Tournaments this account may work**, leave the list empty for all tournaments, or tick some to limit the account to them. For a **Tournament Admin** it works the other way round: it reaches only the tournaments ticked, so an empty list means none. Optionally, under **Role in particular tournaments**, press **Add tournament role** to give it a different role inside one tournament. If organisations exist, choose its **Organisation**: an account in an organisation sees only that organisation's tournaments.
+4. Press **Create account** (**Save account** when editing one), then give the person their email and password.
 
 ![Accounts: every staff account with its role, judge seat, tournaments and two-step sign-in.](images/accounts.webp)
 
