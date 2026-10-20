@@ -1,9 +1,12 @@
-# Kumite tournament scoring
+# Karate Tournament App
 
-WKF-style kumite scoring for a tournament day: an admin sets up tournaments,
-categories and competitors; a referee draws and schedules the bouts and runs
-each one from a live console; judges watch the same console on their own
-devices; a public scoreboard shows the hall what is on.
+Runs a karate tournament from start to finish: an organiser sets up the
+tournament and its categories, coaches register their players through a link,
+officials weigh them in, the app draws pools and brackets and schedules the
+bouts, referees and kata judges score live from their own devices, hall screens
+and the public site show what is on, and results, certificates and reports come
+out at the end. Kumite and kata follow WKF-style rules, and several
+organisations can each run their own tournaments on one installation.
 
 What it is meant to do, and what is out of scope, is in
 [KUMITE-PRD.md](KUMITE-PRD.md).
@@ -41,14 +44,26 @@ REST lives under `/api/v1`. `/health` sits outside it for uptime checks.
 
 ## Roles
 
-| Role | Can do |
+| Role | Does |
 | --- | --- |
-| Admin | Everything a referee can, plus tournaments, categories, competitors, accounts, the sign-in log, and deleting a match |
-| Referee | Draw and create bouts, set time, mat and panel, run the console |
-| Judge | Watch the console for bouts they are assigned to (read-only, per the PRD) |
-| Scoreboard | `/display`, no sign-in |
+| Super Admin | Everything an Admin does, plus organisations, Super Admin accounts and the full backup |
+| Admin | Every tournament and tab, staff accounts, sign-ins, analytics and rulesets |
+| Tournament Admin | Runs the tournaments it was given, every tab; no accounts or system screens |
+| Registration Officer | Checks and approves the players coaches register |
+| Weigh-in Officer | Records weights on the day; check-in and passes |
+| Announcer | Calls the bouts to the mats |
+| Referee | Scores bouts on the live console |
+| Kata Judge | Scores a seat on a kata panel, and judges kumite bouts |
+| Scoreboard Operator | Chooses what the hall screens show |
+| Viewer (read-only) | Follows tournaments and analytics; changes nothing |
+| Coach / Team Manager | Registers their own team and players through the registration link |
 
-There is no signup. Accounts are created by an admin.
+The hall scoreboard (`/display`), the live board (`/live`) and the public site
+need no sign-in. What each role sees, screen by screen, is in the
+[user guide](docs/user-guide/README.md), section 1.
+
+There is no signup. An admin creates every account; the first Super Admin of a
+new installation comes from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`.
 
 ## Help inside the app
 
