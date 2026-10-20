@@ -1,0 +1,31 @@
+# Runs every test and the website build on each pull request and on main,
+# the same commands a contributor runs locally (COMMANDS.md section 5).
+# Everything runs in memory: no database, no secrets, no deploy.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # npm ci also fails when package-lock.json and package.json disagree.
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build

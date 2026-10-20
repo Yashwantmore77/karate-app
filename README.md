@@ -186,6 +186,9 @@ stand-in for the data layer (`packages/web/src/test/fakeDomain.js`), and the
 live console against an in-memory match channel that runs the real shared
 scoring engine (`packages/web/src/test/memoryMatchChannel.js`).
 
+GitHub Actions runs `npm ci`, `npm test` and `npm run build` on every pull
+request and on `main` (`.github/workflows/ci.yml`).
+
 ## Known gaps
 
 The current focus is the MVP, which is complete. Everything deferred is recorded in `FUTURE-BACKLOG.md`:
