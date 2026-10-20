@@ -213,13 +213,13 @@ export const ROLE_GUIDE = {
     'Add staff accounts in Accounts and give each the right role.',
   ],
   super_admin: [
-    'Everything an admin does, plus Organisations and Rulesets.',
+    'Everything an admin does, plus the Organisations page and Super Admin accounts.',
     'Create a tournament in Tournaments, then open it (eye icon) to reach every step.',
   ],
   tournament_owner: [
     'My tournaments lists the events you have been given: open one (eye icon) to run it.',
     'Inside a tournament you can do everything: details, categories, entries, weigh-in, draw, scoring, results, certificates and reports.',
-    'You will not see other people\'s tournaments, staff accounts, backups or rulesets. Ask the super admin for those.',
+    'You will not see other people\'s tournaments, staff accounts, backups or rulesets. Ask an administrator for those.',
   ],
   registration_officer: [
     'Choose the tournament, then go to Registrations.',
@@ -231,7 +231,7 @@ export const ROLE_GUIDE = {
   ],
   referee: [
     'Open Matches, choose the category, then your match.',
-    'Press "Open" on the match to start the scoring console. Score, then confirm the result at the end.',
+    'Press the eye icon ("Control Match") beside your match to open the scoring console. Score, then confirm the result at the end.',
     'If the connection drops, keep scoring: the actions are sent when it is back.',
   ],
   judge: [
@@ -442,7 +442,7 @@ export const HELP = {
     text: 'Staff sign-ins. Create an account for each person and give them a role (referee, judge, registration officer…). A role can also be set for one tournament only.',
   },
   'admin.signins': { title: 'Sign-ins', text: 'Every sign-in attempt, successful or not, for security checks.' },
-  'admin.system': { title: 'System', text: 'Backups, health and system-wide settings.' },
+  'admin.system': { title: 'System', text: 'The full backup (Super Admin only) and the audit trail of changes made outside any one tournament.' },
   'admin.backup': { title: 'Backup', text: 'Download a copy of all the data, to keep safe or to restore later.' },
   'admin.systemAudit': { title: 'Audit trail', text: 'Changes made outside any one tournament: accounts, organisations, rulesets and settings.' },
   'admin.rulesets': {
