@@ -2,12 +2,8 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Chip, Stack, IconButton, Alert,
 } from '@mui/material'
 import { CheckCircle, RadioButtonUnchecked, RemoveCircleOutlineOutlined as RemoveCircleOutline, Close, ArrowForward } from '@mui/icons-material'
+import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 import { WORKFLOW, ROLE_GUIDE } from '../../help/guide'
-
-const ROLE_NAME = {
-  admin: 'Admin', super_admin: 'Super admin', registration_officer: 'Registration officer', weighin_officer: 'Weigh-in officer',
-  referee: 'Referee', judge: 'Judge', announcer: 'Announcer', scoreboard_operator: 'Scoreboard operator', coach: 'Coach', viewer: 'Viewer',
-}
 
 const STATE_ICON = {
   done: <CheckCircle color="success" />,
@@ -32,7 +28,7 @@ export default function GuideDialog({ open, onClose, steps = null, next = null, 
       <DialogContent dividers>
         {roleTips && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Your job as {ROLE_NAME[role] || role}</Typography>
+            <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Your job as {ROLE_LABEL[role] || role}</Typography>
             <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
               {roleTips.map((tip) => <li key={tip}><Typography variant="body2">{tip}</Typography></li>)}
             </Box>

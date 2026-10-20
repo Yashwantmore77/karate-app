@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { HELP, ROLE_GUIDE, TAB_GUIDE, WORKFLOW, workflowState } from './guide'
 import { TABS } from '../pages/tms/TournamentManager'
+import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 
 const SRC = path.resolve(__dirname, '..')
 const sources = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -25,6 +26,12 @@ describe('help texts', () => {
     const list = fs.readFileSync(path.join(SRC, 'pages/referee/RefereeMatchList.jsx'), 'utf8')
     expect(list).toContain('title="Control Match"')
     expect(ROLE_GUIDE.referee.join(' ')).toContain('"Control Match"')
+  })
+
+  it('every role with a job in the guide has a display name', () => {
+    // The guide heads each box "Your job as <name>"; a missing name shows the raw role key.
+    const unnamed = Object.keys(ROLE_GUIDE).filter((role) => !ROLE_LABEL[role])
+    expect(unnamed).toEqual([])
   })
 
   it('every tournament tab says what it is for, and links only to real tabs', () => {
