@@ -12,6 +12,23 @@ and goes out as its own pull request. Open the PR without waiting to be asked.
   branch from `main`.
 - The PR description says what was wrong, what changed, how it was tested, and
   whether the docs needed updating (see below).
+- Merge the PR as soon as it passes testing: the local checks and the **CI**
+  check on GitHub green, and no conflict with `main`. Several PRs that touch
+  the same file can be merged one after another; merge `main` back into a
+  branch if it conflicts.
+
+## Hand each fixed ticket to QA in Jira
+
+After a PR for a Jira ticket (project KAN) is merged:
+
+1. Add a comment to that ticket (and to the story it relates to, if the fix
+   changes what the story describes) with the steps to test the flow: the PR,
+   what changed, what to set up first, then a table of steps with what to do
+   and what to expect, and the automated test that covers it. If only part of
+   the ticket is fixed, say which part, and list what is still open.
+2. When the whole ticket is fixed, move it to **In Review**, which this project
+   uses as "Ready for QA" (KAN has no separate Ready for QA status). A ticket
+   that is only partly fixed keeps its status until its last part is merged.
 
 ## Keep the operator handbook and its PDF in step with the app
 
