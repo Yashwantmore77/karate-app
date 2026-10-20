@@ -18,7 +18,10 @@ import { fileURLToPath } from 'node:url'
 import { launchChromium } from './browser.mjs'
 
 const OUT = process.env.IMAGES_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'images')
-const ONLY = process.argv[2] ? new Set(process.argv[2].split(',')) : null
+// Pictures saved inside another picture's shot: asking for one runs that shot.
+const SAVED_BY = { 'p5-kata-list': 'p5-kata-judge' }
+const ASKED = process.argv[2] ? process.argv[2].split(',') : null
+const ONLY = ASKED ? new Set(ASKED.map((name) => SAVED_BY[name] || name)) : null
 const BASE = process.env.APP_URL || 'http://localhost:5173'
 const API = process.env.API_URL || 'http://localhost:4000'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -108,7 +111,9 @@ const around = (page, boxes, { pad = 60, minW = 720, minH = 380, x0, y0, x1, y1 
   l = Math.max(0, l); tp = Math.max(0, tp)
   return { x: Math.round(l), y: Math.round(tp), width: Math.round(r - l), height: Math.round(bt - tp) }
 }
+const known = new Set()
 const shot = async (name, fn) => {
+  known.add(name)
   if (ONLY && !ONLY.has(name)) return
   try { await fn(); console.log('ok  ', name) } catch (e) { console.log('FAIL', name, '-', e.message.split('\n')[0]); process.exitCode = 1 }
 }
@@ -504,3 +509,10 @@ await shot('p6-complete', async () => {
 })
 
 await browser.close()
+
+// A misspelled name would otherwise take no picture and still look like success.
+const unknown = (ASKED || []).filter((name) => !known.has(SAVED_BY[name] || name))
+if (unknown.length) {
+  console.log(`FAIL no picture called ${unknown.join(', ')}. The names are the shot('…') calls in this file.`)
+  process.exitCode = 1
+}
