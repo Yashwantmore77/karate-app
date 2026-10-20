@@ -195,6 +195,15 @@ for (let pass = 0; pass < 3; pass += 1) {
   pdf = await print()
 }
 await browser.close()
-fs.writeFileSync(OUT, pdf)
-const doc = await PDFDocument.load(pdf)
-console.log(`${path.relative(process.cwd(), OUT)}: ${doc.getPageCount()} pages, ${(pdf.length / 1048576).toFixed(1)} MB`)
+// Chromium stamps the file with the moment it was printed, so every rebuild
+// was a new file and git kept another ~5 MB copy even when nothing changed.
+// Stamped with the handbook's own date instead, the same README gives the
+// same file.
+const updated = fs.readFileSync(path.join(HANDBOOK, 'README.md'), 'utf8').match(/^_Last updated (.+?)\._$/m)[1]
+const stamp = new Date(`${updated} UTC`)
+const doc = await PDFDocument.load(pdf, { updateMetadata: false })
+doc.setCreationDate(stamp)
+doc.setModificationDate(stamp)
+const out = await doc.save()
+fs.writeFileSync(OUT, out)
+console.log(`${path.relative(process.cwd(), OUT)}: ${doc.getPageCount()} pages, ${(out.length / 1048576).toFixed(1)} MB`)
