@@ -28,6 +28,18 @@ describe('help texts', () => {
     expect(ROLE_GUIDE.referee.join(' ')).toContain('"Control Match"')
   })
 
+  it('describes Analytics and the admin home as they are, not as hoped', () => {
+    // Analytics is three tables; it has no trends or charts.
+    expect(HELP.analytics.text).not.toMatch(/trend|chart/i)
+    const page = fs.readFileSync(path.join(SRC, 'pages/Analytics.jsx'), 'utf8')
+    for (const tab of ['clubs', 'athletes', 'tournaments']) {
+      expect(page).toContain(`<Tab value="${tab}"`)
+      expect(HELP.analytics.text.toLowerCase()).toContain(tab)
+    }
+    // An organisation's admin sees only its own tournaments' totals.
+    expect(HELP['admin.dashboard'].text).not.toMatch(/every tournament/)
+  })
+
   it('every role with a job in the guide has a display name', () => {
     // The guide heads each box "Your job as <name>"; a missing name shows the raw role key.
     const unnamed = Object.keys(ROLE_GUIDE).filter((role) => !ROLE_LABEL[role])

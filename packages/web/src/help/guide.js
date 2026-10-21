@@ -438,7 +438,7 @@ export const HELP = {
     text: 'A quick view of one tournament and its categories. Press "Manage" for the full tournament screen with every step.',
   },
   'admin.category': { title: 'Category', text: 'One category\'s players, pools and matches.' },
-  'admin.dashboard': { title: 'Dashboard', text: 'Totals across every tournament: players, matches and what is live right now.' },
+  'admin.dashboard': { title: 'Dashboard', text: 'Totals across the tournaments you can see (your organisation\'s, if you belong to one): players, matches and what is running now.' },
   'admin.accounts': {
     title: 'Accounts',
     text: 'Staff sign-ins. Create an account for each person and give them a role (referee, judge, registration officer…). A role can also be set for one tournament only.',
@@ -452,7 +452,7 @@ export const HELP = {
     text: 'Standard and custom rule sets (match duration, scoring, pool system…). Editing creates a new version; tournaments keep the version they started with. Standard rulesets can be restored.',
   },
   'admin.organizations': { title: 'Organisations', text: 'Federations or associations. Each has its own tournaments and staff.' },
-  'analytics': { title: 'Analytics', text: 'Compare tournaments: entries, teams, medals and trends over time.' },
+  'analytics': { title: 'Analytics', text: 'Tables of clubs, athletes and tournaments: entries, bouts and medals, across every tournament you can see. Click a row for the detail.' },
 
   // --- staff -------------------------------------------------------------
   'referee.categories': {
