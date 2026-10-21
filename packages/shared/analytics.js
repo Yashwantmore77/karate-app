@@ -1,5 +1,6 @@
 import { normalizeName } from './registration.js'
 import { boutOutcome } from './results.js'
+import { countsAsEntry } from './lifecycle.js'
 
 // Phase 2 "advanced analytics": athletes and clubs across tournaments. An
 // athlete is the same person in two events when their name (case, spacing and
@@ -63,6 +64,8 @@ export function buildAnalytics(events) {
       a.history.push({ tournamentId: tournament.id, tournament: tournament.name, date, club: clubName(p), medals: [], won: 0, lost: 0, walkovers: 0 })
       const club = clubOf(clubName(p))
       club.tournaments.add(tournament.id)
+      // A withdrawn athlete keeps the record of the bouts they fought, but is not an entry.
+      if (!countsAsEntry(p)) continue
       club.entries += 1
       entry(club).entries += 1
     }
@@ -115,7 +118,7 @@ export function buildAnalytics(events) {
     for (const [key, row] of perClub) clubs.get(key).history.push(row)
     tournaments.push({
       id: tournament.id, name: tournament.name, date, status: tournament.lifecycleStatus || null,
-      players: players.filter((p) => !['DRAFT', 'REJECTED'].includes(p.registrationStatus)).length,
+      players: players.filter(countsAsEntry).length,
       teams: teams.length, bouts: matches.filter((m) => boutOutcome(m) && !unfought(m)).length, medals: medalCount,
     })
   }

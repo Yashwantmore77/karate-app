@@ -31,3 +31,24 @@ describe('analytics: wins, losses and walkovers', () => {
     expect(out.tournaments[0].bouts).toBe(2)
   })
 })
+
+/** KAN-369 point 1: a player is an entry once sent in, unless rejected or withdrawn. */
+describe('analytics: who counts as an entry', () => {
+  const players = [
+    { ...player('a', 'Aarav Patil', 'Pune KA'), registrationStatus: 'APPROVED' },
+    { ...player('d', 'Draft Only', 'Pune KA'), registrationStatus: 'DRAFT' },
+    { ...player('r', 'Rejected One', 'Pune KA'), registrationStatus: 'REJECTED' },
+    { ...player('w', 'Withdrew Later', 'Pune KA'), registrationStatus: 'WITHDRAWN' },
+  ]
+  const out = buildAnalytics([{ tournament: { id: 't', name: 'Cup', date: '2026-10-21' }, players, teams: [], matches: [bout('m1', 'a', 'w', 'blue')], medals: [] }])
+
+  it('counts only entries in the club and the tournament', () => {
+    expect(out.clubs[0].entries).toBe(1)
+    expect(out.tournaments[0].players).toBe(1)
+  })
+
+  it('keeps a withdrawn athlete with the bouts they fought', () => {
+    expect(out.athletes.find((x) => x.name === 'Withdrew Later')).toMatchObject({ won: 1, lost: 0 })
+    expect(out.athletes.map((x) => x.name)).not.toContain('Draft Only')
+  })
+})
