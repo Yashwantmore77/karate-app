@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { Box, Toolbar, Typography, Button, IconButton, Chip } from '@mui/material'
+import { Box, Toolbar, Typography, IconButton, Chip } from '@mui/material'
 import { ArrowBack } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { isExpired } from '../../utils/dateUtils'

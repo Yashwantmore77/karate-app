@@ -5,7 +5,7 @@ import * as Yup from 'yup'
 import { Container, Box, Toolbar, Typography, Button, Select, MenuItem, FormControl, InputLabel, Stack, Alert, AlertTitle, Paper, IconButton, Chip, Divider, FormHelperText, TextField, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
 import { ArrowBack, Add, Visibility, Delete, FileDownload, Groups, Shuffle } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
-import { TableSearch, TablePager, NoResults } from '../../components/TableToolbar'
+import { TableSearch, TablePager } from '../../components/TableToolbar'
 import { usePagedList } from '../../components/usePagedList'
 import {
   tournaments as tournamentStore,

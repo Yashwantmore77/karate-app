@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Container, Typography, Grid, Paper, Button, Stack, Table, TableHead, TableRow, TableCell, TableBody, TableContainer,
-  Box,
 } from '@mui/material'
 import { Add, People, EmojiEvents, LiveTv, Public, Login, Business } from '@mui/icons-material'
 import { tournaments as tournamentStore } from '../../data/domain'

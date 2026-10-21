@@ -29,7 +29,7 @@ import {
   bracketMedals, poolMedals, medalTally, boutOutcome, nextPow2,
 } from './results.js'
 import {
-  formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, playerIdentity, withoutReadOnly,
+  formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, withoutReadOnly,
   withDefaults, withTeamDefaults, possibleDuplicates, normalizeName,
   publicPlayer, publicTeam,
 } from './registration.js'
