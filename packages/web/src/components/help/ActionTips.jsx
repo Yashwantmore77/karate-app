@@ -7,6 +7,10 @@ import { explainAction } from '../../help/actions'
 // actions, and the column headers that sort a table.
 const ACTIONABLE = 'button, [role="button"], [role="tab"], [role="menuitem"], a.MuiButton-root, a.MuiIconButton-root'
 const SHOW_AFTER_MS = 450
+// On a touch screen: hold a button this long to read its tooltip instead of pressing it.
+const LONG_PRESS_MS = 500
+// A finger that moves further than this is scrolling, not holding.
+const MOVE_SLOP_PX = 10
 // Hall screens are watched, not used: no tooltips over a scoreboard.
 const QUIET_SCREENS = ['/display', '/live']
 
@@ -41,8 +45,9 @@ export function describeAction(el) {
 /**
  * One tooltip for every action in the app, so none goes without an
  * explanation: on hover (after a moment) and on keyboard focus, it says what
- * the action does, and for a disabled one what has to happen first. Not on
- * touch screens, where a press is a press.
+ * the action does, and for a disabled one what has to happen first. On a
+ * touch screen a tap still presses; holding a button shows its tooltip (and
+ * does not press it), and tapping a disabled one says what it is waiting for.
  */
 export default function ActionTips() {
   const { pathname } = useLocation()
@@ -68,6 +73,39 @@ export default function ActionTips() {
         setShown(info ? { el, info } : null)
       }, delay)
     }
+    // Touch: { el, x, y, timer, held } for the finger now on an action.
+    let press = null
+    let swallowClick = null
+    const endPress = () => { if (press) clearTimeout(press.timer); press = null }
+    const onDown = (e) => {
+      hide()
+      endPress()
+      swallowClick = null
+      if (e.pointerType !== 'touch') return
+      const el = e.target.closest?.(ACTIONABLE)
+      if (!el) return
+      // A tap on a greyed-out button does nothing else, so it may as well explain itself.
+      if (isDisabled(el)) { show(el, 0, { hovered: false }); return }
+      const hold = { el, x: e.clientX, y: e.clientY, held: false }
+      hold.timer = setTimeout(() => {
+        // An action with nothing to explain stays an ordinary press.
+        if (!describeAction(el)) return
+        hold.held = true
+        swallowClick = el
+        show(el, 0, { hovered: false })
+      }, LONG_PRESS_MS)
+      press = hold
+    }
+    const onMove = (e) => {
+      if (press && !press.held && Math.hypot(e.clientX - press.x, e.clientY - press.y) > MOVE_SLOP_PX) endPress()
+    }
+    // A hold that showed the tooltip is not also a press.
+    const onClick = (e) => {
+      if (swallowClick && swallowClick.contains(e.target)) { e.preventDefault(); e.stopPropagation() }
+      swallowClick = null
+    }
+    // A long press would also open the browser's own menu over the tooltip.
+    const onContextMenu = (e) => { if (press) e.preventDefault() }
     const onOver = (e) => {
       if (e.pointerType === 'touch') return
       const el = e.target.closest?.(ACTIONABLE)
@@ -75,6 +113,8 @@ export default function ActionTips() {
       if (el !== target.current) show(el, SHOW_AFTER_MS)
     }
     const onOut = (e) => {
+      // A finger leaves as it lifts; the tooltip it held up stays until the next touch.
+      if (e.pointerType === 'touch') return
       // Still inside the same action (between its icon and its text).
       if (target.current && e.relatedTarget && target.current.contains(e.relatedTarget)) return
       hide()
@@ -91,8 +131,13 @@ export default function ActionTips() {
     document.addEventListener('pointerout', onOut)
     document.addEventListener('focusin', onFocus)
     document.addEventListener('focusout', hide)
-    // Pressing the button hides its tooltip.
-    document.addEventListener('pointerdown', hide, true)
+    // Pressing the button hides its tooltip (and on touch, may start a hold).
+    document.addEventListener('pointerdown', onDown, true)
+    document.addEventListener('pointermove', onMove, true)
+    document.addEventListener('pointerup', endPress, true)
+    document.addEventListener('pointercancel', endPress, true)
+    document.addEventListener('click', onClick, true)
+    document.addEventListener('contextmenu', onContextMenu, true)
     document.addEventListener('keydown', onKey)
     window.addEventListener('scroll', onScroll, true)
     return () => {
@@ -101,7 +146,13 @@ export default function ActionTips() {
       document.removeEventListener('pointerout', onOut)
       document.removeEventListener('focusin', onFocus)
       document.removeEventListener('focusout', hide)
-      document.removeEventListener('pointerdown', hide, true)
+      endPress()
+      document.removeEventListener('pointerdown', onDown, true)
+      document.removeEventListener('pointermove', onMove, true)
+      document.removeEventListener('pointerup', endPress, true)
+      document.removeEventListener('pointercancel', endPress, true)
+      document.removeEventListener('click', onClick, true)
+      document.removeEventListener('contextmenu', onContextMenu, true)
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('scroll', onScroll, true)
     }
