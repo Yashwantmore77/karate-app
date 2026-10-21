@@ -1955,6 +1955,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       scoreBefore: { aka: match.avgRed ?? 0, ao: match.avgBlue ?? 0 }, scoreAfter: { aka: patch.avgRed ?? 0, ao: patch.avgBlue ?? 0 }, at: iso(),
     })
     if (match.stage === 'knockout' || match.stage === 'pool') await syncBracket(tournamentId, category.divisionKey)
+    await refreshPublishedMedals(tournamentId, category.divisionKey)
     return after
   }
 
@@ -2807,6 +2808,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (medals === null) {
       if (existing) await stores.medalOverrides.remove(existing.id)
       await record(actor, { tournamentId, action: A.MEDALS_OVERRIDDEN, entity: 'division', entityId: key, before: { medals: before.map((m) => `${m.medal}:${m.name}`) }, after: { medals: 'as calculated' }, reason })
+      await refreshPublishedMedals(tournamentId, key)
       return { cleared: true }
     }
     if (!Array.isArray(medals) || medals.length > 8) throw invalid('invalid_medals')
@@ -2821,6 +2823,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     else await stores.medalOverrides.insert(doc)
     const names = new Map((await stores.players.list({ tournamentId })).map((p) => [p.id, p.name]))
     await record(actor, { tournamentId, action: A.MEDALS_OVERRIDDEN, entity: 'division', entityId: key, before: { medals: before.map((m) => `${m.medal}:${m.name}`) }, after: { medals: clean.map((m) => `${m.medal}:${names.get(m.playerId)}`) }, reason })
+    await refreshPublishedMedals(tournamentId, key)
     return { overridden: true }
   }
 
@@ -2882,6 +2885,19 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return existing ? stores.divisionResults.update(existing.id, doc) : stores.divisionResults.insert({ tournamentId, divisionKey: key, ...doc })
   }
 
+  /**
+   * KAN-330: a published category's medals follow its result. A correction or
+   * hand-set medals after publishing rewrite its part of the medal list (and
+   * so the tally, the dashboards and new certificates). A locked category
+   * keeps the medals it was locked with.
+   */
+  async function refreshPublishedMedals(tournamentId, key) {
+    const row = (await stores.divisionResults.list({ tournamentId, divisionKey: key }))[0]
+    if (row?.status !== RESULT_STATUS.PUBLISHED) return
+    const division = (await results(tournamentId)).find((d) => d.key === key)
+    if (division) await writeMedals(tournamentId, division)
+  }
+
   /** Writes one category's medals into the published list. */
   async function writeMedals(tournamentId, division) {
     await stores.medals.removeWhere({ tournamentId, divisionKey: division.key })
@@ -2936,7 +2952,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         if (row.status === RESULT_STATUS.LOCKED) throw rule('results_locked')
       }
       for (const row of records.values()) {
-        if (row.status === RESULT_STATUS.PUBLISHED) await stores.divisionResults.update(row.id, { status: RESULT_STATUS.VERIFIED })
+        if (row.status !== RESULT_STATUS.PUBLISHED) continue
+        await stores.divisionResults.update(row.id, { status: RESULT_STATUS.VERIFIED })
+        // Unpublished medals leave the medal list, the tally and the counts.
+        await stores.medals.removeWhere({ tournamentId, divisionKey: row.divisionKey })
       }
       await stores.tournaments.update(tournamentId, { resultsPublished: false })
       await record(actor, { tournamentId, action: A.RESULTS_UNPUBLISHED, entity: 'tournament', entityId: tournamentId })
