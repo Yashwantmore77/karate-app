@@ -647,7 +647,8 @@ Do this on competition day, as soon as all the pool bouts of a category are fini
 
 - A category with only one player: click **Decide single entries**, then award the gold or record "no competition".
 - A medal is wrong: click **Override medals** and type the reason.
-- **Unpublish** takes results off the public page, and **Re-publish** puts them back.
+- **Unpublish** takes results off the public page, and **Re-publish** puts them back. While unpublished, the medals are also off the medal list and the tally.
+- If you correct a bout or override medals after publishing, the medal list and tally follow at once. Print any certificates again for the people affected.
 
 ### Job 24: Print the certificates
 

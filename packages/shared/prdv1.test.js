@@ -348,6 +348,40 @@ describe('PRD v1 §16 results lifecycle', () => {
     expect(audit.filter((a) => a.entity === 'division' && ['results.locked', 'results.unlocked'].includes(a.action))).toHaveLength(2)
   })
 
+  it('keeps the medal list in step after publishing: corrections, hand-set medals, unpublishing', async () => {
+    const w = await world({ settings: { requireWeighInForDraw: false } })
+    const { tms, t } = w
+    await w.add(2)
+    await tms.setEntriesLock(admin, t.id, true)
+    await tms.generatePools(admin, t.id)
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    const [m] = await tms.listMatches(t.id)
+    await tms.correctResult(admin, t.id, m.id, { winner: 'red', avgRed: 1, avgBlue: 0 })
+    await tms.publishResults(admin, t.id, true)
+    const gold = async () => (await tms.listMedals(t.id)).find((x) => x.medal === 'gold')?.playerId
+    const [res] = await tms.results(t.id)
+    const [red, blue] = [m.akaPlayerId, m.aoPlayerId]
+    expect(await gold()).toBe(red)
+    // a protest upheld after publishing: the corrected winner is on the list
+    await tms.correctResult(admin, t.id, m.id, { winner: 'blue', avgRed: 0, avgBlue: 1 }, 'Protest upheld')
+    expect(await gold()).toBe(blue)
+    expect((await tms.tally(t.id)).reduce((n, r) => n + r.gold, 0)).toBe(1)
+    // medals set by hand, then cleared, reach the list too
+    await tms.overrideMedals(admin, t.id, res.key, [{ playerId: red, medal: 'gold' }, { playerId: blue, medal: 'silver' }], 'Appeal')
+    expect(await gold()).toBe(red)
+    await tms.overrideMedals(admin, t.id, res.key, null, 'Back to results')
+    expect(await gold()).toBe(blue)
+    // unpublishing takes the medals off the list and out of the counts
+    await tms.publishResults(admin, t.id, false)
+    expect(await tms.listMedals(t.id)).toEqual([])
+    expect((await tms.dashboard(t.id)).gold).toBe(0)
+    // a locked category keeps the medals it was locked with
+    await tms.publishResults(admin, t.id, true)
+    await tms.setDivisionLock(admin, t.id, res.key, true)
+    expect(await gold()).toBe(blue)
+  })
+
   it('publishes a verified category at once in automatic mode', async () => {
     const w = await world({ settings: { requireWeighInForDraw: false, resultPublishing: 'auto' } })
     await w.add(2)
