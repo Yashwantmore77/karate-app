@@ -87,6 +87,8 @@ ticks its tournaments, inside its own organisation.
 
 Only admins hold the sensitive privileges: correcting a finished score, overriding a result, redrawing pools, reopening a completed tournament, and overriding a closed weigh-in. A Tournament Admin holds the same ones inside the tournaments it was given.
 
+Staff whose home screen is "Choose a tournament" (and a Kata Judge opening **Kata scoring**) see the tournaments in a table: name, venue, date and stage, one row each. Type in the search box to find one by name or venue, click a heading to sort, and click the row or its **Open** button to start work.
+
 ![Staff with one job pick a tournament first (here the Registration Officer).](images/staff-picker.webp)
 
 *Staff with one job pick a tournament first (here the Registration Officer).*

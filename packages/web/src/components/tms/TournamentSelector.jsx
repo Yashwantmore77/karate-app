@@ -1,32 +1,32 @@
 import { useEffect, useState } from 'react'
-import { Container, Typography, Grid, Card, CardActionArea, CardContent, Box } from '@mui/material'
+import { Container, Typography, Button } from '@mui/material'
 import { tournaments as tournamentStore } from '../../data/domain'
 import StatusBadge from './StatusBadge'
+import DataTable from './DataTable'
 import { PageLoader } from '../Loader'
 import { HelpTitle } from '../help/InfoTip'
 
-/** Section 63.6's TournamentSelector: officers pick the event they are working. */
+const dayOf = (t) => String(t.startDate || t.date || '').slice(0, 10)
+
+/** Section 63.6's TournamentSelector: officers pick the event they are working, one row each. */
 export default function TournamentSelector({ title = 'Choose a tournament', onPick }) {
   const [rows, setRows] = useState(null)
   useEffect(() => { tournamentStore.list().then(setRows).catch(() => setRows([])) }, [])
+  const columns = [
+    { key: 'name', label: 'Tournament', render: (t) => <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 200 }}>{t.name}</Typography> },
+    { key: 'location', label: 'Venue', render: (t) => <span style={{ whiteSpace: 'nowrap' }}>{t.location || '—'}</span> },
+    { key: 'date', label: 'Date', value: dayOf, render: (t) => <span style={{ whiteSpace: 'nowrap' }}>{dayOf(t) || '—'}</span> },
+    { key: 'stage', label: 'Stage', value: (t) => t.lifecycleStatus || 'DRAFT', render: (t) => <StatusBadge status={t.lifecycleStatus || 'DRAFT'} /> },
+    // The row opens on a click too; the button is there for the keyboard.
+    { key: 'actions', label: '', sortable: false, align: 'right', render: (t) => <Button size="small" variant="outlined" data-tip="Opens this tournament to work on it" onClick={(e) => { e.stopPropagation(); onPick(t) }}>Open</Button> },
+  ]
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
       <HelpTitle id="tournament.select" variant="h1" sx={{ mb: 3 }}>{title}</HelpTitle>
-      {!rows && <PageLoader label="Loading tournaments…" />}
-      {rows && !rows.length && <Typography color="text.secondary">No tournaments yet.</Typography>}
-      <Grid container spacing={2}>
-        {(rows || []).map((t) => (
-          <Grid key={t.id} size={{ xs: 12, sm: 6 }}>
-            <Card><CardActionArea onClick={() => onPick(t)}>
-              <CardContent>
-                <Typography variant="h3">{t.name}</Typography>
-                <Typography variant="body2" color="text.secondary">{t.location} · {t.startDate || t.date}</Typography>
-                <Box sx={{ mt: 1 }}><StatusBadge status={t.lifecycleStatus || 'DRAFT'} /></Box>
-              </CardContent>
-            </CardActionArea></Card>
-          </Grid>
-        ))}
-      </Grid>
+      {!rows ? <PageLoader label="Loading tournaments…" /> : (
+        <DataTable columns={columns} rows={rows} onRowClick={onPick} canExport={false}
+          searchPlaceholder="Search tournament or venue" empty="No tournaments yet." />
+      )}
     </Container>
   )
 }
