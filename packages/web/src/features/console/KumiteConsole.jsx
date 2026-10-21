@@ -156,8 +156,9 @@ export default function KumiteConsole({
 
   const toggleTimer = () => send(clockRunning ? 'CLOCK_STOP' : 'CLOCK_START')
   const resetTime = () => send('CLOCK_RESET')
-  const useDuration = (durationMs) => send('CLOCK_SET', { durationMs })
-  const setMatchDuration = (minutes, seconds) => useDuration(parseDuration(minutes, seconds))
+  // Sets the bout clock to a length; named so it is not mistaken for a React hook.
+  const setClockDuration = (durationMs) => send('CLOCK_SET', { durationMs })
+  const setMatchDuration = (minutes, seconds) => setClockDuration(parseDuration(minutes, seconds))
   const toggleKoTimer = () => send('KO_TIMER')
   // The mat this console scores decides which screens show the bout (that
   // mat's own screen, the hall screen's "Mat N", the live board's card). It
@@ -501,9 +502,9 @@ export default function KumiteConsole({
 
               <Stack direction="row" spacing={1}>
                 <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Reset the time', resetTime)} sx={utilityButtonSx}>Reset time</Button>
-                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', () => useDuration((view.rules || DEFAULT_RULES).extraTimeMs))} sx={utilityButtonSx}>Extra time</Button>
+                <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Switch to extra time', () => setClockDuration((view.rules || DEFAULT_RULES).extraTimeMs))} sx={utilityButtonSx}>Extra time</Button>
               </Stack>
-              <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Set the clock to 60 seconds', () => useDuration(60_000))} sx={{ ...utilityButtonSx, mt: 1 }}>
+              <Button fullWidth variant="outlined" disabled={disabled} onClick={guarded('Set the clock to 60 seconds', () => setClockDuration(60_000))} sx={{ ...utilityButtonSx, mt: 1 }}>
                 60 seconds
               </Button>
 
