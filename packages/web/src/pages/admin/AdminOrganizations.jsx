@@ -12,7 +12,10 @@ import useAction from '../../components/tms/useAction'
 import { useLoading } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 
-const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
+// While typing, a dash may end the short name (the next letter follows it);
+// a stray one at either end is trimmed on saving.
+const slugTyping = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-/, '').slice(0, 60)
+const slugify = (s) => slugTyping(s).replace(/-$/, '')
 
 /**
  * PRD point 33: many associations on one installation. Each organisation has
@@ -31,7 +34,7 @@ export default function AdminOrganizations() {
 
   const save = async () => {
     const { id, tournaments, accounts, createdAt, updatedAt, ...doc } = edit
-    const body = Object.fromEntries(Object.entries(doc).filter(([, v]) => v !== ''))
+    const body = Object.fromEntries(Object.entries({ ...doc, slug: slugify(doc.slug) }).filter(([, v]) => v !== ''))
     const ok = await action.run(() => (id ? organizations.update(id, body) : organizations.create(body)), 'Organisation saved')
     if (ok) { setEdit(null); load() }
   }
@@ -64,7 +67,7 @@ export default function AdminOrganizations() {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField required label="Name" value={edit?.name || ''} onChange={(e) => setEdit({ ...edit, name: e.target.value, ...(edit.id ? {} : { slug: slugify(e.target.value) }) })} />
-            <TextField required label="Short name" helperText="Lower-case letters, numbers and dashes" value={edit?.slug || ''} onChange={(e) => setEdit({ ...edit, slug: slugify(e.target.value) })} />
+            <TextField required label="Short name" helperText="Lower-case letters, numbers and dashes" value={edit?.slug || ''} onChange={(e) => setEdit({ ...edit, slug: slugTyping(e.target.value) })} />
             <TextField label="Contact email" value={edit?.contactEmail || ''} onChange={(e) => setEdit({ ...edit, contactEmail: e.target.value })} />
             <TextField label="Contact mobile" value={edit?.contactMobile || ''} onChange={(e) => setEdit({ ...edit, contactMobile: e.target.value })} />
             <TextField label="Country" value={edit?.country || ''} onChange={(e) => setEdit({ ...edit, country: e.target.value })} />
