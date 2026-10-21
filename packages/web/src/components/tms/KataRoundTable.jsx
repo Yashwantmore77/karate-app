@@ -1,4 +1,4 @@
-import { Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Typography } from '@mui/material'
+import { Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Typography, Tooltip } from '@mui/material'
 
 const MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' }
 
@@ -31,11 +31,13 @@ export default function KataRoundTable({ round, showOrder = false, highlight = n
               <TableCell>{r.name}</TableCell>
               <TableCell>{r.club || r.team || '—'}</TableCell>
               {seats.map((s) => (
-                <TableCell key={s} align="right" title={r.components?.[s] ? `Technical ${r.components[s].technical} · Athletic ${r.components[s].athletic}` : undefined}>
-                  {r.bySeat?.[s] != null ? r.bySeat[s].toFixed(round.precision ?? 1) : '·'}
-                </TableCell>
+                <Tooltip key={s} title={r.components?.[s] ? `Technical ${r.components[s].technical} · Athletic ${r.components[s].athletic}` : ''}>
+                  <TableCell align="right">
+                    {r.bySeat?.[s] != null ? r.bySeat[s].toFixed(round.precision ?? 1) : '·'}
+                  </TableCell>
+                </Tooltip>
               ))}
-              {hasPenalty && <TableCell align="right" title={r.penaltyReason || undefined}>{r.penalty ? `−${r.penalty}` : ''}</TableCell>}
+              {hasPenalty && <Tooltip title={r.penaltyReason || ''}><TableCell align="right">{r.penalty ? `−${r.penalty}` : ''}</TableCell></Tooltip>}
               <TableCell align="right">
                 <b>{r.final != null ? r.final.toFixed(2) : '—'}</b>
                 {r.tieReason && <Typography variant="caption" color="text.secondary" component="div">{r.tieReason}</Typography>}

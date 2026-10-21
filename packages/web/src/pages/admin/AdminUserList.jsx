@@ -228,7 +228,7 @@ export default function AdminUserList({ uid }) {
                         <IconButton
                           aria-label={`Delete ${account.email}`}
                           disabled={account.uid === uid}
-                          title={account.uid === uid ? 'You cannot delete your own account' : undefined}
+                          data-tip-needs={account.uid === uid ? 'You cannot delete your own account.' : undefined}
                           onClick={() => setDeleteConfirm(account)}
                         >
                           <Delete />

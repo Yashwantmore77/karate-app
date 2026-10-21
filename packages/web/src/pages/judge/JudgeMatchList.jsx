@@ -123,7 +123,8 @@ export default function JudgeMatchList({ uid, profile }) {
                           size="small"
                           color="primary"
                           onClick={() => navigate(`/judge/match/${m.id}`)}
-                          title="Watch Match"
+                          aria-label="Watch Match"
+                          data-tip="Opens the bout to follow it live"
                         >
                           <Visibility fontSize="small" />
                         </IconButton>

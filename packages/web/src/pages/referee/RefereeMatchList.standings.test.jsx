@@ -87,7 +87,7 @@ describe('standings', () => {
     expect(store.matches.list).toHaveBeenCalledTimes(1)
 
     store.matches.list.mockResolvedValue(EVERY_MATCH.slice(1))
-    await user.click(screen.getByTitle('Delete Match'))
+    await user.click(screen.getByRole('button', { name: 'Delete Match' }))
     const dialog = within(screen.getByRole('dialog'))
     // m1 has a result, so removing it is a correction that needs a reason (Rule 6).
     expect(dialog.getByRole('button', { name: 'Delete' })).toBeDisabled()

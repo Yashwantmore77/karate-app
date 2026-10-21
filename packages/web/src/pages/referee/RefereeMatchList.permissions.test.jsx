@@ -64,13 +64,13 @@ describe('RefereeMatchList against a server', () => {
   it('offers a referee no delete button, because the server would refuse it', async () => {
     renderPage('referee')
     await screen.findByText('U12 Boys Kumite')
-    expect(screen.queryByTitle('Delete Match')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete Match' })).not.toBeInTheDocument()
   })
 
   it('still offers delete to an administrator', async () => {
     renderPage('admin')
     await screen.findByText('U12 Boys Kumite')
-    expect(await screen.findByTitle('Delete Match')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Delete Match' })).toBeInTheDocument()
   })
 
   it('lets a referee schedule a bout', async () => {

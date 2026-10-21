@@ -22,6 +22,12 @@ describe('every action explains itself on hover', () => {
     expect(missing, missing.join('\n')).toEqual([])
   })
 
+  it('uses the app tooltip, not the browser title, on every action', () => {
+    // A title opts the button out of ActionTips: the slow browser tooltip shows instead.
+    const titled = collectActionLabels(SRC).filter((a) => a.titled).map((a) => `${a.file}:${a.line} <${a.tag}>`)
+    expect(titled, 'Use data-tip (what it does) or data-tip-needs (why it is greyed out)').toEqual([])
+  })
+
   it('explains the tournament tabs, and labels with counts, names and stages', () => {
     for (const t of TABS) expect(t.tip, t.label).toMatch(/\w/)
     expect(explainAction('Players (12)').tip).toMatch(/players/)
