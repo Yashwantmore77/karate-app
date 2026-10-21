@@ -1,6 +1,6 @@
 # Karate Tournament App — Operator Handbook
 
-_Last updated 20 October 2026._
+_Last updated 21 October 2026._
 
 **Download:** [Operator-Handbook.pdf](Operator-Handbook.pdf), to print or to send to the person running the tournament.
 
@@ -137,7 +137,7 @@ Click the eye icon next to a tournament to open it. Almost every job in this han
 5. **Full guide** shows all 18 small steps, and ticks the ones already done.
 6. The **stage buttons**. An arrow to the right (→) moves the tournament to its next stage; an arrow to the left (←) moves it back.
 
-Every button explains itself: rest the mouse on it for a second. A grey button also says why it cannot be used yet.
+Every button explains itself: rest the mouse on it for a second. On a tablet or phone, hold your finger on it instead (a quick tap still presses it). A grey button also says why it cannot be used yet; on a tablet, just tap it.
 
 ## 3. The plan
 

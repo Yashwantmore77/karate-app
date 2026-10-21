@@ -68,6 +68,7 @@ new installation comes from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`
 ## Help inside the app
 
 - **ⓘ icons** next to page titles, section headings and key buttons explain what each one does. Hover on a computer; tap on a phone or tablet.
+- **Every button** has a tooltip: hover on a computer, or hold it on a phone or tablet (a quick tap still presses it). A greyed-out button also says what it is waiting for; on touch, tap it.
 - **Guide** (top bar, every signed-in page) opens "How to run a tournament — step by step", plus what the signed-in role does.
 - On the tournament screen, the **guide bar** under the tabs shows the current page, what comes before and after it, and the next step still to do for this tournament, with a **Go** button for each. **Full guide** lists all the steps and ticks the ones that are done.
 - All help text lives in `packages/web/src/help/guide.js`, so it can be updated in one place. A test checks that every ⓘ icon has text.

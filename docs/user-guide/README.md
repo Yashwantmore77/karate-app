@@ -101,7 +101,7 @@ Staff whose home screen is "Choose a tournament" (and a Kata Judge opening **Kat
 
 - **Guide** (top right) opens the whole workflow, step by step, with your progress for the open tournament.
 - **Needs attention** at the top of every tournament tab lists what is wrong or still to do, with a button that takes you there.
-- Every button explains itself when you hover over it, including why a greyed-out button cannot be pressed yet.
+- Every button explains itself when you hover over it, including why a greyed-out button cannot be pressed yet. On a tablet or phone, hold your finger on a button to read the same text (holding does not press it), and tap a greyed-out button to see what it is waiting for.
 - The ⓘ icons explain each section.
 
 ![Hovering over a button says what it does.](images/tooltip.webp)
