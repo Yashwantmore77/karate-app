@@ -355,7 +355,7 @@ export default function RefereeMatchList({ uid, profile }) {
               startIcon={<Shuffle />}
               onClick={() => setDrawConfirm(true)}
               disabled={competitors.length < 2 || tournamentExpired}
-              title={competitors.length < 2 ? 'Need at least 2 competitors' : 'Create a bout for every pair'}
+              data-tip-needs={tournamentExpired ? 'The tournament has expired.' : `At least 2 competitors (${competitors.length}/2).`}
             >
               Draw Round Robin
             </Button>
@@ -364,12 +364,10 @@ export default function RefereeMatchList({ uid, profile }) {
               startIcon={<Add />}
               onClick={() => openFor(null)}
               disabled={competitors.length < 2 || tournamentExpired}
-              title={
+              data-tip-needs={
                 tournamentExpired
-                  ? "Cannot create matches in expired tournament"
-                  : competitors.length < 2
-                  ? `Need at least 2 competitors (${competitors.length}/2)`
-                  : ""
+                  ? 'The tournament has expired.'
+                  : `At least 2 competitors (${competitors.length}/2).`
               }
             >
               New Match
@@ -457,7 +455,8 @@ export default function RefereeMatchList({ uid, profile }) {
                           size="small"
                           color="primary"
                           onClick={() => navigate(`/referee/match/${m.id}`)}
-                          title="Control Match"
+                          aria-label="Control Match"
+                          data-tip="Opens the scoring console for this bout"
                           sx={{ mr: 1 }}
                         >
                           <Visibility fontSize="small" />
@@ -468,7 +467,8 @@ export default function RefereeMatchList({ uid, profile }) {
                         <IconButton
                           size="small"
                           onClick={() => openFor(m)}
-                          title="Assign officials & time"
+                          aria-label="Assign officials & time"
+                          data-tip="Sets the bout's referee, judges, mat and start time"
                           sx={{ mr: 1 }}
                         >
                           <Groups fontSize="small" />
@@ -478,7 +478,7 @@ export default function RefereeMatchList({ uid, profile }) {
                             size="small"
                             color="error"
                             onClick={() => setDeleteConfirm(m.id)}
-                            title="Delete Match"
+                            aria-label="Delete Match"
                           >
                             <Delete fontSize="small" />
                           </IconButton>

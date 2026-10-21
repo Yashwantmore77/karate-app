@@ -179,7 +179,9 @@ export default function RefereeCategoryList({ uid, profile = null }) {
                           color="primary"
                           onClick={() => navigate(`/referee/category/${c.id}`)}
                           disabled={isSelectedExpired}
-                          title={isSelectedExpired ? "Cannot manage expired tournament" : "View & Manage Matches"}
+                          aria-label="View & Manage Matches"
+                          data-tip="Opens this category's bouts to schedule and score them"
+                          data-tip-needs={isSelectedExpired ? 'The tournament has expired, so its matches cannot be managed.' : undefined}
                         >
                           <Visibility fontSize="small" />
                         </IconButton>

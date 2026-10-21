@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Grid, Stack, IconButton,
-  FormControl, FormLabel, FormGroup, FormControlLabel, Checkbox, FormHelperText, Alert,
+  FormControl, FormLabel, FormGroup, FormControlLabel, Checkbox, FormHelperText, Alert, Tooltip,
 } from '@mui/material'
 import { Add, Edit, Delete } from '@mui/icons-material'
 import { TEAM_MEMBER_ROLES, TEAM_MEMBER_ROLE_LABEL, teamProblems } from '@kumite/shared/tms.js'
@@ -114,8 +114,10 @@ export default function TeamMembers({ members, teams = null, canEdit = true, onS
                 <FormLabel component="legend">Roles (tick all that apply)</FormLabel>
                 <FormGroup row>
                   {TEAM_MEMBER_ROLES.map((r) => (
-                    <FormControlLabel key={r} control={<Checkbox checked={!!edit?.roles?.includes(r)} onChange={() => toggleRole(r)} />}
-                      label={TEAM_MEMBER_ROLE_LABEL[r]} title={ROLE_HINT[r]} />
+                    <Tooltip key={r} title={ROLE_HINT[r] || ''}>
+                      <FormControlLabel control={<Checkbox checked={!!edit?.roles?.includes(r)} onChange={() => toggleRole(r)} />}
+                        label={TEAM_MEMBER_ROLE_LABEL[r]} />
+                    </Tooltip>
                   ))}
                 </FormGroup>
                 <FormHelperText>{problems.roles || 'One person can hold several roles, e.g. Team Manager and Coach, or Coach and Referee.'}</FormHelperText>

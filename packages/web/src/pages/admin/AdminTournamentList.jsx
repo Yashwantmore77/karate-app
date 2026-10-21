@@ -199,7 +199,8 @@ export default function AdminTournamentList({ uid, profile = null, basePath = '/
                         size="small"
                         color="primary"
                         onClick={() => navigate(`${basePath}/tournament/${t.id}/manage`)}
-                        title="View"
+                        aria-label="View"
+                        data-tip="Opens the tournament: its dashboard and every tab"
                         sx={{ mr: 1 }}
                       >
                         <Visibility fontSize="small" />
@@ -208,7 +209,8 @@ export default function AdminTournamentList({ uid, profile = null, basePath = '/
                         size="small"
                         color="primary"
                         onClick={() => handleOpenEdit(t.id)}
-                        title="Edit"
+                        aria-label="Edit"
+                        data-tip="Changes the tournament's name, venue, date or type"
                         sx={{ mr: 1 }}
                       >
                         <Edit fontSize="small" />
@@ -218,7 +220,8 @@ export default function AdminTournamentList({ uid, profile = null, basePath = '/
                           size="small"
                           color="error"
                           onClick={() => setDeleteConfirm(t.id)}
-                          title="Delete"
+                          aria-label="Delete"
+                          data-tip="Deletes the tournament with its categories, players and matches. You are asked to confirm first."
                         >
                           <Delete fontSize="small" />
                         </IconButton>
