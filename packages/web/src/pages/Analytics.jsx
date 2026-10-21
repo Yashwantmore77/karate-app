@@ -15,6 +15,8 @@ const medalCols = [
 const winCols = [
   { key: 'won', label: 'Won' }, { key: 'lost', label: 'Lost' },
   { key: 'winRate', label: 'Win %', render: (r) => (r.winRate == null ? '—' : `${r.winRate}%`) },
+  // Won without a bout (walkover, no-show, withdrawal): not in Won, Lost or Win %.
+  { key: 'walkovers', label: 'Walkovers' },
 ]
 
 /**
@@ -67,7 +69,7 @@ export default function Analytics() {
           {detail && (
             <>
               <Stack direction="row" spacing={3} sx={{ mb: 2, flexWrap: 'wrap' }}>
-                {[['Tournaments', detail.row.tournaments], ['🥇', detail.row.gold], ['🥈', detail.row.silver], ['🥉', detail.row.bronze], ['Won', detail.row.won], ['Lost', detail.row.lost], ['Win %', detail.row.winRate == null ? '—' : `${detail.row.winRate}%`]].map(([k, v]) => (
+                {[['Tournaments', detail.row.tournaments], ['🥇', detail.row.gold], ['🥈', detail.row.silver], ['🥉', detail.row.bronze], ['Won', detail.row.won], ['Lost', detail.row.lost], ['Win %', detail.row.winRate == null ? '—' : `${detail.row.winRate}%`], ['Walkovers', detail.row.walkovers]].map(([k, v]) => (
                   <Box key={k}><Typography variant="caption" color="text.secondary">{k}</Typography><Typography variant="h3">{v}</Typography></Box>
                 ))}
               </Stack>
@@ -78,7 +80,7 @@ export default function Analytics() {
                       <TableRow>
                         <TableCell>Date</TableCell><TableCell>Tournament</TableCell>
                         {detail.kind === 'club' ? <><TableCell align="right">Entries</TableCell><TableCell align="right">🥇</TableCell><TableCell align="right">🥈</TableCell><TableCell align="right">🥉</TableCell></> : <TableCell>Medals</TableCell>}
-                        <TableCell align="right">Won</TableCell><TableCell align="right">Lost</TableCell>
+                        <TableCell align="right">Won</TableCell><TableCell align="right">Lost</TableCell><TableCell align="right">Walkovers</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -89,7 +91,7 @@ export default function Analytics() {
                           {detail.kind === 'club'
                             ? <><TableCell align="right">{h.entries}</TableCell><TableCell align="right">{h.gold}</TableCell><TableCell align="right">{h.silver}</TableCell><TableCell align="right">{h.bronze}</TableCell></>
                             : <TableCell>{h.medals.length ? h.medals.map((m) => `${m.medal} (${m.category})`).join(', ') : '—'}</TableCell>}
-                          <TableCell align="right">{h.won}</TableCell><TableCell align="right">{h.lost}</TableCell>
+                          <TableCell align="right">{h.won}</TableCell><TableCell align="right">{h.lost}</TableCell><TableCell align="right">{h.walkovers}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
