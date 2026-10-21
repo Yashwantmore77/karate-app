@@ -718,6 +718,7 @@ Admins manage staff accounts and watch sign-ins. The super admin also takes back
 ### Dashboard and Analytics
 
 - The **Dashboard** counts tournaments, teams, players, entries, approvals waiting, weigh-ins pending, live and finished matches, and medals. Each tournament row links to Manage, Matches and Results.
+- **Players** (here, on each tournament's Dashboard and in Analytics) counts entries sent in: not drafts, rejected or withdrawn players. A withdrawn athlete stays in Analytics with the bouts they fought.
 - The totals leave out archived tournaments (they stay in the list). **Live now** counts tournaments at the Live stage. **Matches done** reads finished bouts out of all bouts that will be fought: a cancelled bout counts in neither number.
 - **Analytics** compares clubs (entries, medals, wins, losses, win rate, walkovers), athletes (one athlete across tournaments, by name and date of birth) and tournaments. Each list exports.
 - Won, Lost and Win % count only bouts that were fought. A bout won because the opponent did not come or had withdrawn (walkover, no-show, kiken) is no win or loss for either; the winner's are counted under **Walkovers**. A disqualification still counts: that bout was fought.

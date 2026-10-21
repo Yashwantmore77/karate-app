@@ -16,7 +16,7 @@ import { CATEGORY_PRESETS, weightClasses } from './presets.js'
 import { categorizePlayer, categoryLabel, EVENTS, weightCoverage } from './categories.js'
 import {
   TOURNAMENT_STATUS, REGISTRATION_STATUS, tournamentLifecycle, registrationLifecycle,
-  assertTransition, InvalidTransition, isBackward, RESULT_TYPES as LIFECYCLE_RESULT_TYPES, EXCEPTIONAL_RESULTS, matchLifecycle,
+  assertTransition, InvalidTransition, isBackward, RESULT_TYPES as LIFECYCLE_RESULT_TYPES, EXCEPTIONAL_RESULTS, matchLifecycle, countsAsEntry,
 } from './lifecycle.js'
 import { can, PERMISSION as P } from './permissions.js'
 import { DEFAULT_TIME_ZONE, isValidTimeZone, isLocalDateTime, zonedInstant } from './timezone.js'
@@ -3506,9 +3506,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       matchesWithReferee: matches.filter((m) => m.refereeId).length,
       teams: teamRows.length,
       teamMembers: (await stores.teamMembers.list({ tournamentId })).length,
-      players: players.length,
-      kataPlayers: count((p) => p.events?.includes('kata')),
-      kumitePlayers: count((p) => p.events?.includes('kumite')),
+      players: count(countsAsEntry),
+      kataPlayers: count((p) => countsAsEntry(p) && p.events?.includes('kata')),
+      kumitePlayers: count((p) => countsAsEntry(p) && p.events?.includes('kumite')),
       pendingVerification: count((p) => [R.SUBMITTED, R.PENDING_VERIFICATION].includes(p.registrationStatus)),
       pendingPayment: paymentsEnabled() ? count((p) => DRAW_ELIGIBLE.has(p.registrationStatus) && (p.payment?.status || 'PENDING') !== 'PAID') : 0,
       pendingWeighIn: count((p) => p.events?.includes('kumite') && DRAW_ELIGIBLE.has(p.registrationStatus) && (p.weighIn?.status || 'PENDING') !== 'PASSED'),

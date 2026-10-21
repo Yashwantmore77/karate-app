@@ -64,6 +64,11 @@ export const REGISTRATION_STATUS = {
 
 const R = REGISTRATION_STATUS
 
+// KAN-369: what every screen counts as a player (an entry): sent in, and not
+// rejected or withdrawn. A draft is not sent in yet.
+const NOT_AN_ENTRY = new Set([R.DRAFT, R.REJECTED, R.WITHDRAWN])
+export const countsAsEntry = (p) => !NOT_AN_ENTRY.has(p.registrationStatus)
+
 const REGISTRATION_TRANSITIONS = {
   [R.DRAFT]: [R.SUBMITTED],
   [R.SUBMITTED]: [R.PENDING_VERIFICATION, R.DRAFT],

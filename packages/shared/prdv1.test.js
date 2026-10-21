@@ -348,6 +348,16 @@ describe('PRD v1 §16 results lifecycle', () => {
     expect(audit.filter((a) => a.entity === 'division' && ['results.locked', 'results.unlocked'].includes(a.action))).toHaveLength(2)
   })
 
+  it('counts only entries as players on the dashboard (KAN-369)', async () => {
+    const w = await world()
+    const ids = await w.add(4)
+    await w.stores.players.update(ids[1], { registrationStatus: 'REJECTED' })
+    await w.stores.players.update(ids[2], { registrationStatus: 'WITHDRAWN' })
+    await w.stores.players.update(ids[3], { registrationStatus: 'DRAFT' })
+    const d = await w.tms.dashboard(w.t.id)
+    expect(d).toMatchObject({ players: 1, kumitePlayers: 1, kataPlayers: 0 })
+  })
+
   it('publishes a verified category at once in automatic mode', async () => {
     const w = await world({ settings: { requireWeighInForDraw: false, resultPublishing: 'auto' } })
     await w.add(2)
