@@ -49,7 +49,6 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   /** A date `offset` days from today, as YYYY-MM-DD. */
   const day = (offset) => new Date(today.getTime() + offset * 86_400_000).toISOString().slice(0, 10)
-  const year = (date) => Number(date.slice(0, 4))
   let officials = { referees: [], judges: [] }
 
   const name = (gender) => {
@@ -386,7 +385,7 @@ export async function seedScenarios(stores, { now = new Date(), log = console.lo
       for (const p of [...failed, ...refunded]) await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
     }
     // Entered by a coach through the link: "Submitted", waiting for the officer.
-    const submitted = await b.players(t, teamRows, 'Boys 14-15', [{ events: ['kumite'], weight: '-57 KG', count: 3 }], { status: 'SUBMITTED' })
+    await b.players(t, teamRows, 'Boys 14-15', [{ events: ['kumite'], weight: '-57 KG', count: 3 }], { status: 'SUBMITTED' })
     // A possible duplicate (same name and date of birth), confirmed on purpose.
     const original = all[0]
     await tms.createPlayer(admin, t.id, { teamId: original.teamId, name: original.name, dob: original.dob, gender: original.gender, events: original.events, weight: original.weight, club: original.club, district: original.district, state: original.state, country: 'India', confirmDuplicate: true })

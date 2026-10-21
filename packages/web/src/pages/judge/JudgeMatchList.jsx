@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Container, Box, Toolbar, Typography, Button, Grid, Paper, Alert, Chip, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, IconButton } from '@mui/material'
+import { Container, Box, Toolbar, Typography, Grid, Paper, Chip, Table, TableContainer, TableHead, TableBody, TableRow, TableCell, IconButton } from '@mui/material'
 import { Visibility } from '@mui/icons-material'
 import PageBar from '../../components/PageBar'
 import { competitors as competitorStore, matches as matchStore } from '../../data/domain'

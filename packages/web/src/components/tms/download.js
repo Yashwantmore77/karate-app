@@ -3,7 +3,7 @@ import { toExportCsv } from '@kumite/shared/registration.js'
 /** Hands the browser a file to save. CSV opens directly in Excel. */
 export function downloadText(filename, text, type = 'text/csv;charset=utf-8') {
   // A BOM so Excel reads UTF-8 names (accents, Devanagari) correctly.
-  const blob = new Blob([type.startsWith('text/csv') ? `﻿${text}` : text], { type })
+  const blob = new Blob([type.startsWith('text/csv') ? `\uFEFF${text}` : text], { type })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

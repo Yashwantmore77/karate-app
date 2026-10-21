@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createApp } from './index.js'
-import { createUser } from './auth/users.js'
 import { readOutbox, clearOutbox } from './lib/mailer.js'
 import { totp } from './auth/totp.js'
 

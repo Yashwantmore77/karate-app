@@ -222,7 +222,7 @@ describe('assigning a panel to a bout that already exists', () => {
     store.matches.update.mockResolvedValue({ ...EXISTING, refereeId: 'ref-uid-001' })
   })
 
-  const openPanelDialog = async (user, match = EXISTING) => {
+  const openPanelDialog = async (user) => {
     await screen.findByText('U14 Boys')
     await user.click(await screen.findByRole('button', { name: /assign officials/i }))
     return screen.getByRole('dialog')
@@ -238,7 +238,6 @@ describe('assigning a panel to a bout that already exists', () => {
   })
 
   it('shows how much of the panel is filled, on the row', async () => {
-    const user = userEvent.setup()
     renderPage()
     await screen.findByText('U14 Boys')
     expect(await screen.findByText('No referee')).toBeInTheDocument()
