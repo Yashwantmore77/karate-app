@@ -28,4 +28,6 @@ jobs:
       # npm ci also fails when package-lock.json and package.json disagree.
       - run: npm ci --no-audit --no-fund
       - run: npm test
+      # Report only (KAN-414): every rule warns, so this lists findings without failing.
+      - run: npm run lint
       - run: npm run build

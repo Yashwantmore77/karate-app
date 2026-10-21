@@ -199,6 +199,7 @@ npm test             # every package
 npm run test:api
 npm run test:web
 npm run test:shared
+npm run lint         # likely mistakes, as warnings (report only for now)
 ```
 
 The web tests never call a real API. Pages are tested against an in-memory
@@ -206,8 +207,9 @@ stand-in for the data layer (`packages/web/src/test/fakeDomain.js`), and the
 live console against an in-memory match channel that runs the real shared
 scoring engine (`packages/web/src/test/memoryMatchChannel.js`).
 
-GitHub Actions runs `npm ci`, `npm test` and `npm run build` on every pull
-request and on `main` (`.github/workflows/ci.yml`).
+GitHub Actions runs `npm ci`, `npm test`, `npm run lint` and `npm run build` on
+every pull request and on `main` (`.github/workflows/ci.yml`). The lint step
+lists its warnings in the job log but does not fail.
 
 ## Known gaps
 
