@@ -12,6 +12,9 @@ import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { paymentsEnabled } from '@kumite/shared/features.js'
 
+// Bouts that count: done or still to fight. A cancelled bout is neither.
+export const boutsToFight = (d) => (d.completedMatches || 0) + (d.pendingMatches || 0)
+
 const SUM_KEYS = ['teams', 'players', 'kataPlayers', 'kumitePlayers', 'pendingVerification', 'pendingPayment', 'pendingWeighIn', 'matches', 'completedMatches', 'liveMatches', 'pendingMatches', 'gold', 'silver', 'bronze']
 
 /**
@@ -35,9 +38,11 @@ export default function AdminDashboard({ profile }) {
 
   if (!rows) return <PageLoader label="Loading dashboard…" />
 
-  const total = Object.fromEntries(SUM_KEYS.map((k) => [k, rows.reduce((n, r) => n + (r.d?.[k] || 0), 0)]))
   const status = (t) => t.lifecycleStatus || 'DRAFT'
-  const running = rows.filter((r) => !['DRAFT', 'COMPLETED', 'ARCHIVED'].includes(status(r.t))).length
+  // Archived tournaments stay in the table but not in the totals.
+  const current = rows.filter((r) => status(r.t) !== 'ARCHIVED')
+  const total = Object.fromEntries(SUM_KEYS.map((k) => [k, current.reduce((n, r) => n + (r.d?.[k] || 0), 0)]))
+  const running = current.filter((r) => status(r.t) === 'LIVE').length
   const manage = (t, tab) => navigate(`/admin/tournament/${t.id}/manage${tab ? `?tab=${tab}` : ''}`)
 
   const actions = [
@@ -61,13 +66,13 @@ export default function AdminDashboard({ profile }) {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          ['Tournaments', rows.length], ['Running now', running], ['Teams', total.teams], ['Players', total.players],
+          ['Tournaments', current.length], ['Live now', running], ['Teams', total.teams], ['Players', total.players],
           ['Kata entries', total.kataPlayers], ['Kumite entries', total.kumitePlayers],
           ['Awaiting approval', total.pendingVerification, total.pendingVerification ? 'warning' : null],
           ...(paymentsEnabled() ? [['Payment pending', total.pendingPayment, total.pendingPayment ? 'warning' : null]] : []),
           ['Weigh-in pending', total.pendingWeighIn, total.pendingWeighIn ? 'warning' : null],
           ['Matches live', total.liveMatches, total.liveMatches ? 'error' : null],
-          ['Matches done', `${total.completedMatches} / ${total.matches}`],
+          ['Matches done', `${total.completedMatches} / ${boutsToFight(total)}`],
           ['Medals', total.gold + total.silver + total.bronze],
         ].map(([label, value, tone]) => (
           <Grid key={label} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}><StatCard label={label} value={value} tone={tone} /></Grid>
@@ -97,7 +102,7 @@ export default function AdminDashboard({ profile }) {
                   <TableCell align="right">{d?.players ?? '—'}</TableCell>
                   <TableCell align="right">{d?.pendingVerification ? <Button size="small" color="warning" data-tip="Registrations waiting for approval: opens Registrations" onClick={() => manage(t, 'registrations')}>{d.pendingVerification}</Button> : 0}</TableCell>
                   <TableCell align="right">{d?.pendingWeighIn ? <Button size="small" data-tip="Kumite players without a passed weigh-in: opens Weigh-in" onClick={() => manage(t, 'weighin')}>{d.pendingWeighIn}</Button> : 0}</TableCell>
-                  <TableCell align="right">{d ? `${d.completedMatches}/${d.matches}` : '—'}</TableCell>
+                  <TableCell align="right">{d ? `${d.completedMatches}/${boutsToFight(d)}` : '—'}</TableCell>
                   <TableCell align="right">{d?.liveMatches || 0}</TableCell>
                   <TableCell align="right">{d ? d.gold + d.silver + d.bronze : '—'}</TableCell>
                   <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
