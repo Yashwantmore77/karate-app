@@ -1766,6 +1766,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * there is no competition. (Moving the player is a category override.)
    */
   async function decideSingleEntry(actor, tournamentId, key, decision, reason = null) {
+    await writableTournament(tournamentId)
     const division = (await divisions(tournamentId)).find((d) => d.key === key)
     if (!division) throw missing('division_not_found')
     if (division.playerIds.length !== 1) throw rule('not_single_entry')
@@ -2799,6 +2800,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * the audit log; clearing it returns to the medals the results produce.
    */
   async function overrideMedals(actor, tournamentId, key, medals, reason) {
+    // KAN-331: an archived tournament is read-only, its medals included.
+    await writableTournament(tournamentId)
     if (!reason) throw invalid('reason_required')
     await assertNotLocked(tournamentId, key)
     const division = (await divisions(tournamentId)).find((d) => d.key === key)

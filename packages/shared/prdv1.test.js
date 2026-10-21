@@ -392,6 +392,17 @@ describe('PRD v1 §16 results lifecycle', () => {
     expect(await gold()).toBe(blue)
   })
 
+  it('refuses medal changes on an archived tournament (KAN-331)', async () => {
+    const w = await world({ settings: { requireWeighInForDraw: false } })
+    const { tms, t } = w
+    const [only] = await w.add(1)
+    const [res] = await tms.results(t.id)
+    await w.stores.tournaments.update(t.id, { lifecycleStatus: 'ARCHIVED' })
+    await expect(tms.overrideMedals(admin, t.id, res.key, [{ playerId: only, medal: 'gold' }], 'Late protest')).rejects.toMatchObject({ code: 'tournament_archived' })
+    await expect(tms.decideSingleEntry(admin, t.id, res.key, 'award')).rejects.toMatchObject({ code: 'tournament_archived' })
+    expect(await w.stores.medalOverrides.list({ tournamentId: t.id })).toEqual([])
+  })
+
   it('publishes a verified category at once in automatic mode', async () => {
     const w = await world({ settings: { requireWeighInForDraw: false, resultPublishing: 'auto' } })
     await w.add(2)
