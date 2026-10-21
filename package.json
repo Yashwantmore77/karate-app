@@ -14,8 +14,15 @@
     "test:web": "npm run test:run -w @kumite/web",
     "test:api": "npm run test:run -w @kumite/api",
     "test:shared": "npm run test:run -w @kumite/shared",
+    "lint": "eslint .",
     "docs:tools": "npm install --prefix docs/operator-handbook/tools --no-audit --no-fund --silent",
     "docs:pdf": "npm run docs:tools && node docs/operator-handbook/tools/make-pdf.mjs",
     "docs:screenshots": "npm run docs:tools && node docs/operator-handbook/tools/screenshots.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "16.5.0"
   }
 }

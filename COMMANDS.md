@@ -175,11 +175,13 @@ npm test
 npm run test:api
 npm run test:web
 npm run test:shared
+npm run lint
 npm run build
 ```
 
-`npm test` runs every test. The next three run one part each. `npm run build`
-builds the website — the same build Vercel runs.
+`npm test` runs every test. The next three run one part each. `npm run lint`
+lists likely mistakes (unused code, hook dependencies) as warnings; it does not
+fail on them yet. `npm run build` builds the website — the same build Vercel runs.
 
 ---
 
