@@ -11,6 +11,12 @@ import { boutOutcome } from './results.js'
 const identity = (p) => `${normalizeName(p.name)}|${p.dob || ''}`
 const clubKey = (name) => normalizeName(name || '') || '—'
 const MEDALS = ['gold', 'silver', 'bronze']
+// A bout won without being fought: the opponent did not come (walkover,
+// no-show) or had withdrawn (kiken). It is no win or loss for either athlete;
+// the winner's are counted apart, as walkovers. A disqualification ends a bout
+// that was fought, so it still counts.
+const UNFOUGHT = new Set(['walkover', 'no_show', 'kiken'])
+export const unfought = (m) => UNFOUGHT.has(m.result?.method) || ['WALKOVER', 'NO_SHOW', 'KIKEN'].includes(m.status)
 
 /**
  * Builds the analytics from each tournament's data:
@@ -31,7 +37,7 @@ export function buildAnalytics(events) {
 
   const clubOf = (name) => {
     const key = clubKey(name)
-    if (!clubs.has(key)) clubs.set(key, { key, name: name || 'No club', tournaments: new Set(), entries: 0, gold: 0, silver: 0, bronze: 0, won: 0, lost: 0, history: [] })
+    if (!clubs.has(key)) clubs.set(key, { key, name: name || 'No club', tournaments: new Set(), entries: 0, gold: 0, silver: 0, bronze: 0, won: 0, lost: 0, walkovers: 0, history: [] })
     return clubs.get(key)
   }
 
@@ -42,19 +48,19 @@ export function buildAnalytics(events) {
     const byPlayer = new Map(players.map((p) => [p.id, p]))
     const perClub = new Map()
     const entry = (club) => {
-      if (!perClub.has(club.key)) perClub.set(club.key, { tournamentId: tournament.id, tournament: tournament.name, date, entries: 0, gold: 0, silver: 0, bronze: 0, won: 0, lost: 0 })
+      if (!perClub.has(club.key)) perClub.set(club.key, { tournamentId: tournament.id, tournament: tournament.name, date, entries: 0, gold: 0, silver: 0, bronze: 0, won: 0, lost: 0, walkovers: 0 })
       return perClub.get(club.key)
     }
 
     for (const p of players) {
       if (['DRAFT', 'REJECTED'].includes(p.registrationStatus)) continue
       const key = athleteKey(p)
-      if (!athletes.has(key)) athletes.set(key, { key, name: p.name, gender: p.gender || null, club: clubName(p), tournaments: new Set(), gold: 0, silver: 0, bronze: 0, won: 0, lost: 0, history: [] })
+      if (!athletes.has(key)) athletes.set(key, { key, name: p.name, gender: p.gender || null, club: clubName(p), tournaments: new Set(), gold: 0, silver: 0, bronze: 0, won: 0, lost: 0, walkovers: 0, history: [] })
       const a = athletes.get(key)
       a.name = p.name
       a.club = clubName(p) || a.club
       a.tournaments.add(tournament.id)
-      a.history.push({ tournamentId: tournament.id, tournament: tournament.name, date, club: clubName(p), medals: [], won: 0, lost: 0 })
+      a.history.push({ tournamentId: tournament.id, tournament: tournament.name, date, club: clubName(p), medals: [], won: 0, lost: 0, walkovers: 0 })
       const club = clubOf(clubName(p))
       club.tournaments.add(tournament.id)
       club.entries += 1
@@ -69,6 +75,16 @@ export function buildAnalytics(events) {
       const outcome = boutOutcome(m)
       if (!outcome || !m.winner || m.winner === 'tie' || !m.akaPlayerId || !m.aoPlayerId) continue
       const [winner, loser] = m.winner === 'red' ? [m.akaPlayerId, m.aoPlayerId] : [m.aoPlayerId, m.akaPlayerId]
+      if (unfought(m)) {
+        const p = byPlayer.get(winner)
+        if (!p) continue
+        const h = lastOf(winner)
+        const club = clubOf(clubName(p))
+        const a = athletes.get(athleteKey(p))
+        if (a) a.walkovers += 1
+        club.walkovers += 1; entry(club).walkovers += 1; if (h) h.walkovers += 1
+        continue
+      }
       for (const [id, won] of [[winner, true], [loser, false]]) {
         const p = byPlayer.get(id)
         if (!p) continue
@@ -100,7 +116,7 @@ export function buildAnalytics(events) {
     tournaments.push({
       id: tournament.id, name: tournament.name, date, status: tournament.lifecycleStatus || null,
       players: players.filter((p) => !['DRAFT', 'REJECTED'].includes(p.registrationStatus)).length,
-      teams: teams.length, bouts: matches.filter((m) => boutOutcome(m)).length, medals: medalCount,
+      teams: teams.length, bouts: matches.filter((m) => boutOutcome(m) && !unfought(m)).length, medals: medalCount,
     })
   }
 
