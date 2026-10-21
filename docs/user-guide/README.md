@@ -1088,6 +1088,8 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | That account belongs to another organisation. | Work only with your own organisation's accounts and tournaments |
 | This organisation still has tournaments or accounts. | Super Admin: move or delete them first, then delete the organisation |
 | That short name is already used. | Choose another short name |
+| A short name uses only lowercase letters, numbers and hyphens, with no spaces. | For example `maharashtra-ka`, not `Maharashtra KA` |
+| The name is missing, too short or too long. | Type a name of a sensible length: an organisation name is 2 to 120 characters, a tournament name 3 to 120 |
 
 ## 14. Karate terms on screen
 

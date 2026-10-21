@@ -129,6 +129,8 @@ export const ERROR_TEXT = {
   organization_forbidden: 'That account belongs to another organisation.',
   organization_in_use: 'This organisation still has tournaments or accounts.',
   slug_taken: 'That short name is already used.',
+  invalid_slug: 'A short name uses only lowercase letters, numbers and hyphens, with no spaces.',
+  invalid_name: 'The name is missing, too short or too long.',
   role_forbidden: 'Only a super admin can create that role.',
   terms_not_accepted: 'Accept the terms and conditions to register.',
   // PRD v1
