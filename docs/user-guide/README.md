@@ -643,7 +643,8 @@ Each category's result moves from Provisional to Verified, Published and Locked.
 - **Generate final stage** appears when every pool bout of a category is finished (Step 5).
 - **Decide single entries**: a category with one player is awarded the gold or recorded as "no competition".
 - **Override medals** changes a medal by hand; it needs the result-override privilege and a reason.
-- **Unpublish** takes results off the public page; **Re-publish** puts them back.
+- **Unpublish** takes results off the public page; **Re-publish** puts them back. Unpublished medals also leave the medal list, the medal tally and the medal counts until they are published again.
+- A correction or an override in a published category updates its medals in the medal list and tally at once. A locked category keeps the medals it was locked with.
 - Unlocking a locked result needs a reason. After the tournament is Completed, results change only after moving it back to Live (reopen privilege and a reason).
 
 ### Certificates
