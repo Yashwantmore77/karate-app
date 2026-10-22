@@ -251,8 +251,12 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
                 onChange={(e) => setCorrect({ ...correct, resultType: e.target.value, winner: correct.winner === 'tie' && e.target.value !== 'COMPLETED' ? 'red' : correct.winner })}>
                 {Object.entries(RESULT_TYPE_LABEL).map(([k, label]) => <MenuItem key={k} value={k}>{label}</MenuItem>)}
               </TextField>
-              {!['COMPLETED', 'CANCELLED'].includes(correct?.resultType) && (
-                <TextField fullWidth required sx={{ mb: 2 }} label="Finish reason" helperText="e.g. Injury, did not report at call 3, hansoku"
+              {correct?.resultType === 'CANCELLED' && (
+                <Alert severity="warning" sx={{ mb: 2 }}>Cancelling takes the bout off the mats with no result: it counts for nobody. Put it back with Change status → Scheduled.</Alert>
+              )}
+              {correct?.resultType && correct.resultType !== 'COMPLETED' && (
+                <TextField fullWidth required sx={{ mb: 2 }} label={correct.resultType === 'CANCELLED' ? 'Why is it cancelled?' : 'Finish reason'}
+                  helperText={correct.resultType === 'CANCELLED' ? 'e.g. Wrong pairing, mat closed, both players withdrew' : 'e.g. Injury, did not report at call 3, hansoku'}
                   value={correct?.finishReason || ''} onChange={(e) => setCorrect({ ...correct, finishReason: e.target.value })} />
               )}
               {correct?.resultType !== 'CANCELLED' && <TextField select fullWidth label="Winner" value={correct?.winner || 'red'} onChange={(e) => setCorrect({ ...correct, winner: e.target.value })}>
@@ -268,7 +272,10 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCorrect(null)}>Cancel</Button>
-          <Button variant="contained" disabled={action.busy || !!(correct && ((boutOutcome(correct.m) && !correct.reason.trim()) || (!['COMPLETED', 'CANCELLED'].includes(correct.resultType) && !correct.finishReason?.trim())))} onClick={async () => {
+          <Button variant="contained" disabled={action.busy || !!(correct && ((boutOutcome(correct.m) && !correct.reason.trim()) || (correct.resultType !== 'COMPLETED' && !correct.finishReason?.trim())))}
+            color={correct?.resultType === 'CANCELLED' ? 'error' : 'primary'}
+            data-tip={correct?.resultType === 'CANCELLED' ? 'Cancels the bout with no result. You give the reason above.' : undefined}
+            onClick={async () => {
             const c = correct
             setCorrect(null)
             await action.run(() => tms.correctResult(tid, c.m.id, {
@@ -276,7 +283,7 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
               ...(c.finishReason?.trim() ? { finishReason: c.finishReason.trim() } : {}),
             }, c.reason || null), 'Result saved')
             load()
-          }}>Save result</Button>
+          }}>{correct?.resultType === 'CANCELLED' ? 'Cancel this bout' : 'Save result'}</Button>
         </DialogActions>
       </Dialog>
     </Stack>

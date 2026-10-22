@@ -1936,7 +1936,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (finished && !reason) throw invalid('correction_reason_required')
     if (finished && actor && !can(actor.role, P.SCORE_CORRECT)) throw denied('score_correction_forbidden')
     if (!RESULT_TYPES.includes(resultType)) throw invalid('invalid_resultType')
-    if (EXCEPTIONAL_RESULTS.includes(resultType) && resultType !== 'CANCELLED' && !(finishReason || reason)) throw invalid('finish_reason_required')
+    // KAN-268: a cancellation needs its reason too, like every other exceptional ending.
+    if (EXCEPTIONAL_RESULTS.includes(resultType) && !(finishReason || reason)) throw invalid('finish_reason_required')
     if (resultType === 'MANUAL_OVERRIDE' && actor && !can(actor.role, P.RESULT_OVERRIDE)) throw denied('result_override_forbidden')
     await assertResultEditable(actor, tournamentId, category.divisionKey, reason)
     // Section 27: a cancelled bout has no winner and counts for nobody; a

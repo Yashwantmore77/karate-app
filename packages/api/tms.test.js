@@ -227,8 +227,10 @@ describe('PRD tournament management over HTTP', () => {
 
     const wo = await call('POST', `/tournaments/${t}/matches/${m1.id}/correct`, { winner: 'red', resultType: 'WALKOVER', finishReason: 'Opponent did not report' }, tokens.admin)
     expect(wo.body.match, JSON.stringify(wo.body)).toMatchObject({ status: 'completed', winner: 'red', result: { type: 'WALKOVER' } })
-    const cancelled = await call('POST', `/tournaments/${t}/matches/${m2.id}/correct`, { resultType: 'CANCELLED' }, tokens.admin)
-    expect(cancelled.body.match).toMatchObject({ status: 'cancelled', winner: null })
+    // a cancellation needs its reason, like every other exceptional ending
+    expect((await call('POST', `/tournaments/${t}/matches/${m2.id}/correct`, { resultType: 'CANCELLED' }, tokens.admin)).body.error).toBe('finish_reason_required')
+    const cancelled = await call('POST', `/tournaments/${t}/matches/${m2.id}/correct`, { resultType: 'CANCELLED', finishReason: 'Mat closed' }, tokens.admin)
+    expect(cancelled.body.match).toMatchObject({ status: 'cancelled', winner: null, result: { finishReason: 'Mat closed' } })
     const listed = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.referee)).body.matches
     expect(listed.find((m) => m.id === m1.id).resultType).toBe('WALKOVER')
   })
