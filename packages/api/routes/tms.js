@@ -432,6 +432,13 @@ export function tmsRoutes(tms, stores) {
     const body = validate(req.body, { playerId: { ...ID, required: true }, fromPoolId: { ...ID, required: true }, toPoolId: { ...ID, required: true }, reason: REASON, force: { type: 'boolean' } })
     res.json({ pools: await tms.movePlayer(withMeta(req), tid(req), body) })
   })
+  // The pool editor: a category's pools as laid out on screen, in one go.
+  const POOL_LAYOUT = { id: { ...ID, nullable: true }, playerIds: { type: 'array', required: true, items: ID, maxItems: 512, unique: true } }
+  router.put('/:tid/pools/arrangement', requirePermission(P.POOL_MANAGE), async (req, res) => {
+    const { divisionKey, pools, reason, force } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, pools: { type: 'array', required: true, items: { type: 'object' }, maxItems: 64 }, reason: REASON, force: { type: 'boolean' } })
+    const layout = pools.map((pool) => validate(pool, POOL_LAYOUT))
+    res.json({ pools: await tms.arrangePools(withMeta(req), tid(req), divisionKey, layout, { reason, force }) })
+  })
   // PRD v1 §12 explicit qualification.
   router.post('/:tid/pools/:id/qualifiers', requirePermission(P.RESULT_MANAGE), async (req, res) => {
     const { playerIds, reason } = validate(req.body, { playerIds: { type: 'array', required: true, items: ID, maxItems: 64, unique: true }, reason: REASON })

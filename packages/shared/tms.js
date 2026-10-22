@@ -1751,6 +1751,61 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return listPools(tournamentId, from.divisionKey)
   }
 
+  // A category's pools are rewritten while no one creates its bouts.
+  const arrangePools = (actor, tournamentId, key, layout, options) => boutsTurn(tournamentId, () => arrangePoolsNow(actor, tournamentId, key, layout, options))
+
+  /**
+   * The Draw tab's pool editor: one category's pools as the operator laid
+   * them out, saved in one go. `layout` lists the pools in order as
+   * { id, playerIds }, with no id for a pool added on screen. Every drawn
+   * player is in exactly one pool; a pool left empty is dropped and the rest
+   * are lettered A, B, C … in order. Over the pool maximum only on purpose,
+   * with a reason, as for a single move.
+   */
+  async function arrangePoolsNow(actor, tournamentId, key, layout, { reason = null, force = false } = {}) {
+    const tournament = await writableTournament(tournamentId)
+    if (tournament.drawLocked) throw rule('draw_locked')
+    const current = await listPools(tournamentId, key)
+    if (!current.length) throw missing('pools_not_found')
+    if (!Array.isArray(layout) || !layout.length) throw invalid('invalid_layout')
+    const byId = new Map(current.map((p) => [p.id, p]))
+    const ids = layout.map((p) => p.id).filter(Boolean)
+    if (ids.some((id) => !byId.has(id)) || new Set(ids).size !== ids.length) throw invalid('invalid_pool')
+    const drawn = new Set(current.flatMap((p) => p.playerIds))
+    const placed = layout.flatMap((p) => p.playerIds)
+    if (placed.length !== drawn.size || new Set(placed).size !== placed.length || placed.some((id) => !drawn.has(id))) throw invalid('players_mismatch')
+
+    const kept = layout.filter((p) => p.playerIds.length)
+    // A knockout category is one list; its bracket is arranged on the Bracket tab.
+    if (current[0].poolSystem === 'knockout' && kept.length > 1) throw rule('knockout_single_list')
+    // One player alone in a pool has nobody to fight.
+    if (kept.some((p) => p.playerIds.length < 2)) throw rule('pool_too_small')
+    const max = current[0].poolSize || settingsOf(tournament).poolSize
+    if (kept.some((p) => p.playerIds.length > max) && !(force && reason)) throw rule('pool_full', { max })
+
+    const same = kept.length === current.length && kept.every((p, i) => p.id === current[i].id && p.playerIds.join() === current[i].playerIds.join())
+    if (same) return current
+    await clearBridge(tournamentId, key)
+    const poolOf = (pools, id) => pools.find((p) => p.playerIds.includes(id))
+    const moved = placed.map((id) => ({ playerId: id, from: poolOf(current, id).name, to: poolName(kept.indexOf(poolOf(kept, id))) })).filter((m) => m.from !== m.to)
+    // A pool added on screen is drawn like its neighbours.
+    const division = (({ divisionKey, event, ageGroupId, weightCategoryId, label, method, drawSeed, poolSize, poolSystem }) => ({ tournamentId, divisionKey, event, ageGroupId, weightCategoryId, label, method, drawSeed, poolSize, poolSystem }))(current[0])
+    for (const [i, pool] of kept.entries()) {
+      const fields = { name: poolName(i), playerIds: pool.playerIds }
+      if (pool.id) {
+        const before = byId.get(pool.id)
+        await stores.pools.update(pool.id, before.qualifiers ? { ...fields, qualifiers: before.qualifiers.filter((id) => pool.playerIds.includes(id)) } : fields)
+      } else {
+        await stores.pools.insert({ ...division, ...fields, addedAt: iso() })
+      }
+    }
+    const keptIds = new Set(kept.map((p) => p.id).filter(Boolean))
+    for (const pool of current) if (!keptIds.has(pool.id)) await stores.pools.remove(pool.id)
+    const sizes = (pools) => pools.map((p, i) => ({ pool: p.name || poolName(i), players: p.playerIds.length }))
+    await record(actor, { tournamentId, action: A.POOLS_ARRANGED, entity: 'division', entityId: key, before: { pools: sizes(current) }, after: { pools: sizes(kept), moved }, reason })
+    return listPools(tournamentId, key)
+  }
+
   /** PRD v1 §12 explicit qualification: the admin names a pool's qualifiers. */
   async function setQualifiers(actor, tournamentId, poolId, playerIds, reason = null) {
     await writableTournament(tournamentId)
@@ -3642,7 +3697,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     teams, teamMembers, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
     setRegistrationStatus, recordPayment, recordWeighIn,
     // categorisation and draw
-    categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, drawImpact, setQualifiers, decideSingleEntry,
+    categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, arrangePools, drawImpact, setQualifiers, decideSingleEntry,
     // matches and results
     generateMatches, listMatches, correctResult, attention, swapCorners, callMatch, setRunningEvent, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,

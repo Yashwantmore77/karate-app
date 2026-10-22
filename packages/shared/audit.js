@@ -16,6 +16,7 @@ export const AUDIT_ACTIONS = {
   DRAW_UNLOCKED: 'draw.unlocked',
   POOLS_GENERATED: 'pools.generated',
   PLAYER_MOVED_POOL: 'pool.player_moved',
+  POOLS_ARRANGED: 'pools.arranged',
   MATCH_RESULT_CHANGED: 'match.result_changed',
   SCORE_UNDONE: 'match.score_undone',
   TOURNAMENT_UPDATED: 'tournament.updated',

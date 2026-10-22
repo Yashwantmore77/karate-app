@@ -176,6 +176,36 @@ describe('PRD v1 §12-13 draw and matches', () => {
     await tms.movePlayer(admin, t.id, { playerId: again[0].playerIds[0], fromPoolId: again[0].id, toPoolId: again[1].id, force: true, reason: 'Coach clash' })
   })
 
+  it('saves a category laid out by hand: players moved, a pool added, an emptied pool dropped', async () => {
+    const { tms, t, stores } = await ready({ players: 8, settings: { poolSize: 4 } })
+    const [a, b] = await tms.generatePools(admin, t.id, { seed: 1 })
+    const key = a.divisionKey
+    // Two from A and one from B into a new pool; nobody is lost or doubled.
+    await expect(tms.arrangePools(admin, t.id, key, [{ id: a.id, playerIds: a.playerIds.slice(1) }, { id: b.id, playerIds: b.playerIds }])).rejects.toMatchObject({ code: 'players_mismatch' })
+    await expect(tms.arrangePools(admin, t.id, key, [{ id: a.id, playerIds: a.playerIds }, { id: b.id, playerIds: [...b.playerIds, a.playerIds[0]] }])).rejects.toMatchObject({ code: 'players_mismatch' })
+    await expect(tms.arrangePools(admin, t.id, key, [{ id: a.id, playerIds: a.playerIds.slice(1) }, { id: b.id, playerIds: b.playerIds }, { playerIds: [a.playerIds[0]] }])).rejects.toMatchObject({ code: 'pool_too_small' })
+    await expect(tms.arrangePools(admin, t.id, key, [{ id: a.id, playerIds: a.playerIds.slice(1) }, { id: b.id, playerIds: [...b.playerIds, a.playerIds[0]] }])).rejects.toMatchObject({ code: 'pool_full' })
+    const pools = await tms.arrangePools(admin, t.id, key, [
+      { id: a.id, playerIds: a.playerIds.slice(2) },
+      { id: b.id, playerIds: b.playerIds.slice(1) },
+      { playerIds: [a.playerIds[0], a.playerIds[1], b.playerIds[0]] },
+    ])
+    expect(pools.map((p) => [p.name, p.playerIds.length])).toEqual([['A', 2], ['B', 3], ['C', 3]])
+    expect(pools[2]).toMatchObject({ divisionKey: key, poolSystem: 'round_robin', poolSize: 4 })
+    const [entry] = await stores.auditLog.list({ action: 'pools.arranged' })
+    expect(entry.changes.moved.to).toHaveLength(3)
+
+    // Emptying a pool drops it, and the rest are lettered again.
+    const [, b2, c2] = pools
+    const after = await tms.arrangePools(admin, t.id, key, [{ id: pools[0].id, playerIds: [] }, { id: b2.id, playerIds: [...b2.playerIds, pools[0].playerIds[0]] }, { id: c2.id, playerIds: [...c2.playerIds, pools[0].playerIds[1]] }])
+    expect(after.map((p) => [p.name, p.playerIds.length])).toEqual([['A', 4], ['B', 4]])
+    expect(await stores.pools.get(pools[0].id)).toBeFalsy()
+
+    // Nothing moves once the draw is locked.
+    await tms.setDrawLock(admin, t.id, true)
+    await expect(tms.arrangePools(admin, t.id, key, after.map((p) => ({ id: p.id, playerIds: p.playerIds })))).rejects.toMatchObject({ code: 'draw_locked' })
+  })
+
   it('splits evenly when uneven pools are not allowed, and refuses seeded draws when seeding is off', async () => {
     expect(poolSizes(18, 8, 'equal')).toEqual([6, 6, 6])
     expect(poolSizes(10, 8, 'equal')).toEqual([5, 5])
