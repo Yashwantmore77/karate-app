@@ -144,7 +144,7 @@ export const ERROR_TEXT = {
   certificates_not_public: 'Certificates are not published for this tournament.',
   different_division: 'Players can only move between pools of the same category.',
   email_taken: 'An account with that email already exists.',
-  finish_reason_required: 'Give a finish reason for a walkover, no-show, kiken, disqualification or override.',
+  finish_reason_required: 'Give a finish reason for a walkover, no-show, kiken, disqualification, override or cancellation.',
   invalid_credentials: 'Wrong email or password.',
   invalid_two_factor: 'That code did not match.',
   two_factor_required: 'Enter the code from your authenticator app.',
