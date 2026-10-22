@@ -489,7 +489,7 @@ Use **Enter result** when a bout is decided off the console. Choose how it ended
 | Kiken | The opponent forfeited | A finish reason |
 | Disqualification | The opponent was disqualified | A finish reason |
 | Manual decision | An official override | A finish reason and the result-override privilege |
-| Cancelled | No result; counts for nobody | — |
+| Cancelled | No result; counts for nobody. The button reads **Cancel this bout** | Why it is cancelled |
 
 - Changing a finished bout needs a reason and the score-correction privilege. Both are written to the audit log.
 - A cancelled bout counts as finished too: the dialog says it was cancelled and why, and saving a result on it is a correction that needs a reason. To fight it instead, use **Change status → Scheduled** to put it back in the queue.
@@ -1044,7 +1044,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | This bout has started; corners can no longer be swapped. | Swap only before the bout starts |
 | This bout is already decided. | Use Correct result, with a reason |
 | Another device is running this mat | If that device is gone or wrong, press **Take over** |
-| Give a finish reason for a walkover, no-show, kiken, disqualification or override. | Type what happened, for example "AO did not report after three calls" |
+| Give a finish reason for a walkover, no-show, kiken, disqualification, override or cancellation. | Type what happened, for example "AO did not report after three calls" or "Wrong pairing" |
 | Changing a completed result needs a reason (Rule 6). | Type the reason; the change goes to the audit log |
 | Correcting a decided bout needs the score-correction privilege. | Ask a tournament admin |
 | The round has not started yet. The admin starts it once judges are assigned. | Judge: wait. Admin: seat the judges and press Start round |
