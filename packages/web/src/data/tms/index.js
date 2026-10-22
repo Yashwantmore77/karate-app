@@ -91,6 +91,7 @@ export const ERROR_TEXT = {
   players_mismatch: 'The pools were changed on another screen. Discard your changes and try again.',
   pool_too_small: 'Every pool needs at least two players. Move the last player out, or move another one in.',
   knockout_single_list: 'A knockout category is one list. Arrange its bouts on the Bracket tab.',
+  not_knockout: 'This category is fought in pools, not as a knockout sheet.',
   pools_not_found: 'This category has no pools yet. Draw it first.',
   registration_closed: 'Registration is not open for this tournament.',
   reason_required: 'A reason is required for this action.',

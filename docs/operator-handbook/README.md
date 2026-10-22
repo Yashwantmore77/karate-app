@@ -429,9 +429,21 @@ To undo it, click **Unlock entries** and type a reason. This works only until th
 - A category with only one player cannot have bouts. Needs attention lists it, and you award that player on the Results tab (Part 6).
 - To draw one category again, click **Redraw** on its row. This is possible only before any of its bouts has a result, and not once the category is confirmed.
 
-### Job 13: Check the pools and confirm each category
+### Job 13: Check the draw and confirm each category
 
-Each drawn category appears below the list with its pools. Change them if you need to, then confirm the category.
+Each drawn category appears below the list. Change it if you need to, then confirm it.
+
+**A knockout category** shows its draw sheet, like the paper one: the players in the first-round Aka and Ao boxes, the later rounds still empty, then 1st, 2nd and 3rd.
+
+1. To change who fights whom, drag a player (1) onto another box. The two players swap places. On a tablet, tap one box, then the other.
+2. An empty box (2) is a bye: that player goes straight to the next round. Drag a player into it to change who gets the bye. Every first-round bout needs at least one player.
+3. Click **Confirm** (3), then **Confirm** in the box. Until then nothing is saved; **Discard** puts the sheet back.
+
+![1 Drag a player onto another box 2 An empty box is a bye 3 Confirm](images/p3-sheet.webp)
+
+*1 Drag a player onto another box 2 An empty box is a bye 3 Confirm*
+
+**A category fought in pools** shows its pools instead.
 
 1. To move a player, drag their name (1) onto another pool. On a tablet, tap the name, then tap **Move here** on the pool they go to.
 2. To add a pool, click **Add pool** (2) and drag players into it. A pool needs at least two players. An empty pool is dropped when you save.
@@ -441,10 +453,13 @@ Each drawn category appears below the list with its pools. Change them if you ne
 
 *1 Drag a player to another pool 2 Add pool 3 Confirm*
 
-- The category's bouts are made at once, numbered after any bouts that already exist, and it shows **Confirmed**. The other categories stay open.
+For both:
+
+- The category's bouts are made at once, exactly as on the screen, numbered after any bouts that already exist, and it shows **Confirmed**. The other categories stay open. A knockout category's bracket is then on the Bracket tab.
 - When the last category is confirmed, the draw locks by itself and the teams are told the draw is published. You can skip Jobs 14 and 15.
 - A pool with more players than the maximum asks you for a reason, which is kept in the audit log.
-- **Save pools** keeps your changes without confirming, so you can come back to them.
+- **Save sheet** or **Save pools** keeps your changes without confirming, so you can come back to them.
+- **Print draw sheet** prints the sheet as it is saved, for the mat table.
 - To change a confirmed category, click **Reopen** and type a reason. Its bouts are deleted until you confirm it again. This is not possible once one of its bouts has a result.
 
 ### Job 14: Lock the draw

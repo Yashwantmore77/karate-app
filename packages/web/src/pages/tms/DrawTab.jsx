@@ -128,12 +128,15 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
         const own = pools.filter((p) => p.divisionKey === d.key && p.stage !== 'master')
         return (
           <PoolBoard key={d.key} tid={tid} division={d} pools={own} nameOf={nameOf} teamOf={teamOf}
-            maxSize={own[0]?.poolSize || settings.poolSize} drawLocked={drawLocked} action={action}
+            maxSize={own[0]?.poolSize || settings.poolSize} thirdPlace={!!settings.thirdPlaceMatch} drawLocked={drawLocked} action={action}
             onChanged={() => { reload(); load() }}
-            onPrint={() => printBracketSheets(sheetsForPlayers({
-              title: sheetTitle, event: d.label,
-              groups: own.map((p) => ({ label: `Pool ${p.name}`, names: p.playerIds.map((id) => nameOf(id)) })),
-            }), `${d.label} — draw sheet`)} />
+            onPrint={() => printBracketSheets(own[0]?.places?.length <= 16
+              // A knockout sheet prints as laid out, byes where they are.
+              ? [{ title: sheetTitle, event: d.label, size: own[0].places.length, columns: [own[0].places.map((id) => (id ? nameOf(id) : ''))] }]
+              : sheetsForPlayers({
+                title: sheetTitle, event: d.label,
+                groups: own.map((p) => ({ label: `Pool ${p.name}`, names: p.playerIds.map((id) => nameOf(id)) })),
+              }), `${d.label} — draw sheet`)} />
         )
       })}
 
