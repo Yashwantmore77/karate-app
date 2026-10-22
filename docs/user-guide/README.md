@@ -382,10 +382,10 @@ Locking entries freezes the player list. The draw then puts each category's play
 
 1. **Categorise players**: press **Run categorisation**. Every approved player is placed by gender, age on the Master Age Calculation Date, event and weight.
 2. **Draw pools**: press **Draw all categories**, or **Draw** on one category. **Redraw** replaces that category's pools.
-3. **Change the pools by hand** if you need to. Each drawn category is shown below the list with its pools:
-   - Drag a player onto another pool. On a tablet, tap the player, then tap **Move here** on the pool they go to.
-   - **Add pool** adds an empty pool for you to fill.
-   - Nothing is saved until you press **Save pools** or **Confirm**. **Discard** puts the pools back as they were.
+3. **Change the draw by hand** if you need to. Each drawn category is shown below the list:
+   - A **knockout** category shows its draw sheet, like the paper one: Aka and Ao boxes for the first round, then the later rounds, 1st, 2nd and 3rd. Drag a player onto another box to swap them, or onto an empty box (a bye). On a tablet, tap one box, then the other.
+   - A category fought in **pools** shows its pools. Drag a player onto another pool; on a tablet, tap the player, then tap **Move here** on the pool they go to. **Add pool** adds an empty pool for you to fill.
+   - Nothing is saved until you press **Save sheet** / **Save pools** or **Confirm**. **Discard** puts the draw back as it was.
 4. **Confirm** each category. Its pools become final and its bouts are created at once, while the other categories stay open. When every drawn category is confirmed, the draw locks by itself.
 5. Or do it all at once: **Lock the draw** on the Dashboard (**Lock draw**), then **Generate matches** (Draw / Pools, step 3). This creates every bout of every drawn category that has none yet.
 
@@ -393,9 +393,13 @@ Locking entries freezes the player list. The draw then puts each category's play
 
 *Draw / Pools: categorise, draw each category, then generate the matches.*
 
-![A drawn category: drag players between pools, add a pool, then Confirm.](images/draw-pools.webp)
+![A knockout category's draw sheet: drag players between the Aka and Ao boxes, then Confirm.](images/draw-sheet.webp)
 
-*A drawn category: drag players between pools, add a pool, then Confirm.*
+*A knockout category's draw sheet: drag players between the Aka and Ao boxes, then Confirm.*
+
+![A category in pools: drag players between pools, add a pool, then Confirm.](images/draw-pools.webp)
+
+*A category in pools: drag players between pools, add a pool, then Confirm.*
 
 How pools are made:
 
@@ -413,7 +417,7 @@ Rules for the draw:
 - Players can move only between pools of the same category, and only before the draw is locked.
 - Every pool needs at least two players. An empty pool is dropped when you save, and the rest are lettered A, B, C again.
 - A pool over the maximum size is allowed only with a reason, which goes in the audit log.
-- A straight knockout category is one list: arrange its bouts on the Bracket tab instead.
+- A straight knockout category is one list, drawn as its sheet. Every first-round bout needs at least one player; an empty box is a bye, and byes are refused when they are switched off. Its bouts are made exactly as on the sheet.
 - A confirmed category cannot be moved, changed or redrawn. **Draw all categories** leaves it as it is.
 - **Reopen** on a confirmed category needs a reason and the redraw privilege. It deletes the category's unplayed bouts, and is refused once one of its bouts has a result or while the draw is locked.
 - A redraw needs the redraw privilege and a confirmation. It is impossible once any bout in that category has a result.
@@ -876,7 +880,8 @@ The app checks every action on the server, so a rule cannot be skipped from any 
 | Redraw | Needs the redraw privilege and a confirmation; impossible once a bout in the category has a result |
 | Seeded draw | Only when seeding is allowed in Settings |
 | Moving a player | Only between pools of the same category, before the draw is locked and before the category is confirmed; a pool over the maximum needs a reason |
-| Pools | At least two players each; an empty pool is dropped when saved; a knockout category is one list |
+| Pools | At least two players each; an empty pool is dropped when saved; a knockout category is one list, drawn as its sheet |
+| Knockout sheet | Every player in one box; every first-round bout has at least one player; byes only when allowed |
 | Confirming a category | Its pools become final and its bouts are created; the draw locks when every drawn category is confirmed |
 | Reopening a category | A reason and the redraw privilege; refused once a bout has a result, or while the draw is locked |
 | Generating matches | The draw must be locked, or the category confirmed |
@@ -1026,6 +1031,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | The pools were changed on another screen. Discard your changes and try again. | Click **Discard**, then make your change again |
 | Every pool needs at least two players. Move the last player out, or move another one in. | Empty the pool, or give it a second player |
 | A knockout category is one list. Arrange its bouts on the Bracket tab. | Use **Arrange draw** on the Bracket tab |
+| This category is fought in pools, not as a knockout sheet. | Move players between its pools instead, or set the category to Knockout before drawing it |
 | This category has no pools yet. Draw it first. | Click **Draw** on the category's row |
 | Redrawing replaces existing pools and unplayed matches. Confirm to continue. | Confirm only if the old pools should go |
 | Matches in this division have results; the draw can no longer change. | Keep the draw; correct individual results instead |

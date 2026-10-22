@@ -367,6 +367,21 @@ await shot('p3-pools', async () => {
   const edge = await board.boundingBox()
   await save(page, 'p3-pools', around(page, boxes, { x0: 0, x1: 1280, y0: edge.y - 16, y1: edge.y + edge.height + 16 }))
 })
+await shot('p3-sheet', async () => {
+  const page = await open('admin', manage('senior-trials', 'draw'), { wait: 'Run categorisation', height: 900 })
+  // A knockout category: its sheet, one player dragged onto another box.
+  const board = page.locator('.MuiPaper-root').filter({ has: page.getByTestId('place-0') }).first()
+  await bring(page, board, 0.08)
+  await board.getByTestId('place-0').dragTo(board.getByTestId('place-3'))
+  await page.waitForTimeout(300)
+  const boxes = await mark(page, [
+    [board.getByTestId('place-3'), 1, { at: 'l' }],
+    [board.getByTestId('place-1'), 2, { at: 'l' }],
+    [board.getByRole('button', { name: 'Confirm' }), 3, { at: 'tr' }],
+  ])
+  const edge = await board.boundingBox()
+  await save(page, 'p3-sheet', around(page, boxes, { x0: 0, x1: 1280, y0: edge.y - 16, y1: edge.y + edge.height + 16 }))
+})
 await shot('p3-lockdraw', async () => {
   const page = await open('admin', manage('senior-trials', 'overview'), { wait: 'Tournament status', height: 760 })
   await mark(page, [[btn(page, 'Lock draw'), 1]])

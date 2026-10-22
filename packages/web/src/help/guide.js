@@ -357,7 +357,9 @@ export const HELP = {
     title: 'Step 2: Lock entries and draw pools',
     text: 'Entries must be locked first. Then draw the pools for each category: players are placed at random, keeping team-mates apart where possible. Below the list, each drawn category can be changed by hand and confirmed.',
     tips: [
-      'Drag a player to another pool (or tap the player, then "Move here"). "Add pool" adds an empty pool. Nothing is saved until "Save pools" or "Confirm"; "Discard" undoes your changes.',
+      'A knockout category shows its draw sheet: drag a player onto another Aka / Ao box to swap them, or onto an empty box for a bye (on a tablet, tap one box and then another).',
+      'In pools: drag a player to another pool (or tap the player, then "Move here"). "Add pool" adds an empty pool.',
+      'Nothing is saved until "Save sheet" / "Save pools" or "Confirm"; "Discard" undoes your changes.',
       '"Confirm" makes that category final and creates its matches at once; the other categories stay open. When every category is confirmed, the draw locks itself.',
       '"Reopen" (with a reason) deletes a confirmed category\'s unplayed matches so its pools can change again.',
       '"Print draw sheet" prints the paper bracket for the mat table (one sheet per pool, signed by four judges and the referee). "Blank draw sheet" prints an empty one.',

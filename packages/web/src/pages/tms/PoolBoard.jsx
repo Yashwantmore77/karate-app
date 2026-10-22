@@ -4,6 +4,7 @@ import { Add, Print, CheckCircle, LockOpen } from '@mui/icons-material'
 import { poolName } from '@kumite/shared/pools.js'
 import { tms } from '../../data/tms'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
+import DrawSheet from './DrawSheet'
 
 const layoutOf = (pools) => pools.map((p) => ({ id: p.id, playerIds: p.playerIds }))
 const sameLayout = (a, b) => a.length === b.length && a.every((p, i) => p.id === b[i].id && p.playerIds.join() === b[i].playerIds.join())
@@ -12,13 +13,18 @@ const bouts = (n) => (n * (n - 1)) / 2
 /**
  * One drawn category on the Draw tab. Players are dragged between pools (or
  * tapped, then "Move here" on the pool they go to); Add pool makes an empty
- * one. Nothing is saved until Save pools or Confirm, and Confirm also makes
- * the category final and creates its matches. A confirmed category is
- * reopened with a reason.
+ * one. A knockout category shows its sheet instead, where players are
+ * dragged between the Aka / Ao boxes. Nothing is saved until Save or
+ * Confirm, and Confirm also makes the category final and creates its
+ * matches. A confirmed category is reopened with a reason.
  */
-export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSize, drawLocked, action, onChanged, onPrint }) {
+export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSize, thirdPlace, drawLocked, action, onChanged, onPrint }) {
   const saved = layoutOf(pools)
   const [draft, setDraft] = useState(null)
+  // A knockout category's sheet: first-round places, AKA then AO, null for a bye.
+  const sheet = pools.length === 1 && pools[0].poolSystem === 'knockout' && Array.isArray(pools[0].places) ? pools[0].places : null
+  const [sheetDraft, setSheetDraft] = useState(null)
+  const places = sheetDraft || sheet
   const [dragging, setDragging] = useState(null)
   const [over, setOver] = useState(null)
   const [picked, setPicked] = useState(null)
@@ -26,13 +32,16 @@ export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSiz
 
   const layout = draft || saved
   const kept = layout.filter((p) => p.playerIds.length)
-  const changed = !!draft && !sameLayout(kept, saved)
+  const changed = sheet ? !!sheetDraft && sheetDraft.join() !== sheet.join() : !!draft && !sameLayout(kept, saved)
   const confirmed = pools.length > 0 && pools.every((p) => p.confirmedAt)
   const knockout = pools[0]?.poolSystem === 'knockout'
   const editable = !confirmed && !drawLocked
-  const lonely = kept.some((p) => p.playerIds.length < 2)
-  const overMax = kept.some((p) => p.playerIds.length > maxSize)
-  const needs = lonely ? 'Every pool needs at least two players, or none.' : undefined
+  const emptyBout = !!sheet && places.some((id, i) => i % 2 === 0 && !id && !places[i + 1])
+  const lonely = !sheet && kept.some((p) => p.playerIds.length < 2)
+  const overMax = !sheet && kept.some((p) => p.playerIds.length > maxSize)
+  const blocked = lonely || emptyBout
+  const needs = lonely ? 'Every pool needs at least two players, or none.' : emptyBout ? 'Every first-round bout needs at least one player.' : undefined
+  const firstBouts = sheet ? places.filter((id, i) => i % 2 === 0 && id && places[i + 1]).length : 0
 
   const move = (playerId, from, to) => {
     if (from === to) return
@@ -42,16 +51,23 @@ export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSiz
     setPicked(null)
   }
   const sent = () => layout.map(({ id, playerIds }) => (id ? { id, playerIds } : { playerIds }))
-  const done = () => { setDraft(null); setPicked(null); onChanged() }
+  const discard = () => { setDraft(null); setSheetDraft(null); setPicked(null) }
+  const done = () => { discard(); onChanged() }
+  const swap = (a, b) => {
+    const next = [...places]
+    ;[next[a], next[b]] = [next[b], next[a]]
+    setSheetDraft(next)
+  }
 
   const save = async (reason) => {
     setAsking(null)
-    const ok = await action.run(() => tms.arrangePools(tid, division.key, sent(), { reason, force: overMax }), 'Pools saved')
+    const ok = await action.run(() => (sheet ? tms.arrangeSheet(tid, division.key, places) : tms.arrangePools(tid, division.key, sent(), { reason, force: overMax })), sheet ? 'Sheet saved' : 'Pools saved')
     if (ok) done()
   }
   const confirm = async (reason) => {
     setAsking(null)
-    const ok = await action.run(() => tms.confirmPools(tid, division.key, { ...(draft ? { pools: sent() } : {}), reason, force: overMax }),
+    const edited = sheet ? (sheetDraft ? { places } : {}) : (draft ? { pools: sent() } : {})
+    const ok = await action.run(() => tms.confirmPools(tid, division.key, { ...edited, reason, force: overMax }),
       (r) => `${division.label} confirmed: ${r.created} match${r.created === 1 ? '' : 'es'} created${r.drawLocked ? '. Every category is confirmed, so the draw is now locked' : ''}`)
     if (ok) done()
   }
@@ -67,9 +83,11 @@ export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSiz
     setDragging(null)
     setOver(null)
   }
-  const confirmText = knockout
-    ? 'Its list becomes final and its bracket is made now.'
-    : `Its pools become final and its ${kept.reduce((n, p) => n + bouts(p.playerIds.length), 0)} matches are made now.`
+  const confirmText = sheet
+    ? `Its sheet becomes final and its ${firstBouts} first-round bout${firstBouts === 1 ? ' is' : 's are'} made now; the winners move on as results come in.`
+    : knockout
+      ? 'Its list becomes final and its bracket is made now.'
+      : `Its pools become final and its ${kept.reduce((n, p) => n + bouts(p.playerIds.length), 0)} matches are made now.`
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -82,10 +100,10 @@ export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSiz
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
           {editable && !knockout && <Button size="small" startIcon={<Add />} onClick={() => setDraft([...layout, { id: null, playerIds: [] }])}
             data-tip="Adds an empty pool to this category. Drag players into it; an empty pool is dropped when you save.">Add pool</Button>}
-          {editable && draft && <Button size="small" onClick={() => { setDraft(null); setPicked(null) }} data-tip="Puts the pools back as they were saved.">Discard</Button>}
-          {editable && changed && <Button size="small" variant="outlined" disabled={lonely} onClick={() => setAsking('save')}
-            data-tip="Saves these pools without confirming them. You can still change them, and no matches are made." data-tip-needs={needs}>Save pools</Button>}
-          {editable && <Button size="small" variant="contained" disabled={lonely} onClick={() => setAsking('confirm')}
+          {editable && (draft || sheetDraft) && <Button size="small" onClick={discard} data-tip="Puts the draw back as it was saved.">Discard</Button>}
+          {editable && changed && <Button size="small" variant="outlined" disabled={blocked} onClick={() => setAsking('save')}
+            data-tip="Saves this draw without confirming it. You can still change it, and no matches are made." data-tip-needs={needs}>{sheet ? 'Save sheet' : 'Save pools'}</Button>}
+          {editable && <Button size="small" variant="contained" disabled={blocked} onClick={() => setAsking('confirm')}
             data-tip="Saves these pools, makes them final and creates this category's matches. The other categories stay open." data-tip-needs={needs}>Confirm</Button>}
           {confirmed && <Button size="small" color="warning" startIcon={<LockOpen />} disabled={drawLocked} onClick={() => setAsking('reopen')}
             data-tip="Deletes this category's unplayed matches so its pools can be changed again. Needs a reason."
@@ -95,11 +113,15 @@ export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSiz
       </Stack>
       {editable && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Drag a player to another pool, or tap the player and then <b>Move here</b> on the pool. Nothing is saved until you click Save pools or Confirm.
+          {sheet
+            ? <>Drag a player onto another box to swap them, or onto an empty box to give a bye. On a tablet, tap one box and then another. Nothing is saved until you click Save sheet or Confirm.</>
+            : <>Drag a player to another pool, or tap the player and then <b>Move here</b> on the pool. Nothing is saved until you click Save pools or Confirm.</>}
         </Typography>
       )}
-      {confirmed && <Alert severity="success" sx={{ mb: 1 }}>Confirmed: this category's matches are on the Matches tab.</Alert>}
-      <Grid container spacing={2}>
+      {confirmed && <Alert severity="success" sx={{ mb: 1 }}>Confirmed: this category's matches are on the Matches tab{sheet ? ', and its bracket on the Bracket tab' : ''}.</Alert>}
+      {emptyBout && <Alert severity="error" sx={{ mb: 1 }}>A first-round bout has nobody in it. Move a player into it.</Alert>}
+      {sheet && <DrawSheet places={places} nameOf={nameOf} teamOf={teamOf} editable={editable} onSwap={swap} thirdPlace={thirdPlace} />}
+      {!sheet && <Grid container spacing={2}>
         {layout.map((pool, index) => {
           const n = pool.playerIds.length
           const target = editable && (dragging ? dragging.from !== index : picked && picked.from !== index)
@@ -133,10 +155,10 @@ export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSiz
             </Grid>
           )
         })}
-      </Grid>
+      </Grid>}
 
-      <ConfirmDialog open={asking === 'save'} title={`Save the pools of ${division.label}?`} confirmLabel="Save pools"
-        message={overMax ? `A pool has more than ${maxSize} players. Say why; it is kept in the audit log.` : 'The pools are saved. You can still change them; no matches are made yet.'}
+      <ConfirmDialog open={asking === 'save'} title={`Save the ${sheet ? 'sheet' : 'pools'} of ${division.label}?`} confirmLabel={sheet ? 'Save sheet' : 'Save pools'}
+        message={overMax ? `A pool has more than ${maxSize} players. Say why; it is kept in the audit log.` : `The ${sheet ? 'sheet is' : 'pools are'} saved. You can still change ${sheet ? 'it' : 'them'}; no matches are made yet.`}
         requireReason={overMax} onClose={() => setAsking(null)} onConfirm={save} />
       <ConfirmDialog open={asking === 'confirm'} title={`Confirm ${division.label}?`} confirmLabel="Confirm"
         message={`${confirmText} The other categories stay open.${overMax ? ` A pool has more than ${maxSize} players: say why; it is kept in the audit log.` : ''}`}

@@ -11,16 +11,7 @@ import { HelpTitle } from '../../components/help/InfoTip'
 import { PageLoader } from '../../components/Loader'
 import { printBracketSheets, placesFromBracket } from '../../components/tms/bracketSheet'
 import { RESULT_TYPE_LABEL } from './MatchesTab'
-
-// The board is drawn like the paper draw sheet: first-round AKA / AO boxes on
-// the left, each winner's box between the two it comes from, the final on the
-// right, then 1st / 2nd / 3rd and the 3rd/4th place bout.
-const BOX_W = 196
-const BOX_H = 36
-const STEP = 46
-const TOP = 8
-const AKA = '#e53935'
-const AO = '#1e63d6'
+import { BOX_W, BOX_H, AKA, AO, boardHeight, boardCentres } from '../../components/tms/bracketBoard'
 
 /**
  * Drag and drop on the bracket:
@@ -185,14 +176,8 @@ export default function BracketTab({ tournament, version, action, role }) {
   }
 
   // --- drawing ------------------------------------------------------------------
-  const height = TOP + size * STEP + 20
-  const centres = []
-  for (let col = 0, list = Array.from({ length: size }, (_, i) => TOP + STEP * (i + 0.5)); col < columns; col += 1) {
-    centres.push(list)
-    const next = []
-    for (let i = 0; i < list.length; i += 2) next.push((list[i] + list[i + 1]) / 2)
-    list = next
-  }
+  const height = boardHeight(size)
+  const centres = boardCentres(size)
 
   // A plain render function, not a component: a component made inside render
   // would remount every box on each drag-over and cancel the drag.

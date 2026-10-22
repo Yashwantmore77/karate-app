@@ -95,7 +95,8 @@ export const tms = {
   generatePools: (tid, opts) => send('POST', `${T(tid)}/pools/generate`, opts),
   // The Draw tab's pool editor: save a category's pools, confirm it (its matches are made), reopen it.
   arrangePools: async (tid, divisionKey, pools, { reason = null, force = false } = {}) => (await send('PUT', `${T(tid)}/pools/arrangement`, { divisionKey, pools, reason, force })).pools,
-  confirmPools: (tid, divisionKey, { pools = null, reason = null, force = false } = {}) => send('POST', `${T(tid)}/pools/confirm`, { divisionKey, pools, reason, force }),
+  arrangeSheet: async (tid, divisionKey, places) => (await send('PUT', `${T(tid)}/pools/arrangement`, { divisionKey, places })).pools,
+  confirmPools: (tid, divisionKey, { pools = null, places = null, reason = null, force = false } = {}) => send('POST', `${T(tid)}/pools/confirm`, { divisionKey, pools, places, reason, force }),
   reopenPools: async (tid, divisionKey, reason) => (await send('POST', `${T(tid)}/pools/reopen`, { divisionKey, reason })).pools,
   matches: async (tid, filter) => (await get(`${T(tid)}/matches${qs(filter)}`)).matches,
   generateMatches: (tid, opts = {}) => send('POST', `${T(tid)}/matches/generate`, opts),

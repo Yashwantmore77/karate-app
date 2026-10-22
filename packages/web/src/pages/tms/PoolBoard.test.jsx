@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent, waitForElementToBeRemoved } from '@t
 import userEvent from '@testing-library/user-event'
 import PoolBoard from './PoolBoard'
 
-const data = vi.hoisted(() => ({ arrangePools: vi.fn(), confirmPools: vi.fn(), reopenPools: vi.fn() }))
+const data = vi.hoisted(() => ({ arrangePools: vi.fn(), arrangeSheet: vi.fn(), confirmPools: vi.fn(), reopenPools: vi.fn() }))
 vi.mock('../../data/tms', () => ({ tms: data }))
 
 const NAMES = { a1: 'Aarav Patil', a2: 'Rohan Kulkarni', a3: 'Ishaan Rao', b1: 'Kabir Shah', b2: 'Vihaan Joshi', b3: 'Arjun Nair' }
@@ -31,6 +31,7 @@ const drag = (who, to) => {
 describe('the pool editor on the Draw tab', () => {
   beforeEach(() => {
     data.arrangePools.mockReset().mockResolvedValue([])
+    data.arrangeSheet.mockReset().mockResolvedValue([])
     data.confirmPools.mockReset().mockResolvedValue({ created: 7, drawLocked: false })
     data.reopenPools.mockReset().mockResolvedValue([])
   })
@@ -94,5 +95,48 @@ describe('the pool editor on the Draw tab', () => {
     await user.type(within(dialog).getByLabelText('Reason'), 'Wrong pool')
     await user.click(within(dialog).getByRole('button', { name: 'Reopen' }))
     expect(data.reopenPools).toHaveBeenCalledWith('t1', 'k', 'Wrong pool')
+  })
+
+  // KAN-425: a knockout category is its paper sheet; players are swapped between the Aka / Ao boxes.
+  it('shows a knockout category as its sheet: drag or tap to swap places, then confirm that sheet', async () => {
+    const user = userEvent.setup()
+    const sheet = ['a1', 'b1', 'a2', null, 'a3', 'b2', 'b3', null]
+    setup({ pools: [{ id: 'ko', name: 'A', divisionKey: 'k', poolSize: 8, poolSystem: 'knockout', playerIds: ['a1', 'a2', 'a3', 'b1', 'b2', 'b3'], places: sheet }], thirdPlace: true })
+    expect(screen.queryByRole('button', { name: 'Add pool' })).not.toBeInTheDocument()
+    expect(screen.getByText('3rd/4th Place')).toBeInTheDocument()
+    const place = (i) => screen.getByTestId(`place-${i}`)
+    expect(place(0)).toHaveTextContent('Aarav Patil')
+    expect(place(3)).toHaveTextContent('bye')
+
+    // Drag Kabir Shah (box 1) onto the empty box 3: Aarav now has a bye, Kabir faces Rohan.
+    const transfer = { setData: vi.fn(), effectAllowed: '' }
+    fireEvent.dragStart(place(1), { dataTransfer: transfer })
+    fireEvent.dragOver(place(3), { dataTransfer: transfer })
+    fireEvent.drop(place(3), { dataTransfer: transfer })
+    expect(place(3)).toHaveTextContent('Kabir Shah')
+    expect(screen.getByText('Not saved')).toBeInTheDocument()
+
+    // Tap, tap: Ishaan Rao (box 4) and Vihaan Joshi (box 5) change sides.
+    await user.click(place(4))
+    await user.click(place(5))
+    expect(place(4)).toHaveTextContent('Vihaan Joshi')
+
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/its 2 first-round bouts are made now/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+    expect(data.confirmPools).toHaveBeenCalledWith('t1', 'k', { places: ['a1', null, 'a2', 'b1', 'b2', 'a3', 'b3', null], reason: null, force: false })
+  })
+
+  it('will not save a sheet with an empty first-round bout', async () => {
+    setup({ pools: [{ id: 'ko', name: 'A', divisionKey: 'k', poolSize: 8, poolSystem: 'knockout', playerIds: ['a1', 'a2', 'a3', 'b1', 'b2'], places: ['a1', 'a2', 'a3', null, 'b1', null, 'b2', null] }] })
+    // Kabir Shah (box 4) to the empty box 3 leaves bout 3 with nobody in it.
+    const transfer = { setData: vi.fn(), effectAllowed: '' }
+    fireEvent.dragStart(screen.getByTestId('place-4'), { dataTransfer: transfer })
+    fireEvent.dragOver(screen.getByTestId('place-3'), { dataTransfer: transfer })
+    fireEvent.drop(screen.getByTestId('place-3'), { dataTransfer: transfer })
+    expect(screen.getByText(/A first-round bout has nobody in it/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save sheet' })).toBeDisabled()
   })
 })
