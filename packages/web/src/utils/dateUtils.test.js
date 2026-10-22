@@ -14,7 +14,10 @@ describe('dateUtils', () => {
     })
 
     it('does not treat today as expired', () => {
-      const today = new Date().toISOString().split('T')[0]
+      // Today on the local calendar (the tests run in India time): the UTC
+      // date is still yesterday between midnight and 05:30 (KAN-426).
+      const now = new Date()
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       expect(isExpired(today)).toBe(false)
     })
 
