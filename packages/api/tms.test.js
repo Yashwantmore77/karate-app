@@ -226,6 +226,32 @@ describe('PRD tournament management over HTTP', () => {
     expect(saved.body.pools.map((p) => [p.name, p.playerIds.length])).toEqual([['A', 2], ['B', 2]])
   })
 
+  it('confirms one category: its matches are made and its pools go public before the draw is locked', async () => {
+    const { t, link } = await setUpTournament()
+    const coach = await openCoach(link)
+    for (let i = 0; i < 3; i += 1) {
+      const { body: { player } } = await call('POST', '/coach/players', { name: `Confirm ${i}`, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    }
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    const [pool] = (await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)).body.pools
+    const key = { divisionKey: pool.divisionKey }
+    expect((await call('GET', `/public/tournaments/${t}`)).body.pools).toEqual([])
+
+    expect((await call('POST', `/tournaments/${t}/pools/confirm`, key, tokens.referee)).status).toBe(403)
+    const confirmed = await call('POST', `/tournaments/${t}/pools/confirm`, { ...key, pools: [{ id: pool.id, playerIds: [...pool.playerIds].reverse() }] }, tokens.admin)
+    expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200)
+    // One category, one pool of three: three bouts, and the draw is now complete.
+    expect(confirmed.body).toMatchObject({ created: 3, drawLocked: true })
+    expect((await call('GET', `/public/tournaments/${t}`)).body.pools).toHaveLength(1)
+
+    await call('POST', `/tournaments/${t}/locks/draw`, { locked: false, reason: 'Late entry' }, tokens.admin)
+    expect((await call('POST', `/tournaments/${t}/pools/reopen`, key, tokens.admin)).status).toBe(400)
+    const reopened = await call('POST', `/tournaments/${t}/pools/reopen`, { ...key, reason: 'Late entry' }, tokens.admin)
+    expect(reopened.status, JSON.stringify(reopened.body)).toBe(200)
+    expect((await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches).toHaveLength(0)
+  })
+
   it('assigns officials to a match and records a walkover and a cancellation', async () => {
     const { t, link } = await setUpTournament()
     const coach = await openCoach(link)
