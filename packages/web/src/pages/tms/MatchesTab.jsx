@@ -76,6 +76,10 @@ export function describeLiveEvent(e) {
   return changed ? `${what} — AKA ${b.aka} → ${a.aka}, AO ${b.ao} → ${a.ao}` : what
 }
 
+// A bout with a result, or a cancelled one: the server treats both as
+// finished, so a new result on either is a correction and needs a reason.
+const decided = (m) => !!boutOutcome(m) || m?.status === 'cancelled'
+
 // What each status in the "Change status" menu means.
 const STATUS_TIP = {
   scheduled: 'Back in the queue: not called yet.',
@@ -167,7 +171,7 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
                 <IconButton size="small" aria-label="Change status" onClick={(e) => setStatusMenu({ anchor: e.currentTarget, m })}><PlaylistPlay fontSize="small" /></IconButton>
               )}
               <IconButton size="small" aria-label="Live score log" onClick={async () => setLog({ m, events: await tms.matchEvents(tid, m.id).catch(() => []) })}><History fontSize="small" /></IconButton>
-              <IconButton size="small" aria-label={boutOutcome(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '', finishReason: m.finishReason || '' })}><EditNote fontSize="small" /></IconButton>
+              <IconButton size="small" aria-label={decided(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '', finishReason: m.finishReason || '' })}><EditNote fontSize="small" /></IconButton>
             </Stack>
           ) },
         ]}
@@ -242,8 +246,13 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
       </Dialog>
 
       <Dialog open={!!correct} onClose={() => setCorrect(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>{correct && boutOutcome(correct.m) ? 'Correct result' : 'Enter result'} — {correct?.m.matchNumber}</DialogTitle>
+        <DialogTitle>{correct && decided(correct.m) ? 'Correct result' : 'Enter result'} — {correct?.m.matchNumber}</DialogTitle>
         <DialogContent>
+          {correct?.m.status === 'cancelled' && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              This bout was cancelled{correct.m.result?.finishReason ? `: ${correct.m.result.finishReason}` : ''}. Saving a result here is a correction: it needs a reason and is recorded in the audit log (Rule 6). To fight the bout instead, close this and use Change status → Scheduled to put it back in the queue.
+            </Alert>
+          )}
           {correct && boutOutcome(correct.m) && <Alert severity="warning" sx={{ mb: 2 }}>This match is completed. A correction needs a reason and is recorded in the audit log (Rule 6).</Alert>}
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
             <Grid size={{ xs: 12 }}>
@@ -267,12 +276,12 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
             </Grid>
             <Grid size={{ xs: 6 }}><TextField fullWidth type="number" label="AKA score" value={correct?.avgRed ?? 0} onChange={(e) => setCorrect({ ...correct, avgRed: e.target.value })} /></Grid>
             <Grid size={{ xs: 6 }}><TextField fullWidth type="number" label="AO score" value={correct?.avgBlue ?? 0} onChange={(e) => setCorrect({ ...correct, avgBlue: e.target.value })} /></Grid>
-            <Grid size={{ xs: 12 }}><TextField fullWidth label="Reason" required={!!(correct && boutOutcome(correct.m))} value={correct?.reason || ''} onChange={(e) => setCorrect({ ...correct, reason: e.target.value })} /></Grid>
+            <Grid size={{ xs: 12 }}><TextField fullWidth label="Reason" required={!!(correct && decided(correct.m))} value={correct?.reason || ''} onChange={(e) => setCorrect({ ...correct, reason: e.target.value })} /></Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCorrect(null)}>Cancel</Button>
-          <Button variant="contained" disabled={action.busy || !!(correct && ((boutOutcome(correct.m) && !correct.reason.trim()) || (correct.resultType !== 'COMPLETED' && !correct.finishReason?.trim())))}
+          <Button variant="contained" disabled={action.busy || !!(correct && ((decided(correct.m) && !correct.reason.trim()) || (correct.resultType !== 'COMPLETED' && !correct.finishReason?.trim())))}
             color={correct?.resultType === 'CANCELLED' ? 'error' : 'primary'}
             data-tip={correct?.resultType === 'CANCELLED' ? 'Cancels the bout with no result. You give the reason above.' : undefined}
             onClick={async () => {

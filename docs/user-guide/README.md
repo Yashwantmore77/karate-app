@@ -492,6 +492,7 @@ Use **Enter result** when a bout is decided off the console. Choose how it ended
 | Cancelled | No result; counts for nobody. The button reads **Cancel this bout** | Why it is cancelled |
 
 - Changing a finished bout needs a reason and the score-correction privilege. Both are written to the audit log.
+- A cancelled bout counts as finished too: the dialog says it was cancelled and why, and saving a result on it is a correction that needs a reason. To fight it instead, use **Change status → Scheduled** to put it back in the queue.
 - Once a category's results are published, a change also needs the result-override privilege. Once results are locked, nothing changes until they are unlocked: a category locked on its own is unlocked on the Results tab (with a reason); when the tournament is Completed, it goes back to Live (with a reason).
 - A bout that was fought can be deleted only by an admin, with a reason and the correction privilege, and never from a locked draw.
 
