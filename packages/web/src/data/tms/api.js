@@ -93,7 +93,10 @@ export const tms = {
   divisions: async (tid) => (await get(`${T(tid)}/divisions`)).divisions,
   pools: async (tid) => (await get(`${T(tid)}/pools`)).pools,
   generatePools: (tid, opts) => send('POST', `${T(tid)}/pools/generate`, opts),
-  movePlayer: async (tid, body) => (await send('POST', `${T(tid)}/pools/move`, body)).pools,
+  // The Draw tab's pool editor: save a category's pools, confirm it (its matches are made), reopen it.
+  arrangePools: async (tid, divisionKey, pools, { reason = null, force = false } = {}) => (await send('PUT', `${T(tid)}/pools/arrangement`, { divisionKey, pools, reason, force })).pools,
+  confirmPools: (tid, divisionKey, { pools = null, reason = null, force = false } = {}) => send('POST', `${T(tid)}/pools/confirm`, { divisionKey, pools, reason, force }),
+  reopenPools: async (tid, divisionKey, reason) => (await send('POST', `${T(tid)}/pools/reopen`, { divisionKey, reason })).pools,
   matches: async (tid, filter) => (await get(`${T(tid)}/matches${qs(filter)}`)).matches,
   generateMatches: (tid, opts = {}) => send('POST', `${T(tid)}/matches/generate`, opts),
   swapCorners: async (tid, mid, reason) => (await send('POST', `${T(tid)}/matches/${mid}/swap-corners`, { reason: reason || null })).match,

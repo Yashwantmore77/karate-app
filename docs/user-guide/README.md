@@ -382,12 +382,20 @@ Locking entries freezes the player list. The draw then puts each category's play
 
 1. **Categorise players**: press **Run categorisation**. Every approved player is placed by gender, age on the Master Age Calculation Date, event and weight.
 2. **Draw pools**: press **Draw all categories**, or **Draw** on one category. **Redraw** replaces that category's pools.
-3. **Lock the draw** on the Dashboard (**Lock draw**). Pools can no longer change.
-4. **Generate matches** (Draw / Pools, step 3) creates every bout of every drawn category that has none yet.
+3. **Change the pools by hand** if you need to. Each drawn category is shown below the list with its pools:
+   - Drag a player onto another pool. On a tablet, tap the player, then tap **Move here** on the pool they go to.
+   - **Add pool** adds an empty pool for you to fill.
+   - Nothing is saved until you press **Save pools** or **Confirm**. **Discard** puts the pools back as they were.
+4. **Confirm** each category. Its pools become final and its bouts are created at once, while the other categories stay open. When every drawn category is confirmed, the draw locks by itself.
+5. Or do it all at once: **Lock the draw** on the Dashboard (**Lock draw**), then **Generate matches** (Draw / Pools, step 3). This creates every bout of every drawn category that has none yet.
 
 ![Draw / Pools: categorise, draw each category, then generate the matches.](images/draw.webp)
 
 *Draw / Pools: categorise, draw each category, then generate the matches.*
+
+![A drawn category: drag players between pools, add a pool, then Confirm.](images/draw-pools.webp)
+
+*A drawn category: drag players between pools, add a pool, then Confirm.*
 
 How pools are made:
 
@@ -403,6 +411,11 @@ Rules for the draw:
 - Entries must be locked first, and the draw must not be locked.
 - With "Only verified weigh-ins enter the draw" on, Kumite players without a passed weigh-in are left out and listed.
 - Players can move only between pools of the same category, and only before the draw is locked.
+- Every pool needs at least two players. An empty pool is dropped when you save, and the rest are lettered A, B, C again.
+- A pool over the maximum size is allowed only with a reason, which goes in the audit log.
+- A straight knockout category is one list: arrange its bouts on the Bracket tab instead.
+- A confirmed category cannot be moved, changed or redrawn. **Draw all categories** leaves it as it is.
+- **Reopen** on a confirmed category needs a reason and the redraw privilege. It deletes the category's unplayed bouts, and is refused once one of its bouts has a result or while the draw is locked.
 - A redraw needs the redraw privilege and a confirmation. It is impossible once any bout in that category has a result.
 - A bracket that needs byes is refused when byes are switched off.
 - Unlocking the draw needs a reason.
@@ -862,8 +875,11 @@ The app checks every action on the server, so a rule cannot be skipped from any 
 | Drawing pools | Entries locked; draw not locked |
 | Redraw | Needs the redraw privilege and a confirmation; impossible once a bout in the category has a result |
 | Seeded draw | Only when seeding is allowed in Settings |
-| Moving a player | Only between pools of the same category, before the draw is locked; a full pool takes nobody |
-| Generating matches | The draw must be locked |
+| Moving a player | Only between pools of the same category, before the draw is locked and before the category is confirmed; a pool over the maximum needs a reason |
+| Pools | At least two players each; an empty pool is dropped when saved; a knockout category is one list |
+| Confirming a category | Its pools become final and its bouts are created; the draw locks when every drawn category is confirmed |
+| Reopening a category | A reason and the redraw privilege; refused once a bout has a result, or while the draw is locked |
+| Generating matches | The draw must be locked, or the category confirmed |
 | Byes | Refused when byes are switched off and the bracket needs them |
 | Final stage | Every pool bout finished; at least two pools; qualifiers chosen when selection is manual; at least two qualifiers |
 | Arranging a bracket | Every player placed once; each first-round bout has at least one player; only before the bracket's first bout starts |
@@ -1004,7 +1020,13 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Weigh-in is closed. An override needs the privilege and a reason in Notes. | An admin records it, with the reason in Notes |
 | Lock entries before generating pools. | Dashboard → Lock entries |
 | The draw is locked. Unlock it (with a reason) to change pools. | Dashboard → Unlock draw, with a reason |
-| Confirm (lock) the draw before generating matches. | Dashboard → Lock draw, then Generate matches |
+| Lock the draw on the Dashboard, or confirm the category on the Draw tab, before making its matches. | Click **Confirm** on the category, or Dashboard → Lock draw, then Generate matches |
+| This category is confirmed. Reopen it (with a reason) to change its pools. | Click **Reopen** on the category and give a reason |
+| This category is not confirmed. | Nothing to reopen; change its pools directly |
+| The pools were changed on another screen. Discard your changes and try again. | Click **Discard**, then make your change again |
+| Every pool needs at least two players. Move the last player out, or move another one in. | Empty the pool, or give it a second player |
+| A knockout category is one list. Arrange its bouts on the Bracket tab. | Use **Arrange draw** on the Bracket tab |
+| This category has no pools yet. Draw it first. | Click **Draw** on the category's row |
 | Redrawing replaces existing pools and unplayed matches. Confirm to continue. | Confirm only if the old pools should go |
 | Matches in this division have results; the draw can no longer change. | Keep the draw; correct individual results instead |
 | This bracket would need byes, which are switched off in Settings. | Allow byes in Settings, or change the number of qualifiers |
@@ -1016,7 +1038,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Generate matches first. | Lock the draw, then Generate matches |
 | That category no longer exists. | It was deleted or merged; reload the page |
 | That player is already in this pool. | Choose another pool |
-| That pool is full. | Choose another pool, or move a player out first |
+| That pool is full. Give a reason to go over the maximum. | Move a player out first, or save again with a reason |
 | Players can only move between pools of the same category. | Change the player's category on Registrations first (with the draw unlocked) |
 | At least two players are needed. | Decide a single entry on the Results tab instead of drawing it |
 | This category has more than one player. | Draw it; only a category with one player is decided as a single entry |
