@@ -42,8 +42,9 @@ tab or field label, the order of the steps, a rule, a message or a default):
 
 1. Update `docs/operator-handbook/README.md`.
 2. If a pictured screen changed, retake its screenshots with
-   `npm run docs:screenshots -- <names>` while the app runs with its test data
-   (how to start it is at the top of `docs/operator-handbook/tools/screenshots.mjs`).
+   `npm run docs:screenshots -- <names>`. It starts a throwaway copy of the app
+   with its test data by itself and stops it afterwards
+   (`docs/operator-handbook/tools/servers.mjs`).
 3. Rebuild the PDF with `npm run docs:pdf` and commit `Operator-Handbook.pdf`
    in the same PR.
 4. Check `docs/user-guide/README.md` as well: it lists every rule and message.

@@ -187,21 +187,7 @@ fail on them yet. `npm run build` builds the website — the same build Vercel r
 
 ## 6. The operator handbook (pictures and PDF)
 
-The pictures are taken from the app running with its test tournaments, which
-the run changes as it goes, so start a throwaway server for it. In two windows,
-in the top folder. `node index.js` reads no `.env`, so this server is always
-in memory, never your live database; the higher rate limit stops the run
-tripping it:
-
-```
-cd packages\api && set "SEED_SCENARIOS=true" && set "API_RATE_LIMIT=100000" && node index.js
-```
-
-```
-npm run dev
-```
-
-Then, in a third window in the top folder:
+In the top folder:
 
 ```
 npm run docs:screenshots
@@ -212,8 +198,16 @@ npm run docs:pdf
 The first line retakes every picture, the second only the named ones, and the
 third rebuilds `docs\operator-handbook\Operator-Handbook.pdf`.
 
-To run it twice, restart the API in between: the first run leaves the test
-data changed.
+The picture run starts a throwaway copy of the app by itself (on ports 4100 and
+5273), with the test tournaments, in memory, and stops it at the end. It never
+reads `.env`, so it never touches your live database, and each run starts from
+fresh test data. A development server already running on 4000 / 5173 is left
+alone.
+
+To use servers you started yourself instead, set `APP_URL` and `API_URL`
+(for example `set "APP_URL=http://localhost:5173" && set "API_URL=http://localhost:4000"`).
+Start that API with `SEED_SCENARIOS=true` and `API_RATE_LIMIT=100000`, and
+restart it between runs: a run changes the test data.
 
 ---
 
