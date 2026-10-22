@@ -8,7 +8,7 @@ import { Schedule, EditNote, SportsMma, SwapHoriz, History, PlaylistPlay } from 
 import { matchLifecycle } from '@kumite/shared/lifecycle.js'
 import { humanize } from '../../components/tms/StatusBadge'
 import { boutOutcome } from '@kumite/shared/results.js'
-import { settingsOf } from '@kumite/shared/tms.js'
+import { settingsOf, parseDivisionKey } from '@kumite/shared/tms.js'
 import { tms, describeError } from '../../data/tms'
 import { listOfficials } from '../../data/officials'
 import { matches as matchStore } from '../../data/domain'
@@ -75,6 +75,9 @@ export function describeLiveEvent(e) {
   const changed = b && a && (b.aka !== a.aka || b.ao !== a.ao)
   return changed ? `${what} — AKA ${b.aka} → ${a.aka}, AO ${b.ao} → ${a.ao}` : what
 }
+
+// KAN-268: Kumite bouts are won on points; a kata bout carries the panel's score.
+const scoreWord = (m) => (m?.divisionKey && parseDivisionKey(m.divisionKey).event === 'kata' ? 'score' : 'points')
 
 // A bout with a result, or a cancelled one: the server treats both as
 // finished, so a new result on either is a correction and needs a reason.
@@ -270,9 +273,11 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
                 {correct?.resultType === 'COMPLETED' && <MenuItem value="tie">Draw</MenuItem>}
               </TextField>}
             </Grid>
-            <Grid size={{ xs: 6 }}><TextField fullWidth type="number" label="AKA score" value={correct?.avgRed ?? 0} onChange={(e) => setCorrect({ ...correct, avgRed: e.target.value })} /></Grid>
-            <Grid size={{ xs: 6 }}><TextField fullWidth type="number" label="AO score" value={correct?.avgBlue ?? 0} onChange={(e) => setCorrect({ ...correct, avgBlue: e.target.value })} /></Grid>
-            <Grid size={{ xs: 12 }}><TextField fullWidth label="Reason" required={!!(correct && decided(correct.m))} value={correct?.reason || ''} onChange={(e) => setCorrect({ ...correct, reason: e.target.value })} /></Grid>
+            <Grid size={{ xs: 6 }}><TextField fullWidth type="number" label={`AKA ${scoreWord(correct?.m)}`} value={correct?.avgRed ?? 0} onChange={(e) => setCorrect({ ...correct, avgRed: e.target.value })} /></Grid>
+            <Grid size={{ xs: 6 }}><TextField fullWidth type="number" label={`AO ${scoreWord(correct?.m)}`} value={correct?.avgBlue ?? 0} onChange={(e) => setCorrect({ ...correct, avgBlue: e.target.value })} /></Grid>
+            <Grid size={{ xs: 12 }}><TextField fullWidth label={correct && decided(correct.m) ? 'Reason for the correction' : 'Note for the audit log (optional)'}
+              helperText={correct && decided(correct.m) ? 'Why the result changes; kept in the audit log (Rule 6)' : undefined}
+              required={!!(correct && decided(correct.m))} value={correct?.reason || ''} onChange={(e) => setCorrect({ ...correct, reason: e.target.value })} /></Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
