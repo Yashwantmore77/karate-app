@@ -45,6 +45,14 @@ export const RESULT_TYPE_LABEL = {
   CANCELLED: 'Cancelled (no result)',
 }
 const POINT_NAME = { yuko: 'Yuko', wazaAri: 'Waza-ari', ippon: 'Ippon' }
+const WINNER = { red: 'AKA wins', blue: 'AO wins', tie: 'Draw' }
+
+/** A result typed in or corrected at the scoring table: "AO wins by walkover. Reason: …". */
+function describeResult(p) {
+  if (p.resultType === 'CANCELLED') return `Bout cancelled${p.reason ? `. Reason: ${p.reason}` : ''}`
+  const how = p.resultType && p.resultType !== 'COMPLETED' ? ` by ${RESULT_TYPE_LABEL[p.resultType]?.split(' (')[0].toLowerCase() || p.resultType}` : ''
+  return `${WINNER[p.winner] || 'No winner'}${how}${p.reason ? `. Reason: ${p.reason}` : ''}`
+}
 
 /** One live command as a sentence: "Waza-ari to AKA — AKA 2 → 4". */
 export function describeLiveEvent(e) {
@@ -59,6 +67,8 @@ export function describeLiveEvent(e) {
     CLOCK_START: 'Clock started', CLOCK_STOP: 'Clock stopped', CLOCK_RESET: 'Clock reset', CLOCK_SET: 'Clock set', KO_TIMER: 'KO timer',
     KIKEN: `Kiken (${SIDE[p.side] || p.side})`, SHIKKAKU: `Shikkaku (${SIDE[p.side] || p.side})`, HANTEI: `Hantei to ${SIDE[p.side] || p.side}`,
     CLEAR_DECISION: 'Decision cleared', CLOCK_EXPIRED: 'Time up',
+    RESULT_ENTERED: `Result entered by hand: ${describeResult(p)}`,
+    OFFICIAL_CORRECTION: `Result corrected: ${describeResult(p)}`,
   }[e.cmd] || e.cmd
   const b = e.scoreBefore
   const a = e.scoreAfter
