@@ -205,6 +205,27 @@ describe('PRD tournament management over HTTP', () => {
     expect((await call('PATCH', `/matches/${kumite.id}`, { mat: 2, scheduledAt: '2027-01-15T10:00:00Z' }, tokens.admin)).status).toBe(200)
   })
 
+  it('saves pools laid out on the Draw tab, for staff who manage the draw only', async () => {
+    const { t, link } = await setUpTournament()
+    const coach = await openCoach(link)
+    for (let i = 0; i < 4; i += 1) {
+      const { body: { player } } = await call('POST', '/coach/players', { name: `Pool ${i}`, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    }
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    const [pool] = (await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)).body.pools
+    const path = `/tournaments/${t}/pools/arrangement`
+    const split = { divisionKey: pool.divisionKey, pools: [{ id: pool.id, playerIds: pool.playerIds.slice(0, 2) }, { playerIds: pool.playerIds.slice(2) }] }
+
+    expect((await call('PUT', path, { ...split, pools: [{ id: pool.id, playerIds: 'all' }] }, tokens.admin)).status).toBe(400)
+    expect((await call('PUT', path, { ...split, pools: [{ id: pool.id, playerIds: pool.playerIds, extra: 1 }] }, tokens.admin)).status).toBe(400)
+    expect((await call('PUT', path, split, tokens.referee)).status).toBe(403)
+    expect((await call('PUT', path, split, coach)).status).toBe(403)
+    const saved = await call('PUT', path, split, tokens.admin)
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200)
+    expect(saved.body.pools.map((p) => [p.name, p.playerIds.length])).toEqual([['A', 2], ['B', 2]])
+  })
+
   it('assigns officials to a match and records a walkover and a cancellation', async () => {
     const { t, link } = await setUpTournament()
     const coach = await openCoach(link)
