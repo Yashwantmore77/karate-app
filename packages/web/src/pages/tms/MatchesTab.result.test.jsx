@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import MatchesTab from './MatchesTab'
@@ -56,5 +56,18 @@ describe('the result dialog on a cancelled bout', () => {
     expect(within(dialog).getByText(/Enter result — M-001/)).toBeInTheDocument()
     expect(within(dialog).queryByText(/This bout was cancelled/)).not.toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Save result' })).toBeEnabled()
+  })
+
+  it('names the scores by event and says what the reason is for (KAN-268)', async () => {
+    const user = userEvent.setup()
+    let dialog = await openResult(user, { ...BOUT, status: 'scheduled', divisionKey: 'kumite:g1:w1' }, 'Enter result')
+    expect(within(dialog).getByLabelText('AKA points')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('AO points')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Note for the audit log (optional)')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    cleanup()
+    dialog = await openResult(user, { ...CANCELLED, divisionKey: 'kata:g1:-' }, 'Correct result')
+    expect(within(dialog).getByLabelText('AKA score')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/Reason for the correction/)).toBeRequired()
   })
 })
