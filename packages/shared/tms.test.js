@@ -196,7 +196,7 @@ describe('section 64 core flow', () => {
   })
 
   const setUp = async () => {
-    await tms.updateTournament(admin, tournament.id, { masterAgeDate: '2027-01-01', type: 'kata_kumite', settings: { poolSize: 8, requireWeighInForDraw: false } })
+    await tms.updateTournament(admin, tournament.id, { masterAgeDate: '2027-01-01', type: 'kata_kumite', settings: { poolSize: 8, requireWeighInForDraw: false, poolSystem: 'round_robin' } })
     ageGroup = await tms.ageGroups.create(admin, tournament.id, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 })
     w35 = await tms.weightCategories.create(admin, tournament.id, { ageGroupId: ageGroup.id, name: '-35 KG', maxWeight: 35 })
     await tms.weightCategories.create(admin, tournament.id, { ageGroupId: ageGroup.id, name: '-40 KG', minWeight: 35, maxWeight: 40 })
@@ -468,7 +468,7 @@ describe('gap features: scoring rules, draw options, kata panel, medal override'
   const setup = async ({ settings = {}, groupSettings = {}, kumite = 10, kata = 0 } = {}) => {
     const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
     const tms = createTms(stores)
-    const t = await stores.tournaments.insert({ name: 'Gap Cup', masterAgeDate: '2027-01-01', country: 'India', settings: { requireWeighInForDraw: false, ...settings } })
+    const t = await stores.tournaments.insert({ name: 'Gap Cup', masterAgeDate: '2027-01-01', country: 'India', settings: { requireWeighInForDraw: false, poolSystem: 'round_robin', ...settings } })
     const g = await tms.ageGroups.create(admin, t.id, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13, settings: groupSettings })
     await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-35 KG', maxWeight: 35 })
     const team = await tms.teams.create(admin, t.id, { name: 'A' })

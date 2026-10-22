@@ -143,7 +143,7 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
       <Paper sx={{ p: 2 }}>
         <HelpTitle id="draw.matches" variant="h3" gutterBottom>3. Generate matches</HelpTitle>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Every pool fights a round robin. AKA (red) and AO (blue) are stored on each match, numbered M-001 onwards and spread across {settings.mats} mat{settings.mats > 1 ? 's' : ''}.
+          A knockout category becomes its bracket; every pool fights a round robin. AKA (red) and AO (blue) are stored on each match, numbered M-001 onwards and spread across {settings.mats} mat{settings.mats > 1 ? 's' : ''}.
           {!drawLocked && ' Confirm each category above to make its matches straight away, or lock the draw on the Dashboard and make them all here.'}
         </Typography>
         <Stack direction="row" spacing={1}>

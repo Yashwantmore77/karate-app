@@ -82,7 +82,7 @@ export async function runMockTournament({
       await call('POST', `${T}/weight-categories`, { ageGroupId: ageGroup.id, name: '-40 KG', maxWeight: 40 }, ctx.admin)
       await call('POST', `${T}/weight-categories`, { ageGroupId: ageGroup.id, name: '+40 KG', minWeight: 40, maxWeight: 200 }, ctx.admin)
       // No emails to real people from a rehearsal.
-      await call('PATCH', `${T}/settings`, { poolSize: 4, mats, kataMode, kataJudges: 3, kataRounds: 2, kataQualifiers: 4, requireWeighInForDraw: true, emailNotifications: false, notificationChannels: { email: false, sms: false, whatsapp: false } }, ctx.admin)
+      await call('PATCH', `${T}/settings`, { poolSize: 4, poolSystem: 'round_robin', mats, kataMode, kataJudges: 3, kataRounds: 2, kataQualifiers: 4, requireWeighInForDraw: true, emailNotifications: false, notificationChannels: { email: false, sms: false, whatsapp: false } }, ctx.admin)
       return `1 age group, 2 weight categories, kata by ${kataMode}`
     })
 

@@ -47,7 +47,8 @@ const setUpTournament = async () => {
   const { body: { ageGroup } } = await call('POST', `/tournaments/${t}/age-groups`, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 }, tokens.admin)
   await call('POST', `/tournaments/${t}/weight-categories`, { ageGroupId: ageGroup.id, name: '-35 KG', maxWeight: 35 }, tokens.admin)
   // These flows draw from registered weights; the verified weigh-in gate has its own tests.
-  await call('PATCH', `/tournaments/${t}/settings`, { requireWeighInForDraw: false }, tokens.admin)
+  // Pools: these flows are written for them; straight knockout is the default (KAN-425).
+  await call('PATCH', `/tournaments/${t}/settings`, { requireWeighInForDraw: false, poolSystem: 'round_robin' }, tokens.admin)
   await call('POST', `/tournaments/${t}/lifecycle`, { to: 'REGISTRATION_OPEN' }, tokens.admin)
   const { body: { link } } = await call('PUT', `/tournaments/${t}/registration-link`, { password: 'dojo-pass' }, tokens.admin)
   return { t, link, ageGroup }

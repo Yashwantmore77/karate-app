@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createTms, TMS_COLLECTIONS, registrationReadiness, runningEvent, registrationPath, parseDivisionKey } from './tms.js'
+import { createTms, TMS_COLLECTIONS, registrationReadiness, runningEvent, registrationPath, parseDivisionKey, settingsOf } from './tms.js'
 import { memoryStores } from './test/memoryStore.js'
 import { evaluateOutcome, DEFAULT_RULES } from './rules.js'
 import { applyCommand, initialMatchState, rulesFrom } from './commands.js'
@@ -23,7 +23,8 @@ async function world({ settings = {}, at = '2026-12-01T10:00:00Z', tournament = 
   const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
   let clock = new Date(at)
   const tms = createTms(stores, { now: () => clock })
-  const t = await stores.tournaments.insert({ ...READY, settings, ...tournament })
+  // These flows are written for pools; straight knockout is the default (KAN-425).
+  const t = await stores.tournaments.insert({ ...READY, settings: { poolSystem: 'round_robin', ...settings }, ...tournament })
   const g = await tms.ageGroups.create(admin, t.id, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 })
   const w = await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-35 KG', maxWeight: 35 })
   const team = await tms.teams.create(admin, t.id, { name: 'ABC Dojo', club: 'ABC Dojo' })
@@ -304,6 +305,27 @@ describe('PRD v1 §12-13 draw and matches', () => {
     const [res] = await tms.results(t.id)
     expect(res.finalStage).toBe('master_pool')
     expect(res.medals.map((m) => m.medal)).toEqual(['gold', 'silver', 'bronze'])
+  })
+
+  it('fights every category as a straight knockout unless the tournament chooses pools (KAN-425)', async () => {
+    expect(settingsOf({}).poolSystem).toBe('knockout')
+    expect(settingsOf({ settings: { poolSystem: 'round_robin' } }).poolSystem).toBe('round_robin')
+    // A tournament with no choice made draws its category as one sheet.
+    const stores = memoryStores([...LEGACY, ...TMS_COLLECTIONS])
+    const tms = createTms(stores, { now: () => new Date('2026-12-01T10:00:00Z') })
+    const t = await stores.tournaments.insert({ ...READY, settings: { requireWeighInForDraw: false } })
+    const g = await tms.ageGroups.create(admin, t.id, { name: 'Boys 12-13', gender: 'M', minAge: 12, maxAge: 13 })
+    await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-35 KG', maxWeight: 35 })
+    const team = await tms.teams.create(admin, t.id, { name: 'ABC Dojo' })
+    for (let i = 0; i < 10; i += 1) {
+      const p = await tms.createPlayer(admin, t.id, { teamId: team.id, name: `Player ${i}`, dob: `2014-0${(i % 9) + 1}-1${i % 9}`, gender: 'M', events: ['kumite'], weight: 31 })
+      await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
+    }
+    await tms.setEntriesLock(admin, t.id, true)
+    const pools = await tms.generatePools(admin, t.id, { seed: 1 })
+    expect(pools).toHaveLength(1)
+    expect(pools[0]).toMatchObject({ poolSystem: 'knockout' })
+    expect(pools[0].places).toHaveLength(16)
   })
 
   it('draws a knockout category as a sheet, saves it as laid out, and builds the bouts from it (KAN-425)', async () => {

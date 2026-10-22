@@ -54,8 +54,8 @@ export const DEFAULT_SETTINGS = {
   emailNotifications: true,
   // PRD point 12: how uneven entries are split (see pools.js POOL_MODES).
   poolMode: 'max',
-  // Round robin in pools, or straight knockout.
-  poolSystem: 'round_robin',
+  // Straight knockout, drawn as the paper sheet (KAN-425), or round robin in pools.
+  poolSystem: 'knockout',
   // PRD point 16: score values, yuko / waza-ari / ippon.
   points: { yuko: 1, wazaAri: 2, ippon: 3 },
   ruleset: 'WKF',
