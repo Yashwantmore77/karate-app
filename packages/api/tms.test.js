@@ -252,6 +252,29 @@ describe('PRD tournament management over HTTP', () => {
     expect((await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches).toHaveLength(0)
   })
 
+  it('saves a knockout category\'s sheet and confirms it: the bouts follow the sheet (KAN-425)', async () => {
+    const { t, link } = await setUpTournament()
+    await call('PATCH', `/tournaments/${t}/settings`, { poolSystem: 'knockout' }, tokens.admin)
+    const coach = await openCoach(link)
+    for (let i = 0; i < 4; i += 1) {
+      const { body: { player } } = await call('POST', '/coach/players', { name: `Sheet ${i}`, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    }
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    const [pool] = (await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)).body.pools
+    expect(pool.places).toHaveLength(4)
+    const [a, b, c, d] = pool.playerIds
+    const path = `/tournaments/${t}/pools/arrangement`
+
+    expect((await call('PUT', path, { divisionKey: pool.divisionKey, places: 'a,b' }, tokens.admin)).status).toBe(400)
+    expect((await call('PUT', path, { divisionKey: pool.divisionKey, places: [a, b, c] }, tokens.admin)).body.error).toBe('invalid_layout')
+    expect((await call('PUT', path, { divisionKey: pool.divisionKey, places: [a, d, b, c] }, tokens.referee)).status).toBe(403)
+    const confirmed = await call('POST', `/tournaments/${t}/pools/confirm`, { divisionKey: pool.divisionKey, places: [a, d, b, c] }, tokens.admin)
+    expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200)
+    const first = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches.filter((m) => m.round === 1)
+    expect(first.map((m) => [m.akaPlayerId, m.aoPlayerId])).toEqual([[a, d], [b, c]])
+  })
+
   it('assigns officials to a match and records a walkover and a cancellation', async () => {
     const { t, link } = await setUpTournament()
     const coach = await openCoach(link)

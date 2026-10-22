@@ -3,7 +3,7 @@ import { requireAuth, requirePermission, tournamentAccess } from '../auth/middle
 import { findUserRecord, listAssignableOfficials } from '../auth/users.js'
 import { mayAccessTournament } from '../auth/middleware.js'
 import { validate } from '../lib/validate.js'
-import { notFound } from '../lib/errors.js'
+import { notFound, badRequest } from '../lib/errors.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { PERMISSION as P, can } from '@kumite/shared/permissions.js'
@@ -432,18 +432,30 @@ export function tmsRoutes(tms, stores) {
     const body = validate(req.body, { playerId: { ...ID, required: true }, fromPoolId: { ...ID, required: true }, toPoolId: { ...ID, required: true }, reason: REASON, force: { type: 'boolean' } })
     res.json({ pools: await tms.movePlayer(withMeta(req), tid(req), body) })
   })
-  // The pool editor: a category's pools as laid out on screen, in one go.
+  // The pool editor: a category's pools as laid out on screen, in one go;
+  // for a knockout category, its sheet's first-round places (null = a bye).
   const POOL_LAYOUT = { id: { ...ID, nullable: true }, playerIds: { type: 'array', required: true, items: ID, maxItems: 512, unique: true } }
+  const DRAW_LAYOUT = { divisionKey: { type: 'string', required: true, max: 200 }, pools: { type: 'array', items: { type: 'object' }, maxItems: 64, nullable: true }, reason: REASON, force: { type: 'boolean' } }
+  const readSheet = (places) => {
+    if (places === undefined || places === null) return null
+    if (!Array.isArray(places) || places.length > 1024 || places.some((id) => id != null && (typeof id !== 'string' || id.length > 80))) throw badRequest('invalid_layout')
+    return places.map((id) => id || null)
+  }
+  const readDrawLayout = (req) => {
+    const { places, ...body } = req.body || {}
+    const { pools, ...rest } = validate(body, DRAW_LAYOUT)
+    return { ...rest, layout: pools ? pools.map((pool) => validate(pool, POOL_LAYOUT)) : null, places: readSheet(places) }
+  }
   router.put('/:tid/pools/arrangement', requirePermission(P.POOL_MANAGE), async (req, res) => {
-    const { divisionKey, pools, reason, force } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, pools: { type: 'array', required: true, items: { type: 'object' }, maxItems: 64 }, reason: REASON, force: { type: 'boolean' } })
-    const layout = pools.map((pool) => validate(pool, POOL_LAYOUT))
+    const { divisionKey, layout, places, reason, force } = readDrawLayout(req)
+    if (places) return res.json({ pools: await tms.arrangeSheet(withMeta(req), tid(req), divisionKey, places) })
+    if (!layout) throw badRequest('pools_required')
     res.json({ pools: await tms.arrangePools(withMeta(req), tid(req), divisionKey, layout, { reason, force }) })
   })
-  // One category's Confirm: its pools (as laid out, if sent) are final and its matches are made.
+  // One category's Confirm: its pools or sheet (as laid out, if sent) are final and its matches are made.
   router.post('/:tid/pools/confirm', requirePermission(P.POOL_MANAGE), requirePermission(P.MATCH_GENERATE), async (req, res) => {
-    const { divisionKey, pools, reason, force } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, pools: { type: 'array', items: { type: 'object' }, maxItems: 64, nullable: true }, reason: REASON, force: { type: 'boolean' } })
-    const layout = pools ? pools.map((pool) => validate(pool, POOL_LAYOUT)) : null
-    res.json(await tms.confirmDivision(withMeta(req), tid(req), divisionKey, { layout, reason, force }))
+    const { divisionKey, layout, places, reason, force } = readDrawLayout(req)
+    res.json(await tms.confirmDivision(withMeta(req), tid(req), divisionKey, { layout, places, reason, force }))
   })
   router.post('/:tid/pools/reopen', requirePermission(P.POOL_MANAGE), async (req, res) => {
     const { divisionKey, reason } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, reason: { ...REASON, required: true, nullable: false } })

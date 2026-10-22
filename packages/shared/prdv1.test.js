@@ -306,6 +306,40 @@ describe('PRD v1 §12-13 draw and matches', () => {
     expect(res.medals.map((m) => m.medal)).toEqual(['gold', 'silver', 'bronze'])
   })
 
+  it('draws a knockout category as a sheet, saves it as laid out, and builds the bouts from it (KAN-425)', async () => {
+    const { tms, t, stores, ids } = await ready({ players: 6, settings: { poolSystem: 'knockout' } })
+    const [pool] = await tms.generatePools(admin, t.id, { seed: 4 })
+    // Six players on an eight-place sheet: two byes, to the top of the draw.
+    expect(pool.places).toHaveLength(8)
+    expect(pool.places.filter(Boolean).sort()).toEqual([...ids].sort())
+    const key = pool.divisionKey
+    const sheet = [...pool.places]
+
+    // Refused: a player missing, a first-round bout with nobody in it.
+    await expect(tms.arrangeSheet(admin, t.id, key, sheet.slice(1))).rejects.toMatchObject({ code: 'invalid_layout' })
+    await expect(tms.arrangeSheet(admin, t.id, key, [null, null, ...ids])).rejects.toMatchObject({ code: 'empty_bout' })
+
+    // The operator's sheet: ids[0] v ids[1] and ids[2] v ids[3] first, then two players with byes.
+    const mine = [ids[0], ids[1], ids[2], ids[3], ids[4], null, ids[5], null]
+    expect((await tms.arrangeSheet(admin, t.id, key, mine))[0].places).toEqual(mine)
+    expect((await stores.auditLog.list({ action: 'bracket.arranged' }))).toHaveLength(1)
+
+    // Byes are refused when switched off.
+    await stores.tournaments.update(t.id, { settings: { ...(await stores.tournaments.get(t.id)).settings, allowByes: false } })
+    await expect(tms.arrangeSheet(admin, t.id, key, [...mine].reverse())).rejects.toMatchObject({ code: 'byes_not_allowed' })
+    await stores.tournaments.update(t.id, { settings: { ...(await stores.tournaments.get(t.id)).settings, allowByes: true } })
+
+    // Confirm builds exactly those first-round bouts.
+    const { created } = await tms.confirmDivision(admin, t.id, key)
+    expect(created).toBeGreaterThan(0)
+    const firstRound = (await tms.listMatches(t.id)).filter((m) => m.stage === 'knockout' && m.round === 1)
+    expect(firstRound.map((m) => [m.akaPlayerId, m.aoPlayerId])).toEqual(expect.arrayContaining([[ids[0], ids[1]], [ids[2], ids[3]]]))
+    expect(firstRound).toHaveLength(2)
+    // The only category is confirmed, so the draw locked with it.
+    expect((await stores.tournaments.get(t.id)).drawLocked).toBe(true)
+    await expect(tms.arrangeSheet(admin, t.id, key, mine)).rejects.toMatchObject({ code: 'draw_locked' })
+  })
+
   it('plays a third-place match for one bronze', async () => {
     const { tms, t } = await ready({ settings: { poolSize: 4, thirdPlaceMatch: true } })
     await tms.generatePools(admin, t.id, { seed: 3 })

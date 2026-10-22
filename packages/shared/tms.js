@@ -26,7 +26,7 @@ import { DomainError, rule, invalid, missing, denied } from './errors.js'
 import { DEFAULT_POOL_SIZE, DRAW_METHODS, POOL_MODES, drawPools, roundRobin, seededRandom, poolName, shuffle as shuffleWith, isUneven } from './pools.js'
 import {
   DEFAULT_RESULT_RULES, poolStandings, poolComplete, qualifierSeeds, buildBracket,
-  bracketMedals, poolMedals, medalTally, boutOutcome, nextPow2,
+  bracketMedals, poolMedals, medalTally, boutOutcome, nextPow2, seedOrder,
 } from './results.js'
 import {
   formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, withoutReadOnly,
@@ -1656,6 +1656,19 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   }
 
   /**
+   * A knockout category's sheet: its first-round places, AKA then AO, null
+   * for a bye. Seeds first (1 is strongest, byes to the top seeds), then the
+   * drawn order, as on the paper draw sheet. The Draw tab shows it and the
+   * bracket is built from it.
+   */
+  const knockoutPlaces = (playerIds, players, settings) => {
+    const order = settings.allowSeeding === false ? [...playerIds] : [...playerIds].sort((a, b) => (Number(players.get(a)?.seed) || 999) - (Number(players.get(b)?.seed) || 999))
+    return { order, places: seedOrder(nextPow2(order.length)).map((seed) => order[seed - 1] ?? null) }
+  }
+  // A stored sheet still holds exactly the pool's players.
+  const sheetFits = (places, playerIds) => Array.isArray(places) && places.filter(Boolean).length === playerIds.length && playerIds.every((id) => places.includes(id))
+
+  /**
    * Sections 22-23, PRD v1 §12. Regenerating replaces the division's pools
    * wholesale, needs confirming and the draw-regeneration privilege, and is
    * refused once results exist.
@@ -1715,6 +1728,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
           tournamentId, divisionKey: division.key, event: division.event, ageGroupId: division.ageGroupId,
           weightCategoryId: division.weightCategoryId, label: division.label, name: pool.name,
           playerIds: pool.players.map((p) => p.id), method: drawMethod, drawSeed, poolSize: size, poolSystem: knockout ? 'knockout' : 'round_robin', generatedAt: iso(),
+          ...(knockout ? { places: knockoutPlaces(pool.players.map((p) => p.id), players, cfg.settings).places } : {}),
           ...(uneven && cfg.settings.allowUnevenPools === false ? { unevenWarning: true } : {}),
         }))
       }
@@ -1825,6 +1839,34 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return listPools(tournamentId, key)
   }
 
+  const arrangeSheet = (actor, tournamentId, key, places) => boutsTurn(tournamentId, () => arrangeSheetNow(actor, tournamentId, key, places))
+
+  /**
+   * A knockout category's sheet as laid out on the Draw tab: every drawn
+   * player in one first-round place (AKA, AO, AKA, AO …), null for a bye.
+   * No first-round bout without a player, and byes only where allowed, as
+   * when arranging a bracket.
+   */
+  async function arrangeSheetNow(actor, tournamentId, key, places) {
+    const tournament = await writableTournament(tournamentId)
+    if (tournament.drawLocked) throw rule('draw_locked')
+    const [pool, ...more] = drawnPools(await listPools(tournamentId, key))
+    if (!pool) throw missing('pools_not_found')
+    if (pool.poolSystem !== 'knockout' || more.length) throw rule('not_knockout')
+    if (confirmedPools([pool])) throw rule('category_confirmed')
+    const size = nextPow2(pool.playerIds.length)
+    if (!Array.isArray(places) || places.length !== size || !sheetFits(places, pool.playerIds) || new Set(places.filter(Boolean)).size !== pool.playerIds.length) throw invalid('invalid_layout', { size })
+    for (let i = 0; i < size; i += 2) if (!places[i] && !places[i + 1]) throw invalid('empty_bout', { bout: i / 2 + 1 })
+    if (places.some((id) => !id)) assertByesAllowed(pool.playerIds.length, settingsOf(tournament))
+    const sheet = places.map((id) => id || null)
+    if (JSON.stringify(sheet) === JSON.stringify(pool.places)) return listPools(tournamentId, key)
+    await clearBridge(tournamentId, key)
+    await stores.pools.update(pool.id, { places: sheet })
+    const names = new Map((await stores.players.list({ tournamentId })).map((p) => [p.id, p.name]))
+    await record(actor, { tournamentId, action: A.BRACKET_ARRANGED, entity: 'division', entityId: key, after: { firstRound: Array.from({ length: size / 2 }, (_, i) => `${names.get(sheet[i * 2]) || 'bye'} v ${names.get(sheet[i * 2 + 1]) || 'bye'}`) } })
+    return listPools(tournamentId, key)
+  }
+
   const confirmDivision = (actor, tournamentId, key, options) => boutsTurn(tournamentId, () => confirmDivisionNow(actor, tournamentId, key, options))
   const reopenDivision = (actor, tournamentId, key, reason) => boutsTurn(tournamentId, () => reopenDivisionNow(actor, tournamentId, key, reason))
 
@@ -1834,10 +1876,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    * other categories stay open. Once every drawn category is confirmed, the
    * draw locks as the Dashboard's Lock draw would.
    */
-  async function confirmDivisionNow(actor, tournamentId, key, { layout = null, reason = null, force = false } = {}) {
+  async function confirmDivisionNow(actor, tournamentId, key, { layout = null, places = null, reason = null, force = false } = {}) {
     const tournament = await writableTournament(tournamentId)
     if (tournament.drawLocked) throw rule('draw_locked')
     if (layout) await arrangePoolsNow(actor, tournamentId, key, layout, { reason, force })
+    if (places) await arrangeSheetNow(actor, tournamentId, key, places)
     const pools = drawnPools(await listPools(tournamentId, key))
     if (!pools.length) throw missing('pools_not_found')
     if (confirmedPools(pools)) throw rule('category_confirmed')
@@ -1974,15 +2017,17 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
           })
           competitorOf.set(playerId, c.id)
         }
-        // A knockout category goes straight to a bracket: seeds first (1 is
-        // strongest), then the drawn order, byes to the top seeds.
+        // A knockout category goes straight to a bracket, laid out as its
+        // sheet on the Draw tab (or, for a sheet never stored, seeds first).
         if (pool.poolSystem === 'knockout') {
-          const order = settings.allowSeeding === false ? [...pool.playerIds] : [...pool.playerIds].sort((a, b) => (Number(players.get(a).seed) || 999) - (Number(players.get(b).seed) || 999))
+          const { order, places } = knockoutPlaces(pool.playerIds, players, settings)
+          const sheet = sheetFits(pool.places, pool.playerIds) ? pool.places : places
           assertByesAllowed(order.length, settings)
           await stores.brackets.removeWhere({ tournamentId, divisionKey: division.key })
           await stores.brackets.insert({
             tournamentId, divisionKey: division.key, categoryId: category.id, knockoutOnly: true, thirdPlace: !!settings.thirdPlaceMatch,
             entries: order.map((playerId) => ({ id: competitorOf.get(playerId), playerId, pool: pool.name, place: null })),
+            layout: sheet.map((id) => (id ? competitorOf.get(id) : null)),
           })
           await stores.pools.update(pool.id, { categoryId: category.id })
           const before = (await stores.matches.list({ categoryId: category.id })).length
@@ -3770,7 +3815,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     teams, teamMembers, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
     setRegistrationStatus, recordPayment, recordWeighIn,
     // categorisation and draw
-    categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, arrangePools, confirmDivision, reopenDivision, drawImpact, setQualifiers, decideSingleEntry,
+    categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, arrangePools, arrangeSheet, confirmDivision, reopenDivision, drawImpact, setQualifiers, decideSingleEntry,
     // matches and results
     generateMatches, listMatches, correctResult, attention, swapCorners, callMatch, setRunningEvent, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
