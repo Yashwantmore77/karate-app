@@ -1,29 +1,30 @@
 // Retakes the handbook's screenshots (docs/operator-handbook/images/*.webp).
 // Each one marks where to click with a numbered yellow box.
 //
-// It drives the app running with its test tournaments, which it changes as it
-// goes (it opens kata rounds and adds a fifth judge), so use a server you can
-// throw away:
+// It drives the app with its test tournaments, which it changes as it goes (it
+// opens kata rounds and adds a fifth judge), so it starts a throwaway copy of
+// its own, in memory, and stops it at the end (servers.mjs):
 //
-//   cd packages/api && SEED_SCENARIOS=true API_RATE_LIMIT=100000 node index.js
-//   cd packages/web && VITE_SERVER_URL=http://localhost:4000 npx vite --port 5173
 //   npm run docs:screenshots              # every picture
 //   npm run docs:screenshots -- p5-console,p6-results   # just these
 //
-// APP_URL and API_URL point it at another server, IMAGES_DIR saves the pictures
+// APP_URL and API_URL point it at servers you started yourself instead, for
+// example the in-memory ones from COMMANDS.md. IMAGES_DIR saves the pictures
 // somewhere else. Then rebuild the PDF: npm run docs:pdf
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChromium } from './browser.mjs'
+import { startApp } from './servers.mjs'
 
 const OUT = process.env.IMAGES_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'images')
 // Pictures saved inside another picture's shot: asking for one runs that shot.
 const SAVED_BY = { 'p5-kata-list': 'p5-kata-judge' }
 const ASKED = process.argv[2] ? process.argv[2].split(',') : null
 const ONLY = ASKED ? new Set(ASKED.map((name) => SAVED_BY[name] || name)) : null
-const BASE = process.env.APP_URL || 'http://localhost:5173'
-const API = process.env.API_URL || 'http://localhost:4000'
+const app = await startApp()
+const BASE = app.base
+const API = app.api
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const api = async (method, url, body, token) => {
   const r = await fetch(`${API}/api/v1${url}`, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
@@ -509,6 +510,7 @@ await shot('p6-complete', async () => {
 })
 
 await browser.close()
+app.stop()
 
 // A misspelled name would otherwise take no picture and still look like success.
 const unknown = (ASKED || []).filter((name) => !known.has(SAVED_BY[name] || name))
