@@ -351,6 +351,22 @@ await shot('p3-draw', async () => {
   await mark(page, [[btn(page, 'Draw all categories'), 1, { at: 'l' }]])
   await save(page, 'p3-draw')
 })
+await shot('p3-pools', async () => {
+  const page = await open('admin', manage('senior-trials', 'draw'), { wait: 'Run categorisation', height: 900 })
+  // The first drawn category with two pools: one player dragged from pool A to pool B.
+  const board = page.locator('.MuiPaper-root').filter({ has: page.getByTestId('pool-B') }).filter({ has: page.getByRole('button', { name: 'Add pool' }) }).first()
+  await bring(page, board, 0.08)
+  const [a, b] = [board.getByTestId('pool-A'), board.getByTestId('pool-B')]
+  await a.getByRole('listitem').first().dragTo(b)
+  await page.waitForTimeout(300)
+  const boxes = await mark(page, [
+    [b.getByRole('listitem').last(), 1, { at: 'l' }],
+    [board.getByRole('button', { name: 'Add pool' }), 2],
+    [board.getByRole('button', { name: 'Confirm' }), 3, { at: 'tr' }],
+  ])
+  const edge = await board.boundingBox()
+  await save(page, 'p3-pools', around(page, boxes, { x0: 0, x1: 1280, y0: edge.y - 16, y1: edge.y + edge.height + 16 }))
+})
 await shot('p3-lockdraw', async () => {
   const page = await open('admin', manage('senior-trials', 'overview'), { wait: 'Tournament status', height: 760 })
   await mark(page, [[btn(page, 'Lock draw'), 1]])

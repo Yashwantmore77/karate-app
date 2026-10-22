@@ -58,7 +58,7 @@
 <text class="t1" x="24" y="273">Weigh-in day</text>
 <rect class="line" x="196" y="240" width="320" height="56" rx="8"/>
 <text class="t1 b" x="212" y="262">Part 3 · Weigh-in, lock and draw</text>
-<text class="t2" x="212" y="280">Jobs 9–14: weigh, categorise, lock and draw</text>
+<text class="t2" x="212" y="280">Jobs 9–15: weigh, categorise, lock and draw</text>
 <rect class="tint" x="548" y="240" width="188" height="56" rx="8"/>
 <rect class="line" x="548" y="240" width="188" height="56" rx="8"/>
 <text class="t1 b" x="642" y="264" text-anchor="middle">Draw generated</text>
@@ -66,21 +66,21 @@
 <text class="t1" x="24" y="345">The day before</text>
 <rect class="line" x="196" y="312" width="320" height="56" rx="8"/>
 <text class="t1 b" x="212" y="334">Part 4 · Prepare the day</text>
-<text class="t2" x="212" y="352">Jobs 15–17: times, officials, passes, devices</text>
+<text class="t2" x="212" y="352">Jobs 16–18: times, officials, passes, devices</text>
 <rect class="tint" x="548" y="312" width="188" height="56" rx="8"/>
 <rect class="line" x="548" y="312" width="188" height="56" rx="8"/>
 <text class="t1 b" x="642" y="345" text-anchor="middle">Ready (optional)</text>
 <text class="t1 b" x="24" y="417">Event day</text>
 <rect class="accent" x="196" y="384" width="320" height="56" rx="8"/>
 <text class="t1 b" x="212" y="406">Part 5 · Competition day</text>
-<text class="t2" x="212" y="424">Jobs 18–21: go live, call, score, kata</text>
+<text class="t2" x="212" y="424">Jobs 19–22: go live, call, score, kata</text>
 <rect class="tint" x="548" y="384" width="188" height="56" rx="8"/>
 <rect class="line" x="548" y="384" width="188" height="56" rx="8"/>
 <text class="t1 b" x="642" y="417" text-anchor="middle">Live</text>
 <text class="t1" x="24" y="489">Event day and after</text>
 <rect class="line" x="196" y="456" width="320" height="56" rx="8"/>
 <text class="t1 b" x="212" y="478">Part 6 · Results and finishing</text>
-<text class="t2" x="212" y="496">Jobs 22–26: knockouts, publish, certificates</text>
+<text class="t2" x="212" y="496">Jobs 23–27: knockouts, publish, certificates</text>
 <rect class="tint" x="548" y="456" width="188" height="56" rx="8"/>
 <rect class="line" x="548" y="456" width="188" height="56" rx="8"/>
 <text class="t1 b" x="642" y="480" text-anchor="middle">Completed</text>

@@ -355,13 +355,18 @@ export const HELP = {
   },
   'draw.pools': {
     title: 'Step 2: Lock entries and draw pools',
-    text: 'Entries must be locked first. Then draw the pools for each category: players are placed at random, keeping team-mates apart where possible.',
-    tips: ['You can move a player between pools with a reason, until the draw is locked.', '"Print draw sheet" prints the paper bracket for the mat table (one sheet per pool, signed by four judges and the referee). "Blank draw sheet" prints an empty one.'],
-    next: 'Step 3: lock the draw and generate matches.',
+    text: 'Entries must be locked first. Then draw the pools for each category: players are placed at random, keeping team-mates apart where possible. Below the list, each drawn category can be changed by hand and confirmed.',
+    tips: [
+      'Drag a player to another pool (or tap the player, then "Move here"). "Add pool" adds an empty pool. Nothing is saved until "Save pools" or "Confirm"; "Discard" undoes your changes.',
+      '"Confirm" makes that category final and creates its matches at once; the other categories stay open. When every category is confirmed, the draw locks itself.',
+      '"Reopen" (with a reason) deletes a confirmed category\'s unplayed matches so its pools can change again.',
+      '"Print draw sheet" prints the paper bracket for the mat table (one sheet per pool, signed by four judges and the referee). "Blank draw sheet" prints an empty one.',
+    ],
+    next: 'Confirm each category, or lock the draw and generate all the matches in step 3.',
   },
   'draw.matches': {
     title: 'Step 3: Generate matches',
-    text: 'Lock the draw (Dashboard or here), then generate the matches. Every bout of every pool is created.',
+    text: 'Lock the draw on the Dashboard, then generate the matches: every bout of every pool that has none yet is created. A category confirmed in step 2 already has its matches.',
     next: 'Matches tab: give each match a mat, time and officials.',
   },
 

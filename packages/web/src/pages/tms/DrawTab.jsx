@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
-  Stack, Paper, Typography, Button, Alert, Grid, Box, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  MenuItem, List, ListItem, ListItemText, IconButton, Chip,
+  Stack, Paper, Typography, Button, Alert, Box, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
+  MenuItem, List, ListItem, ListItemText, Chip,
 } from '@mui/material'
-import { SwapHoriz, Shuffle, Lock, Print } from '@mui/icons-material'
+import { Shuffle, Lock, Print } from '@mui/icons-material'
 import { settingsOf } from '@kumite/shared/tms.js'
 import { tms } from '../../data/tms'
 import DataTable from '../../components/tms/DataTable'
@@ -11,8 +11,9 @@ import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { useLoading } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { printBracketSheets, sheetsForPlayers } from '../../components/tms/bracketSheet'
+import PoolBoard from './PoolBoard'
 
-/** Sections 20-25: categorise, lock, draw pools, confirm the draw, generate matches. */
+/** Sections 20-25: categorise, lock, draw pools, arrange and confirm each category, generate matches. */
 export default function DrawTab({ tournament, reload, version, action, goTab }) {
   const tid = tournament.id
   // The sheet carries the organising association's name, as the paper form does.
@@ -24,7 +25,6 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
   const [teams, setTeams] = useState([])
   const [issues, setIssues] = useState(null)
   const [drawDialog, setDrawDialog] = useState(null)
-  const [moving, setMoving] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [outcome, setOutcome] = useState(null)
 
@@ -36,6 +36,10 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
   const nameOf = (id) => players.find((p) => p.id === id)?.name || '?'
   const teamOf = (id) => teams.find((t) => t.id === players.find((p) => p.id === id)?.teamId)?.name || ''
   const locked = !!tournament.entriesLocked
+  const confirmedKey = (key) => {
+    const own = pools.filter((p) => p.divisionKey === key && p.stage !== 'master')
+    return own.length > 0 && own.every((p) => p.confirmedAt)
+  }
   const drawLocked = !!tournament.drawLocked
 
   const categorize = async () => {
@@ -58,23 +62,6 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
     await reload()
     load()
   }
-  const move = async (body) => {
-    try {
-      await tms.movePlayer(tid, body)
-      action.notify({ severity: 'success', text: 'Player moved' })
-      load()
-    } catch (err) {
-      // PRD v1 §21: over the pool maximum only on purpose.
-      if (err?.code === 'pool_full') {
-        return setConfirm({
-          title: 'That pool is full', message: `It already has ${err.details?.max ?? 'the maximum'} players. Move anyway? Your reason is recorded.`,
-          run: () => action.run(() => tms.movePlayer(tid, { ...body, force: true }), 'Player moved over the pool maximum').then(load),
-        })
-      }
-      action.run(() => Promise.reject(err))
-    }
-  }
-
   return (
     <Stack spacing={3}>
       <Paper sx={{ p: 2 }}>
@@ -126,9 +113,10 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
               </Box>
             ) },
             { key: 'expected', label: 'Pools at current size', value: (d) => Math.ceil(d.count / settings.poolSize), render: (d) => Math.ceil(d.count / settings.poolSize) },
-            { key: 'pools', label: 'Drawn', render: (d) => (d.pools ? <Chip size="small" color="success" variant="outlined" label={`✓ ${d.pools} pool${d.pools > 1 ? 's' : ''}`} /> : '—') },
+            { key: 'pools', label: 'Drawn', render: (d) => (d.pools ? <Chip size="small" color="success" variant={confirmedKey(d.key) ? 'filled' : 'outlined'} label={`✓ ${d.pools} pool${d.pools > 1 ? 's' : ''}${confirmedKey(d.key) ? ', confirmed' : ''}`} /> : '—') },
             { key: 'actions', label: '', sortable: false, render: (d) => (
-              <Button size="small" disabled={!locked || drawLocked} onClick={() => openDraw({ divisionKey: d.key, label: d.label, method: settings.drawMethod || 'random', poolSize: settings.poolSize })}>
+              <Button size="small" disabled={!locked || drawLocked || confirmedKey(d.key)} data-tip-needs={confirmedKey(d.key) ? 'This category is confirmed. Reopen it below first.' : undefined}
+                onClick={() => openDraw({ divisionKey: d.key, label: d.label, method: settings.drawMethod || 'random', poolSize: settings.poolSize })}>
                 {d.pools ? 'Redraw' : 'Draw'}
               </Button>
             ) },
@@ -136,41 +124,24 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
         />
       </Paper>
 
-      {divisions.filter((d) => d.pools).map((d) => (
-        <Paper key={d.key} sx={{ p: 2 }}>
-          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-            <Typography variant="h3">{d.label}</Typography>
-            <Button size="small" variant="outlined" startIcon={<Print />} onClick={() => printBracketSheets(sheetsForPlayers({
+      {divisions.filter((d) => d.pools).map((d) => {
+        const own = pools.filter((p) => p.divisionKey === d.key && p.stage !== 'master')
+        return (
+          <PoolBoard key={d.key} tid={tid} division={d} pools={own} nameOf={nameOf} teamOf={teamOf}
+            maxSize={own[0]?.poolSize || settings.poolSize} drawLocked={drawLocked} action={action}
+            onChanged={() => { reload(); load() }}
+            onPrint={() => printBracketSheets(sheetsForPlayers({
               title: sheetTitle, event: d.label,
-              groups: pools.filter((p) => p.divisionKey === d.key).map((p) => ({ label: `Pool ${p.name}`, names: p.playerIds.map((id) => nameOf(id)) })),
-            }), `${d.label} — draw sheet`)}>Print draw sheet</Button>
-          </Stack>
-          <Grid container spacing={2}>
-            {pools.filter((p) => p.divisionKey === d.key).map((pool) => (
-              <Grid key={pool.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <Paper variant="outlined" sx={{ p: 1.5, height: '100%' }}>
-                  <Typography variant="h4">Pool {pool.name} <Typography component="span" color="text.secondary">({pool.playerIds.length})</Typography></Typography>
-                  <List dense>
-                    {pool.playerIds.map((id) => (
-                      <ListItem key={id} disableGutters secondaryAction={!drawLocked && (
-                        <IconButton aria-label="Move to another pool" edge="end" size="small" onClick={() => setMoving({ playerId: id, fromPoolId: pool.id, divisionKey: d.key, toPoolId: '' })}><SwapHoriz fontSize="small" /></IconButton>
-                      )}>
-                        <ListItemText primary={nameOf(id)} secondary={teamOf(id)} />
-                      </ListItem>
-                    ))}
-                  </List>
-                  <Typography variant="body2" color="text.secondary">{pool.method === 'seeded' ? 'Seeded' : 'Random'} draw · seed {pool.drawSeed}</Typography>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        </Paper>
-      ))}
+              groups: own.map((p) => ({ label: `Pool ${p.name}`, names: p.playerIds.map((id) => nameOf(id)) })),
+            }), `${d.label} — draw sheet`)} />
+        )
+      })}
 
       <Paper sx={{ p: 2 }}>
         <HelpTitle id="draw.matches" variant="h3" gutterBottom>3. Generate matches</HelpTitle>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Every pool fights a round robin. AKA (red) and AO (blue) are stored on each match, numbered M-001 onwards and spread across {settings.mats} mat{settings.mats > 1 ? 's' : ''}.
+          {!drawLocked && ' Confirm each category above to make its matches straight away, or lock the draw on the Dashboard and make them all here.'}
         </Typography>
         <Stack direction="row" spacing={1}>
           <Button size="large" variant="contained" disabled={!drawLocked} onClick={() => setConfirm({
@@ -203,26 +174,6 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
         <DialogActions>
           <Button onClick={() => setDrawDialog(null)}>Cancel</Button>
           <Button variant="contained" disabled={!drawDialog?.impact || drawDialog.impact.blocked} onClick={generate}>{drawDialog?.impact?.regenerates ? 'Confirm redraw' : 'Generate pools'}</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={!!moving} onClose={() => setMoving(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Move {moving && nameOf(moving.playerId)}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField select label="To pool" value={moving?.toPoolId || ''} onChange={(e) => setMoving({ ...moving, toPoolId: e.target.value })}>
-              {pools.filter((p) => moving && p.divisionKey === moving.divisionKey && p.id !== moving.fromPoolId).map((p) => <MenuItem key={p.id} value={p.id}>Pool {p.name}</MenuItem>)}
-            </TextField>
-            <TextField label="Reason (audit log)" value={moving?.reason || ''} onChange={(e) => setMoving({ ...moving, reason: e.target.value })} />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setMoving(null)}>Cancel</Button>
-          <Button variant="contained" disabled={!moving?.toPoolId || !moving?.reason?.trim()} onClick={async () => {
-            const { divisionKey, ...body } = moving
-            setMoving(null)
-            move(body)
-          }}>Move</Button>
         </DialogActions>
       </Dialog>
 
