@@ -2847,15 +2847,21 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const row = (await stores.divisionResults.list({ tournamentId, divisionKey: divisionKeyValue }))[0]
     if (!row || ![RESULT_STATUS.PUBLISHED, RESULT_STATUS.LOCKED].includes(row.status)) return
     // A locked category is frozen for everyone: unlock it (with a reason) first.
-    if (row.status === RESULT_STATUS.LOCKED) throw rule('results_locked')
+    if (row.status === RESULT_STATUS.LOCKED) throw await lockedError(tournamentId)
     if (!actor || !can(actor.role, P.RESULT_OVERRIDE)) throw denied('results_published')
     if (!reason) throw invalid('reason_required')
   }
 
   async function assertNotLocked(tournamentId, divisionKeyValue) {
     const row = (await stores.divisionResults.list({ tournamentId, divisionKey: divisionKeyValue }))[0]
-    if (row?.status === RESULT_STATUS.LOCKED) throw rule('results_locked')
+    if (row?.status === RESULT_STATUS.LOCKED) throw await lockedError(tournamentId)
   }
+
+  // KAN-268: say which lock it is. Completing the tournament locks every
+  // published category (move it back to Live to change one); a category
+  // locked on its own is unlocked on the Results tab.
+  const lockedError = async (tournamentId) =>
+    rule(lifecycleOf(await tournamentOf(tournamentId)) === T.COMPLETED ? 'results_locked' : 'category_locked')
 
   /**
    * One category's result, frozen or unfrozen on its own (PRD v1 §16), so a
@@ -2952,7 +2958,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const records = await resultRecords(tournamentId)
     if (!publish) {
       for (const row of records.values()) {
-        if (row.status === RESULT_STATUS.LOCKED) throw rule('results_locked')
+        if (row.status === RESULT_STATUS.LOCKED) throw await lockedError(tournamentId)
       }
       for (const row of records.values()) {
         if (row.status !== RESULT_STATUS.PUBLISHED) continue
