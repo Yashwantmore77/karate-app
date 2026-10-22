@@ -492,7 +492,7 @@ Use **Enter result** when a bout is decided off the console. Choose how it ended
 | Cancelled | No result; counts for nobody | — |
 
 - Changing a finished bout needs a reason and the score-correction privilege. Both are written to the audit log.
-- Once a category's results are published, a change also needs the result-override privilege. Once results are locked, nothing changes until the tournament goes back to Live (with a reason).
+- Once a category's results are published, a change also needs the result-override privilege. Once results are locked, nothing changes until they are unlocked: a category locked on its own is unlocked on the Results tab (with a reason); when the tournament is Completed, it goes back to Live (with a reason).
 - A bout that was fought can be deleted only by an admin, with a reason and the correction privilege, and never from a locked draw.
 
 ## 9. Step 7 — Competition day
@@ -1068,6 +1068,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | --- | --- |
 | These results are published; corrections need the result-override privilege. | Ask a tournament admin |
 | Results are locked. Move the tournament back to Live (with a reason) to change them. | Admin with the reopen privilege: Completed → Live, then correct |
+| This category is locked. Unlock it on the Results tab (with a reason) to change it. | Admin with the result-override privilege: Results → Unlock on that category, then correct |
 | Publish the results first. | Results tab → Publish results |
 | Wrong email or password. | Check both; use Forgot password if needed |
 | This copy of the app was set up without a server address (VITE_SERVER_URL), so nobody can sign in. | Not something you can fix from the sign-in page: whoever set up the website must set `VITE_SERVER_URL` and rebuild it |

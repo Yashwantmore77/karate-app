@@ -338,8 +338,10 @@ describe('PRD v1 §16 results lifecycle', () => {
     ;[res] = await tms.results(t.id)
     expect(res.resultStatus).toBe('LOCKED')
     // frozen for everyone, the override holder included, until unlocked
-    await expect(tms.correctResult(admin, t.id, m.id, { winner: 'blue', avgRed: 0, avgBlue: 1 }, 'Protest')).rejects.toMatchObject({ code: 'results_locked' })
-    await expect(tms.overrideMedals(admin, t.id, res.key, [], 'Protest')).rejects.toMatchObject({ code: 'results_locked' })
+    // one category locked on its own: the fix is Unlock on the Results tab, not reopening the tournament (KAN-268)
+    await expect(tms.correctResult(admin, t.id, m.id, { winner: 'blue', avgRed: 0, avgBlue: 1 }, 'Protest')).rejects.toMatchObject({ code: 'category_locked' })
+    await expect(tms.overrideMedals(admin, t.id, res.key, [], 'Protest')).rejects.toMatchObject({ code: 'category_locked' })
+    await expect(tms.publishResults(admin, t.id, false)).rejects.toMatchObject({ code: 'category_locked' })
     await expect(tms.setDivisionLock(officer, t.id, res.key, false, 'Protest')).rejects.toMatchObject({ code: 'result_override_forbidden' })
     await expect(tms.setDivisionLock(admin, t.id, res.key, false)).rejects.toMatchObject({ code: 'reason_required' })
     expect((await tms.setDivisionLock(admin, t.id, res.key, false, 'Protest upheld')).status).toBe('PUBLISHED')
