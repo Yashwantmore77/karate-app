@@ -447,7 +447,7 @@ On the Matches tab every bout gets a mat, a start time, a referee and judges. Th
 | Schedule | Sets mat, referee, judges and time |
 | Swap AKA and AO | Swaps the corners; only before the bout starts |
 | Change status | Called, Ready, Open, Live, Paused, or back to Scheduled |
-| Live score log | Every score, penalty and correction made on the console, with who and when |
+| Live score log | Every score, penalty and correction made on the console, and every result typed in or corrected at the table ("Result corrected: AO wins. Reason: …"), with who and when |
 | Enter result / Correct result | Records how a bout ended without the console, or corrects a finished one |
 
 ### Schedule a bout

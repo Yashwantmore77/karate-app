@@ -38,4 +38,15 @@ describe('live score log (PRD point 33)', () => {
       .toBe('Waza-ari to AKA — AKA 2 → 4, AO 0 → 0')
     expect(describeLiveEvent({ cmd: 'TIMEOUT', payload: { side: 'ao' }, scoreBefore: { aka: 1, ao: 1 }, scoreAfter: { aka: 1, ao: 1 } })).toBe('Timeout for AO')
   })
+
+  it('words results typed in and corrected at the table, not their code names (KAN-268)', () => {
+    expect(describeLiveEvent({ cmd: 'RESULT_ENTERED', payload: { resultType: 'COMPLETED', winner: 'red' }, scoreBefore: { aka: 0, ao: 0 }, scoreAfter: { aka: 3, ao: 1 } }))
+      .toBe('Result entered by hand: AKA wins — AKA 0 → 3, AO 0 → 1')
+    expect(describeLiveEvent({ cmd: 'RESULT_ENTERED', payload: { resultType: 'WALKOVER', winner: 'blue', reason: 'AKA absent' } }))
+      .toBe('Result entered by hand: AO wins by walkover. Reason: AKA absent')
+    expect(describeLiveEvent({ cmd: 'OFFICIAL_CORRECTION', payload: { resultType: 'COMPLETED', winner: 'blue', reason: 'Protest upheld' }, scoreBefore: { aka: 2, ao: 1 }, scoreAfter: { aka: 2, ao: 3 } }))
+      .toBe('Result corrected: AO wins. Reason: Protest upheld — AKA 2 → 2, AO 1 → 3')
+    expect(describeLiveEvent({ cmd: 'OFFICIAL_CORRECTION', payload: { resultType: 'CANCELLED', winner: null, reason: 'Wrong pairing' } }))
+      .toBe('Result corrected: Bout cancelled. Reason: Wrong pairing')
+  })
 })
