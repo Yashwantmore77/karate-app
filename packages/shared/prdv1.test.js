@@ -206,6 +206,59 @@ describe('PRD v1 §12-13 draw and matches', () => {
     await expect(tms.arrangePools(admin, t.id, key, after.map((p) => ({ id: p.id, playerIds: p.playerIds })))).rejects.toMatchObject({ code: 'draw_locked' })
   })
 
+  it('confirms one category at a time: its matches are made, the others stay open, and the draw locks after the last', async () => {
+    const { tms, t, stores, g, add, ids } = await ready({ players: 6, settings: { poolSize: 3 } })
+    await tms.setEntriesLock(admin, t.id, false, 'Second weight class')
+    await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-40 KG', minWeight: 35, maxWeight: 40 })
+    await add(4, { suffix: ' H', fields: { weight: 38 } })
+    await tms.setEntriesLock(admin, t.id, true)
+    const pools = await tms.generatePools(admin, t.id, { seed: 1 })
+    const lightKey = pools.find((p) => p.playerIds.includes(ids[0])).divisionKey
+    const [a, b, ...none] = pools.filter((p) => p.divisionKey === lightKey)
+    expect([a.playerIds.length, b.playerIds.length, none.length]).toEqual([3, 3, 0])
+    const heavyKey = pools.find((p) => p.divisionKey !== lightKey).divisionKey
+
+    // Matches for one category only once it is confirmed (or the whole draw locked).
+    await expect(tms.generateMatches(admin, t.id, { divisionKey: a.divisionKey })).rejects.toMatchObject({ code: 'draw_not_locked' })
+    // Confirm with the layout on screen: one player moved from A to B first.
+    const out = await tms.confirmDivision(admin, t.id, a.divisionKey, {
+      layout: [{ id: a.id, playerIds: a.playerIds.slice(1) }, { id: b.id, playerIds: [...b.playerIds, a.playerIds[0]] }], force: true, reason: 'Clubmates apart',
+    })
+    expect(out.pools.map((p) => p.playerIds.length)).toEqual([2, 4])
+    expect(out.pools.every((p) => p.confirmedAt)).toBe(true)
+    expect(out.created).toBe(1 + 6)
+    expect(out.drawLocked).toBe(false)
+    expect((await tms.listMatches(t.id)).every((m) => m.divisionKey === a.divisionKey)).toBe(true)
+
+    // A confirmed category is frozen; "Draw all" leaves it alone.
+    await expect(tms.movePlayer(admin, t.id, { playerId: out.pools[1].playerIds[0], fromPoolId: out.pools[1].id, toPoolId: out.pools[0].id })).rejects.toMatchObject({ code: 'category_confirmed' })
+    await expect(tms.arrangePools(admin, t.id, a.divisionKey, out.pools.map((p) => ({ id: p.id, playerIds: p.playerIds })))).rejects.toMatchObject({ code: 'category_confirmed' })
+    await expect(tms.generatePools(admin, t.id, { divisionKey: a.divisionKey, confirm: true })).rejects.toMatchObject({ code: 'category_confirmed' })
+    await tms.generatePools(admin, t.id, { seed: 2, confirm: true })
+    expect((await stores.pools.list({ divisionKey: a.divisionKey })).map((p) => p.id).sort()).toEqual(out.pools.map((p) => p.id).sort())
+    expect(await tms.listMatches(t.id)).toHaveLength(7)
+
+    // Reopen: a reason and the privilege; the unplayed bouts go.
+    await expect(tms.reopenDivision(admin, t.id, a.divisionKey)).rejects.toMatchObject({ code: 'reason_required' })
+    await expect(tms.reopenDivision(officer, t.id, a.divisionKey, 'Wrong pool')).rejects.toMatchObject({ code: 'regenerate_forbidden' })
+    const reopened = await tms.reopenDivision(admin, t.id, a.divisionKey, 'Wrong pool')
+    expect(reopened.some((p) => p.confirmedAt)).toBe(false)
+    expect(await tms.listMatches(t.id)).toHaveLength(0)
+    await tms.confirmDivision(admin, t.id, a.divisionKey)
+
+    // The last category confirmed locks the draw and tells the teams.
+    expect((await tms.confirmDivision(admin, t.id, heavyKey)).drawLocked).toBe(true)
+    expect((await stores.tournaments.get(t.id)).drawLocked).toBe(true)
+    expect((await stores.notifications.list({ tournamentId: t.id })).some((n) => n.type === 'draw_published')).toBe(true)
+
+    // Once a bout is fought the category cannot be reopened.
+    await tms.setDrawLock(admin, t.id, false, 'Late change')
+    const [first] = await tms.listMatches(t.id)
+    await stores.matches.update(first.id, { status: 'completed', winner: 'red' })
+    const playedKey = first.divisionKey
+    await expect(tms.reopenDivision(admin, t.id, playedKey, 'Too late')).rejects.toMatchObject({ code: 'matches_already_played' })
+  })
+
   it('splits evenly when uneven pools are not allowed, and refuses seeded draws when seeding is off', async () => {
     expect(poolSizes(18, 8, 'equal')).toEqual([6, 6, 6])
     expect(poolSizes(10, 8, 'equal')).toEqual([5, 5])

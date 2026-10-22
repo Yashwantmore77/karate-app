@@ -439,6 +439,16 @@ export function tmsRoutes(tms, stores) {
     const layout = pools.map((pool) => validate(pool, POOL_LAYOUT))
     res.json({ pools: await tms.arrangePools(withMeta(req), tid(req), divisionKey, layout, { reason, force }) })
   })
+  // One category's Confirm: its pools (as laid out, if sent) are final and its matches are made.
+  router.post('/:tid/pools/confirm', requirePermission(P.POOL_MANAGE), requirePermission(P.MATCH_GENERATE), async (req, res) => {
+    const { divisionKey, pools, reason, force } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, pools: { type: 'array', items: { type: 'object' }, maxItems: 64, nullable: true }, reason: REASON, force: { type: 'boolean' } })
+    const layout = pools ? pools.map((pool) => validate(pool, POOL_LAYOUT)) : null
+    res.json(await tms.confirmDivision(withMeta(req), tid(req), divisionKey, { layout, reason, force }))
+  })
+  router.post('/:tid/pools/reopen', requirePermission(P.POOL_MANAGE), async (req, res) => {
+    const { divisionKey, reason } = validate(req.body, { divisionKey: { type: 'string', required: true, max: 200 }, reason: { ...REASON, required: true, nullable: false } })
+    res.json({ pools: await tms.reopenDivision(withMeta(req), tid(req), divisionKey, reason) })
+  })
   // PRD v1 §12 explicit qualification.
   router.post('/:tid/pools/:id/qualifiers', requirePermission(P.RESULT_MANAGE), async (req, res) => {
     const { playerIds, reason } = validate(req.body, { playerIds: { type: 'array', required: true, items: ID, maxItems: 64, unique: true }, reason: REASON })

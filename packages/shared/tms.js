@@ -1595,6 +1595,18 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return rows.sort((a, b) => String(a.divisionKey).localeCompare(String(b.divisionKey)) || a.name.localeCompare(b.name))
   }
 
+  // A category's drawn pools; a final pool made from the qualifiers is not one.
+  const drawnPools = (pools) => pools.filter((p) => p.stage !== 'master')
+  /** A category confirmed on the Draw tab: its pools are final and its bouts made. */
+  const confirmedPools = (pools) => drawnPools(pools).length > 0 && drawnPools(pools).every((p) => p.confirmedAt)
+
+  /** The categories confirmed one at a time, by key. */
+  async function confirmedKeys(tournamentId) {
+    const byKey = new Map()
+    for (const p of await stores.pools.list({ tournamentId })) byKey.set(p.divisionKey, [...(byKey.get(p.divisionKey) || []), p])
+    return new Set([...byKey].filter(([, pools]) => confirmedPools(pools)).map(([key]) => key))
+  }
+
   async function assertNoBoutsPlayed(tournamentId, key) {
     const bridged = (await stores.categories.list({ tournamentId })).filter((c) => c.divisionKey === key)
     for (const category of bridged) {
@@ -1620,7 +1632,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
    */
   async function drawImpact(tournamentId, only = null) {
     const cfg = await config(tournamentId)
-    const all = (await divisions(tournamentId)).filter((d) => !isPanelKata(d, cfg.settings))
+    const confirmed = await confirmedKeys(tournamentId)
+    // A confirmed category is not redrawn: reopen it first.
+    const all = (await divisions(tournamentId)).filter((d) => !isPanelKata(d, cfg.settings) && !confirmed.has(d.key))
     const targets = only ? all.filter((d) => d.key === only) : all
     const categories = await stores.categories.list({ tournamentId })
     const out = []
@@ -1654,7 +1668,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const drawMethod = method || cfg.settings.drawMethod || DRAW_METHODS.RANDOM
     if (!Object.values(DRAW_METHODS).includes(drawMethod)) throw invalid('invalid_method')
     if (drawMethod === DRAW_METHODS.SEEDED && cfg.settings.allowSeeding === false) throw rule('seeding_disabled')
-    const all = (await divisions(tournamentId)).filter((d) => !isPanelKata(d, cfg.settings))
+    const confirmed = await confirmedKeys(tournamentId)
+    if (only && confirmed.has(only)) throw rule('category_confirmed')
+    // "Draw all" leaves confirmed categories as they are.
+    const all = (await divisions(tournamentId)).filter((d) => !isPanelKata(d, cfg.settings) && !confirmed.has(d.key))
     const targets = only ? all.filter((d) => d.key === only) : all
     if (only && !targets.length) throw missing('division_not_found')
     const impact = await drawImpact(tournamentId, only)
@@ -1738,6 +1755,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const from = await inTournament('pools', tournamentId, fromPoolId)
     const to = await inTournament('pools', tournamentId, toPoolId)
     if (from.divisionKey !== to.divisionKey) throw rule('different_division')
+    if (confirmedPools(await listPools(tournamentId, from.divisionKey))) throw rule('category_confirmed')
     if (!from.playerIds.includes(playerId)) throw invalid('player_not_in_pool')
     if (to.playerIds.includes(playerId)) throw invalid('already_in_pool')
     // PRD v1 §21 "Pool max respected": over the maximum only on purpose, with a reason.
@@ -1765,8 +1783,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   async function arrangePoolsNow(actor, tournamentId, key, layout, { reason = null, force = false } = {}) {
     const tournament = await writableTournament(tournamentId)
     if (tournament.drawLocked) throw rule('draw_locked')
-    const current = await listPools(tournamentId, key)
+    const current = drawnPools(await listPools(tournamentId, key))
     if (!current.length) throw missing('pools_not_found')
+    if (confirmedPools(current)) throw rule('category_confirmed')
     if (!Array.isArray(layout) || !layout.length) throw invalid('invalid_layout')
     const byId = new Map(current.map((p) => [p.id, p]))
     const ids = layout.map((p) => p.id).filter(Boolean)
@@ -1803,6 +1822,58 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     for (const pool of current) if (!keptIds.has(pool.id)) await stores.pools.remove(pool.id)
     const sizes = (pools) => pools.map((p, i) => ({ pool: p.name || poolName(i), players: p.playerIds.length }))
     await record(actor, { tournamentId, action: A.POOLS_ARRANGED, entity: 'division', entityId: key, before: { pools: sizes(current) }, after: { pools: sizes(kept), moved }, reason })
+    return listPools(tournamentId, key)
+  }
+
+  const confirmDivision = (actor, tournamentId, key, options) => boutsTurn(tournamentId, () => confirmDivisionNow(actor, tournamentId, key, options))
+  const reopenDivision = (actor, tournamentId, key, reason) => boutsTurn(tournamentId, () => reopenDivisionNow(actor, tournamentId, key, reason))
+
+  /**
+   * One category's Confirm on the Draw tab: its pools (as laid out, when a
+   * layout comes with it) become final and its bouts are made, while the
+   * other categories stay open. Once every drawn category is confirmed, the
+   * draw locks as the Dashboard's Lock draw would.
+   */
+  async function confirmDivisionNow(actor, tournamentId, key, { layout = null, reason = null, force = false } = {}) {
+    const tournament = await writableTournament(tournamentId)
+    if (tournament.drawLocked) throw rule('draw_locked')
+    if (layout) await arrangePoolsNow(actor, tournamentId, key, layout, { reason, force })
+    const pools = drawnPools(await listPools(tournamentId, key))
+    if (!pools.length) throw missing('pools_not_found')
+    if (confirmedPools(pools)) throw rule('category_confirmed')
+    const at = iso()
+    for (const pool of pools) await stores.pools.update(pool.id, { confirmedAt: at, confirmedBy: actor?.uid || null })
+    const { created } = await generateMatchesNow(actor, tournamentId, { divisionKey: key })
+    await record(actor, { tournamentId, action: A.CATEGORY_CONFIRMED, entity: 'division', entityId: key, after: { pools: pools.length, matches: created }, reason })
+    return { pools: await listPools(tournamentId, key), created, drawLocked: await lockDrawWhenAllConfirmed(actor, tournamentId) }
+  }
+
+  /** Every category drawn and confirmed: the draw is final, so it locks. */
+  async function lockDrawWhenAllConfirmed(actor, tournamentId) {
+    const cfg = await config(tournamentId)
+    const confirmed = await confirmedKeys(tournamentId)
+    // The same "still to draw" as the dashboard's checklist.
+    const open = (await divisions(tournamentId)).filter((d) => !isPanelKata(d, cfg.settings) && (d.pools ? !confirmed.has(d.key) : d.count >= 2))
+    if (open.length) return false
+    await setDrawLock(actor, tournamentId, true, 'Every category confirmed')
+    return true
+  }
+
+  /**
+   * Undoes a category's Confirm: its unplayed bouts go and its pools can be
+   * changed again. Never once a bout has been fought; it throws bouts away,
+   * so it needs a reason and the draw-regeneration privilege.
+   */
+  async function reopenDivisionNow(actor, tournamentId, key, reason) {
+    const tournament = await writableTournament(tournamentId)
+    if (tournament.drawLocked) throw rule('draw_locked')
+    if (!reason) throw invalid('reason_required')
+    if (actor && !can(actor.role, P.DRAW_REGENERATE)) throw denied('regenerate_forbidden')
+    const pools = drawnPools(await listPools(tournamentId, key))
+    if (!confirmedPools(pools)) throw rule('category_not_confirmed')
+    await clearBridge(tournamentId, key)
+    for (const pool of pools) await stores.pools.update(pool.id, { confirmedAt: null, confirmedBy: null })
+    await record(actor, { tournamentId, action: A.CATEGORY_REOPENED, entity: 'division', entityId: key, reason })
     return listPools(tournamentId, key)
   }
 
@@ -1879,9 +1950,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   async function generateMatchesNow(actor, tournamentId, { divisionKey: only = null } = {}) {
     const cfg = await config(tournamentId, { write: true })
     const { tournament, settings } = cfg
-    if (!tournament.drawLocked) throw rule('draw_not_locked')
-    const all = await divisions(tournamentId)
     const pools = await listPools(tournamentId)
+    // The whole draw locked, or (one category at a time) that category confirmed.
+    if (!tournament.drawLocked && !(only && confirmedPools(pools.filter((p) => p.divisionKey === only)))) throw rule('draw_not_locked')
+    const all = await divisions(tournamentId)
     const targets = (only ? all.filter((d) => d.key === only) : all).filter((d) => pools.some((p) => p.divisionKey === d.key))
     const players = new Map((await stores.players.list({ tournamentId })).map((p) => [p.id, p]))
     let number = await nextMatchNumber(tournamentId)
@@ -3410,7 +3482,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const tournamentId = t.id
     const [divisionRows, teamRows, playerRows, poolRows, matchRows] = await Promise.all([
       divisions(tournamentId), stores.teams.list({ tournamentId }), stores.players.list({ tournamentId }),
-      t.drawLocked ? listPools(tournamentId) : [], listMatches(tournamentId),
+      // The draw once locked, or a category as soon as it is confirmed.
+      Promise.all([listPools(tournamentId), confirmedKeys(tournamentId)]).then(([rows, confirmed]) => rows.filter((p) => t.drawLocked || confirmed.has(p.divisionKey))), listMatches(tournamentId),
     ])
     const labelOf = new Map(divisionRows.map((d) => [d.key, d.label]))
     const visible = playerRows.filter((p) => DRAW_ELIGIBLE.has(p.registrationStatus))
@@ -3697,7 +3770,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     teams, teamMembers, listPlayers, pagePlayers, pageAudit, createPlayer, updatePlayer, removePlayer, previewBulk, importBulk,
     setRegistrationStatus, recordPayment, recordWeighIn,
     // categorisation and draw
-    categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, arrangePools, drawImpact, setQualifiers, decideSingleEntry,
+    categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, arrangePools, confirmDivision, reopenDivision, drawImpact, setQualifiers, decideSingleEntry,
     // matches and results
     generateMatches, listMatches, correctResult, attention, swapCorners, callMatch, setRunningEvent, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,

@@ -17,6 +17,8 @@ export const AUDIT_ACTIONS = {
   POOLS_GENERATED: 'pools.generated',
   PLAYER_MOVED_POOL: 'pool.player_moved',
   POOLS_ARRANGED: 'pools.arranged',
+  CATEGORY_CONFIRMED: 'draw.category_confirmed',
+  CATEGORY_REOPENED: 'draw.category_reopened',
   MATCH_RESULT_CHANGED: 'match.result_changed',
   SCORE_UNDONE: 'match.score_undone',
   TOURNAMENT_UPDATED: 'tournament.updated',
