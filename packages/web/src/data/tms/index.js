@@ -167,6 +167,7 @@ export const ERROR_TEXT = {
   reopen_forbidden: 'Only an administrator with the reopen privilege can move the tournament back.',
   result_override_forbidden: 'Overriding a result needs the result-override privilege.',
   results_locked: 'Results are locked. Move the tournament back to Live (with a reason) to change them.',
+  category_locked: 'This category is locked. Unlock it on the Results tab (with a reason) to change it.',
   results_not_decided: 'This category has no decided result yet.',
   results_published: 'These results are published; corrections need the result-override privilege.',
   round_not_pending: 'This round has already started.',
