@@ -3553,7 +3553,6 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       bronze: medals.filter((m) => m.medal === 'bronze').length,
       // What is called next: the event on the mats (Kata and Kumite take turns), still to be fought.
       nextMatches: matches.filter((m) => upNext(m) && (eventOfCategory(m) || runningEvent(tournament)) === runningEvent(tournament)).slice(0, 8),
-      currentMatches: matches.filter((m) => ['live', 'open'].includes(m.status)),
       // The problems and to-dos shown at the top of every tab.
       attention: await attention(tournamentId, { players, ageGroups, weightCategories, pools, kataRounds }),
     }
