@@ -179,7 +179,7 @@ These apply until you change them. A category can override several of them for i
 | Penalty categories | 2 (each C, K, HC, H) | 1 or 2 |
 | Maximum pool size | 8 | 2 to 64 |
 | Pool split when uneven | Even pools (17 → 6 + 6 + 5) | Even pools, or fewest pools (17 → 9 + 8) |
-| Competition system | Round robin in pools, then knockout | Or straight knockout |
+| Competition system | Straight knockout (each category is one draw sheet) | Or round robin in pools, then knockout |
 | Qualifiers per pool | 2 | 1 to 8 |
 | Standing points | Win 3, draw 1 | 0 to 10 each |
 | Bronze medals per category | 2 | 0, 1 or 2 |
@@ -401,12 +401,12 @@ Locking entries freezes the player list. The draw then puts each category's play
 
 *A category in pools: drag players between pools, add a pool, then Confirm.*
 
-How pools are made:
+How the draw is made:
 
-- A pool holds at most the maximum pool size (default 8). Uneven numbers are split as evenly as possible (20 players → 7 + 7 + 6), or into the fewest pools (17 → 9 + 8) if that option is chosen.
+- By default every category is a **straight knockout**, drawn as its sheet: seeds first, then the drawn order, with byes for the top seeds. To fight in pools instead, choose **Round robin in pools, then knockout** under Settings → Competition rules (or as an age group's or weight class's own rule in Categories) before drawing.
+- In pools, a pool holds at most the maximum pool size (default 8). Uneven numbers are split as evenly as possible (20 players → 7 + 7 + 6), or into the fewest pools (17 → 9 + 8) if that option is chosen.
 - The draw is random, or seeded (seeds placed first) when seeding is allowed.
 - In a pool, everyone fights everyone once (round robin). Two players in a category fight one direct final.
-- A category set to **straight knockout** goes to a bracket instead of pools, with byes for the top seeds.
 - **Blank draw sheet** prints an empty sheet for manual use.
 - A category with only **one player** cannot have bouts. Needs attention lists it; on the Results tab, award that player the medal or record "no competition".
 

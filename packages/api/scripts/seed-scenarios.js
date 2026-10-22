@@ -90,7 +90,8 @@ function builder(stores, { now = new Date(), log = console.log } = {}) {
       weighInDate: day(start - 1), startDate: day(start), endDate: day(start + (spec.days || 2) - 1),
       rules: 'WKF rules apply. Protective gear (mitts, shin and foot guards, mouth guard) is compulsory for Kumite.',
       terms: 'Coaches confirm every player is medically fit and insured.',
-      settings: { poolSize: 8, mats: 3, matchDurationSec: 120, pointGap: 8, emailNotifications: false, fees: { kata: 500, kumite: 700, both: 1000, team: 0 }, ...settings },
+      // Pools unless a scenario or weight class says knockout (the default since KAN-425), so every stage of both systems is here.
+      settings: { poolSize: 8, poolSystem: 'round_robin', mats: 3, matchDurationSec: 120, pointGap: 8, emailNotifications: false, fees: { kata: 500, kumite: 700, both: 1000, team: 0 }, ...settings },
       ...extra,
     } : { ...base, ...extra })
 

@@ -49,7 +49,8 @@ async function open() {
  */
 async function drawn({ classes = 1, each = 4, mats = 1, poolSystem = 'knockout', matches = true } = {}) {
   const { raw, tms, t, g, team } = await open()
-  await raw.tournaments.update(t.id, { settings: { requireWeighInForDraw: false, mats } })
+  // Pools unless a weight class says knockout; straight knockout is the default (KAN-425).
+  await raw.tournaments.update(t.id, { settings: { requireWeighInForDraw: false, mats, poolSystem: 'round_robin' } })
   for (let c = 0; c < classes; c += 1) {
     await tms.weightCategories.create(admin, t.id, {
       ageGroupId: g.id, name: `-${35 + c * 5} KG`, maxWeight: 35 + c * 5,

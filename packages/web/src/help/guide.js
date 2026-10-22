@@ -355,7 +355,7 @@ export const HELP = {
   },
   'draw.pools': {
     title: 'Step 2: Lock entries and draw pools',
-    text: 'Entries must be locked first. Then draw the pools for each category: players are placed at random, keeping team-mates apart where possible. Below the list, each drawn category can be changed by hand and confirmed.',
+    text: 'Entries must be locked first. Then draw each category: by default it is a knockout sheet (seeds first, byes to the top seeds); a category set to pools gets pools, keeping team-mates apart where possible. Below the list, each drawn category can be changed by hand and confirmed.',
     tips: [
       'A knockout category shows its draw sheet: drag a player onto another Aka / Ao box to swap them, or onto an empty box for a bye (on a tablet, tap one box and then another).',
       'In pools: drag a player to another pool (or tap the player, then "Move here"). "Add pool" adds an empty pool.',
