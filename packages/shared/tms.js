@@ -460,6 +460,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   }
 
   const isCoach = (actor) => actor?.role === 'coach'
+  // Seeds place players in the draw (seed 1 at the top, byes to the top
+  // seeds), so only organisers set them; a coach's or partner's is ignored.
+  const maySeed = (actor) => !isCoach(actor) && actor?.role !== 'partner'
 
   /**
    * What the coach portal shows: open exactly when a coach may write
@@ -1169,7 +1172,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         teamId,
         tournamentId,
         playerNumber: nextPlayerNumber(existing),
-        seed: input.seed ?? null,
+        seed: maySeed(actor) ? input.seed ?? null : null,
         registrationStatus: status || (isCoach(actor) ? R.SUBMITTED : R.PENDING_VERIFICATION),
         // The system is free while payments are off (features.js): no fee, no payment record.
         payment: paymentsEnabled() ? { amount: feeFor(player, cfg.settings), status: 'PENDING' } : null,
@@ -1238,7 +1241,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       await inTournament('teams', tournamentId, input.teamId).catch(() => { throw invalid('invalid_teamId') })
       patch.teamId = input.teamId
     }
-    if ('seed' in input) patch.seed = input.seed
+    if ('seed' in input && maySeed(actor)) patch.seed = input.seed
 
     // Section 21: once entries are locked, nothing that decides a category moves.
     if (cfg.tournament.entriesLocked) {
