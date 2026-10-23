@@ -4,10 +4,10 @@ import { MemoryRouter } from 'react-router-dom'
 
 const data = vi.hoisted(() => ({
   list: vi.fn(),
-  dashboard: vi.fn(),
+  summaries: vi.fn(),
 }))
 vi.mock('../../data/domain', () => ({ tournaments: { list: data.list } }))
-vi.mock('../../data/tms', () => ({ tms: { dashboard: data.dashboard } }))
+vi.mock('../../data/tms', () => ({ tms: { summaries: data.summaries } }))
 
 const AdminDashboard = (await import('./AdminDashboard')).default
 
@@ -29,7 +29,7 @@ const card = (label) => screen.getByText(label, { selector: 'p' }).parentElement
 describe('AdminDashboard totals', () => {
   it('counts Live tournaments as live, leaves archived ones out, and ignores cancelled bouts', async () => {
     data.list.mockResolvedValue(TOURNAMENTS)
-    data.dashboard.mockImplementation(async (id) => STATS[id])
+    data.summaries.mockResolvedValue(STATS)
     render(<MemoryRouter><AdminDashboard profile={{ role: 'admin' }} /></MemoryRouter>)
     await screen.findByText('State Championship')
 

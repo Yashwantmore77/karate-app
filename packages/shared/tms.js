@@ -3742,6 +3742,56 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     return out.sort((a, b) => rank[a.level] - rank[b.level])
   }
 
+  // The counts a dashboard shows, from a tournament's rows; the admin home
+  // sums the same ones (dashboardSummaries), so the two never disagree.
+  const playerCounts = (players) => {
+    const count = (pred) => players.filter(pred).length
+    return {
+      players: count(countsAsEntry),
+      kataPlayers: count((p) => countsAsEntry(p) && p.events?.includes('kata')),
+      kumitePlayers: count((p) => countsAsEntry(p) && p.events?.includes('kumite')),
+      pendingVerification: count((p) => [R.SUBMITTED, R.PENDING_VERIFICATION].includes(p.registrationStatus)),
+      pendingPayment: paymentsEnabled() ? count((p) => DRAW_ELIGIBLE.has(p.registrationStatus) && (p.payment?.status || 'PENDING') !== 'PAID') : 0,
+      pendingWeighIn: count((p) => p.events?.includes('kumite') && DRAW_ELIGIBLE.has(p.registrationStatus) && (p.weighIn?.status || 'PENDING') !== 'PASSED'),
+    }
+  }
+  const boutCounts = (matches) => ({
+    matches: matches.length,
+    completedMatches: matches.filter((m) => boutOutcome(m)).length,
+    liveMatches: matches.filter((m) => ['live', 'open'].includes(m.status)).length,
+    pendingMatches: matches.filter((m) => !boutOutcome(m) && m.status !== 'cancelled').length,
+  })
+  const medalCounts = (medals) => ({
+    gold: medals.filter((m) => m.medal === 'gold').length,
+    silver: medals.filter((m) => m.medal === 'silver').length,
+    bronze: medals.filter((m) => m.medal === 'bronze').length,
+  })
+
+  /**
+   * The admin home's numbers for many tournaments at once (KAN-368): each
+   * one's dashboard counts, in five reads however many tournaments there
+   * are, instead of a full dashboard per tournament.
+   */
+  async function dashboardSummaries(tournamentIds) {
+    if (!tournamentIds.length) return {}
+    const ofThese = { tournamentId: { $in: tournamentIds } }
+    const [players, teams, categories, medals] = await Promise.all(
+      [stores.players, stores.teams, stores.categories, stores.medals].map((store) => store.search(ofThese).then((r) => r.rows)),
+    )
+    // The bouts a dashboard counts: those of the draw's categories.
+    const tournamentOfCategory = new Map(categories.filter((c) => c.divisionKey).map((c) => [c.id, c.tournamentId]))
+    const bouts = tournamentOfCategory.size ? (await stores.matches.search({ categoryId: { $in: [...tournamentOfCategory.keys()] } })).rows : []
+    const byTournament = (rows, idOf = (r) => r.tournamentId) => {
+      const out = new Map(tournamentIds.map((id) => [id, []]))
+      for (const row of rows) out.get(idOf(row))?.push(row)
+      return out
+    }
+    const [p, t, m, b] = [byTournament(players), byTournament(teams), byTournament(medals), byTournament(bouts, (r) => tournamentOfCategory.get(r.categoryId))]
+    return Object.fromEntries(tournamentIds.map((id) => [id, {
+      teams: t.get(id).length, ...playerCounts(p.get(id)), ...boutCounts(b.get(id)), ...medalCounts(m.get(id)),
+    }]))
+  }
+
   async function dashboard(tournamentId) {
     const tournament = await tournamentOf(tournamentId)
     const players = await stores.players.list({ tournamentId })
@@ -3754,7 +3804,6 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       stores.ageGroups.list({ tournamentId }), stores.weightCategories.list({ tournamentId }),
       stores.certificates.list({ tournamentId }), stores.passes.list({ tournamentId }), stores.kataRounds.list({ tournamentId }),
     ])
-    const count = (pred) => players.filter(pred).length
     return {
       ageGroups: ageGroups.length,
       weightCategories: weightCategories.length,
@@ -3766,22 +3815,12 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       matchesWithReferee: matches.filter((m) => m.refereeId).length,
       teams: teamRows.length,
       teamMembers: (await stores.teamMembers.list({ tournamentId })).length,
-      players: count(countsAsEntry),
-      kataPlayers: count((p) => countsAsEntry(p) && p.events?.includes('kata')),
-      kumitePlayers: count((p) => countsAsEntry(p) && p.events?.includes('kumite')),
-      pendingVerification: count((p) => [R.SUBMITTED, R.PENDING_VERIFICATION].includes(p.registrationStatus)),
-      pendingPayment: paymentsEnabled() ? count((p) => DRAW_ELIGIBLE.has(p.registrationStatus) && (p.payment?.status || 'PENDING') !== 'PAID') : 0,
-      pendingWeighIn: count((p) => p.events?.includes('kumite') && DRAW_ELIGIBLE.has(p.registrationStatus) && (p.weighIn?.status || 'PENDING') !== 'PASSED'),
+      ...playerCounts(players),
       // Taking part but with an entry in no category: the draw would leave them out.
       uncategorized: await uncategorizedPlayers(tournamentId),
       pools: pools.length,
-      matches: matches.length,
-      completedMatches: matches.filter((m) => boutOutcome(m)).length,
-      liveMatches: matches.filter((m) => ['live', 'open'].includes(m.status)).length,
-      pendingMatches: matches.filter((m) => !boutOutcome(m) && m.status !== 'cancelled').length,
-      gold: medals.filter((m) => m.medal === 'gold').length,
-      silver: medals.filter((m) => m.medal === 'silver').length,
-      bronze: medals.filter((m) => m.medal === 'bronze').length,
+      ...boutCounts(matches),
+      ...medalCounts(medals),
       // What is called next: the event on the mats (Kata and Kumite take turns), still to be fought.
       nextMatches: matches.filter((m) => upNext(m) && (eventOfCategory(m) || runningEvent(tournament)) === runningEvent(tournament)).slice(0, 8),
       // The problems and to-dos shown at the top of every tab.
@@ -3885,7 +3924,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // links and coaches
     getLink, saveLink, linkInfo, openLink, assertLinkSession, coachOverview,
     // public, dashboard, audit
-    publicList, publicView, publicTournament, dashboard, analyticsEvents, listNotifications, markNotificationsRead, sendWeighInReminder,
+    publicList, publicView, publicTournament, dashboard, dashboardSummaries, analyticsEvents, listNotifications, markNotificationsRead, sendWeighInReminder,
     auditTrail: (tournamentId) => audit.forTournament(tournamentId),
     logExport, record,
     // files

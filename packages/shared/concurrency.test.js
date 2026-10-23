@@ -198,6 +198,28 @@ describe('event day: reads per request (KAN-368)', () => {
   })
 })
 
+describe('the admin home in a few reads (KAN-368)', () => {
+  it('gives every tournament its dashboard counts in five reads, however many tournaments there are', async () => {
+    const { raw, tms, t } = await drawn({ classes: 3, each: 4, poolSystem: null })
+    const empty = await raw.tournaments.insert({ ...READY, name: 'Empty Cup' })
+    const keys = ['teams', 'players', 'kataPlayers', 'kumitePlayers', 'pendingVerification', 'pendingPayment', 'pendingWeighIn', 'matches', 'completedMatches', 'liveMatches', 'pendingMatches', 'gold', 'silver', 'bronze']
+    const full = await tms.dashboard(t.id)
+    let reads = 0
+    for (const name of ['players', 'teams', 'categories', 'medals', 'matches', 'competitors']) {
+      for (const method of ['list', 'search']) {
+        const real = raw[name][method].bind(raw[name])
+        raw[name][method] = (...args) => { reads += 1; return real(...args) }
+      }
+    }
+    const summaries = await tms.dashboardSummaries([t.id, empty.id])
+    expect(reads).toBe(5)
+    // The same numbers the tournament's own dashboard shows.
+    expect(summaries[t.id]).toEqual(Object.fromEntries(keys.map((k) => [k, full[k]])))
+    expect(summaries[t.id]).toMatchObject({ players: 12, matches: 18 })
+    expect(summaries[empty.id]).toMatchObject({ players: 0, matches: 0, gold: 0 })
+  })
+})
+
 describe('Analytics in a few reads (KAN-368)', () => {
   it('reads every tournament\'s players, teams, bouts and medals at once, the same as one by one', async () => {
     const { raw, tms, t } = await drawn({ classes: 3, each: 4, poolSystem: null })
