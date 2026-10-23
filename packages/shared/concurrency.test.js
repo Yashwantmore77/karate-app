@@ -220,6 +220,46 @@ describe('the admin home in a few reads (KAN-368)', () => {
   })
 })
 
+describe('the dashboard in a few reads (KAN-368)', () => {
+  it('rebuilds a tournament\'s dashboard reading each table once, nearly all at the same time', async () => {
+    const { raw, tms, t, g, team } = await open()
+    await raw.tournaments.update(t.id, { settings: { requireWeighInForDraw: false, poolSystem: 'round_robin' } })
+    await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-35 KG', maxWeight: 35 })
+    await tms.weightCategories.create(admin, t.id, { ageGroupId: g.id, name: '-40 KG', minWeight: 35, maxWeight: 40 })
+    // Four in one class, one alone in the other and one too heavy for both: plenty to point out.
+    for (const [i, weight] of [32, 32, 33, 34, 38, 60].entries()) {
+      const p = await tms.createPlayer(admin, t.id, { teamId: team.id, name: `Player ${i}`, dob: `2014-03-1${i}`, gender: 'M', events: ['kumite'], weight })
+      await tms.setRegistrationStatus(admin, t.id, p.id, 'approve')
+    }
+    await tms.categorize(admin, t.id)
+    await tms.setEntriesLock(admin, t.id, true)
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    const reads = {}
+    let finished = 0
+    const waits = new Set()
+    for (const [name, store] of Object.entries(raw)) {
+      for (const method of ['get', 'list', 'search']) {
+        const real = store[method].bind(store)
+        store[method] = (...args) => {
+          reads[name] = (reads[name] || 0) + 1
+          // How many reads had finished when this one began: one value per round trip waited for.
+          waits.add(finished)
+          return real(...args).finally(() => { finished += 1 })
+        }
+      }
+    }
+    const dash = await tms.dashboard(t.id)
+    expect(Object.values(reads).every((n) => n === 1), JSON.stringify(reads)).toBe(true)
+    // Everything at once, then the medal decisions for the single entry.
+    expect(waits.size).toBe(2)
+    // The same to-dos the list works out by itself.
+    expect(dash.attention).toEqual(await tms.attention(t.id))
+    expect(dash.attention.map((a) => a.id)).toEqual(expect.arrayContaining(['uncategorized', 'single_entries']))
+    expect(dash.uncategorized.map((u) => u.name)).toEqual(['Player 5'])
+    expect(dash).toMatchObject({ players: 6, pools: 1, teams: 1, matches: 0 })
+  })
+})
+
 describe('Analytics in a few reads (KAN-368)', () => {
   it('reads every tournament\'s players, teams, bouts and medals at once, the same as one by one', async () => {
     const { raw, tms, t } = await drawn({ classes: 3, each: 4, poolSystem: null })

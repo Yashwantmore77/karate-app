@@ -1562,14 +1562,19 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const cfg = await config(tournamentId)
     const players = await stores.players.list({ tournamentId })
     const pools = await stores.pools.list({ tournamentId })
+    return divisionsOf({ ...cfg, players, pools })
+  }
+
+  /** A tournament's categories with their players and pools, from its rows. */
+  function divisionsOf({ ageGroups, weightCategories, players, pools }) {
     const groups = new Map()
     for (const player of players) {
       if (!DRAW_ELIGIBLE.has(player.registrationStatus)) continue
       for (const [event, entry] of Object.entries(player.entries || {})) {
         if (!entry.divisionKey) continue
         if (!groups.has(entry.divisionKey)) {
-          const ageGroup = cfg.ageGroups.find((g) => g.id === entry.ageGroupId)
-          const weightCategory = cfg.weightCategories.find((w) => w.id === entry.weightCategoryId)
+          const ageGroup = ageGroups.find((g) => g.id === entry.ageGroupId)
+          const weightCategory = weightCategories.find((w) => w.id === entry.weightCategoryId)
           const div = parseDivisionKey(entry.divisionKey).division ? player.division : null
           groups.set(entry.divisionKey, {
             key: entry.divisionKey, event, ageGroupId: entry.ageGroupId, weightCategoryId: entry.weightCategoryId || null,
@@ -1760,9 +1765,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   /** Players taking part whose entries (some or all) have no category: the draw leaves those out. */
   async function uncategorizedPlayers(tournamentId) {
-    const tournament = await tournamentOf(tournamentId)
+    const [tournament, players] = await Promise.all([tournamentOf(tournamentId), stores.players.list({ tournamentId })])
+    return uncategorizedOf(tournament, players)
+  }
+
+  function uncategorizedOf(tournament, players) {
     const out = []
-    for (const p of await stores.players.list({ tournamentId })) {
+    for (const p of players) {
       for (const miss of missingCategories(p, tournament)) out.push({ playerId: p.id, name: p.name, ...miss })
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
@@ -2064,19 +2073,25 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
   /** Every bout in the tournament, with names, for the queue and public pages. */
   async function listMatches(tournamentId, filter = {}) {
-    const categories = (await stores.categories.list({ tournamentId })).filter((c) => c.divisionKey)
-    const ids = categories.map((c) => c.id)
-    // Every category's bouts and entrants in two reads, not two per category:
-    // the dashboard rebuilds after every save (KAN-368).
-    const [pools, bouts, entrants] = await Promise.all([
-      stores.pools.list({ tournamentId }),
-      ids.length ? stores.matches.search({ categoryId: { $in: ids } }).then((r) => r.rows) : [],
-      ids.length ? stores.competitors.search({ categoryId: { $in: ids } }).then((r) => r.rows) : [],
-    ])
-    return boutsWithNames({ categories, pools, bouts, entrants })
+    const [categories, pools] = await Promise.all([stores.categories.list({ tournamentId }), stores.pools.list({ tournamentId })])
+    return (await boutsOf(categories, pools))
       .filter((m) => (!filter.status || m.status === filter.status) && (!filter.mat || m.mat === Number(filter.mat)) && (!filter.divisionKey || m.divisionKey === filter.divisionKey))
       // PRD point 20: an official sees the bouts they are on.
       .filter((m) => !filter.officialId || m.refereeId === filter.officialId || (m.judgeIds || []).includes(filter.officialId))
+  }
+
+  /** The bouts of a tournament's categories, with names. */
+  async function boutsOf(categories, pools) {
+    const drawn = categories.filter((c) => c.divisionKey)
+    const ids = drawn.map((c) => c.id)
+    if (!ids.length) return []
+    // Every category's bouts and entrants in two reads, not two per category:
+    // the dashboard rebuilds after every save (KAN-368).
+    const [bouts, entrants] = await Promise.all([
+      stores.matches.search({ categoryId: { $in: ids } }).then((r) => r.rows),
+      stores.competitors.search({ categoryId: { $in: ids } }).then((r) => r.rows),
+    ])
+    return boutsWithNames({ categories: drawn, pools, bouts, entrants })
   }
 
   /**
@@ -3698,7 +3713,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
 
     // Categories: taking part, but in no category.
     if (!t.drawLocked) {
-      const missing = await uncategorizedPlayers(tournamentId)
+      const missing = known.uncategorized || await uncategorizedPlayers(tournamentId)
       if (missing.length) {
         const count = new Set(missing.map((m) => m.playerId)).size
         out.push({ id: 'uncategorized', level: 'error', title: `${plural(count, 'player')} ${count === 1 ? 'has' : 'have'} no category: the draw would leave them out`, detail: 'Usually a weight class is missing. Add it in Categories, or choose their category with "Fix category" in Registrations.', items: missing.map((m) => `${m.name} (${m.event === 'kata' ? 'Kata' : 'Kumite'}): ${m.message}`), tab: 'registrations', action: 'Fix categories' })
@@ -3793,17 +3808,19 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   }
 
   async function dashboard(tournamentId) {
-    const tournament = await tournamentOf(tournamentId)
-    const players = await stores.players.list({ tournamentId })
-    const teamRows = await stores.teams.list({ tournamentId })
-    const pools = await stores.pools.list({ tournamentId })
-    const matches = await listMatches(tournamentId)
-    const medals = await stores.medals.list({ tournamentId })
-    // For the step-by-step guide: how far each stage of the event has got.
-    const [ageGroups, weightCategories, certificates, passes, kataRounds] = await Promise.all([
-      stores.ageGroups.list({ tournamentId }), stores.weightCategories.list({ tournamentId }),
-      stores.certificates.list({ tournamentId }), stores.passes.list({ tournamentId }), stores.kataRounds.list({ tournamentId }),
+    // Every table once and all at the same time, the bouts as soon as their
+    // categories are in: this reloads after every burst of saves (KAN-368).
+    const rows = (name) => stores[name].list({ tournamentId })
+    const poolRows = rows('pools')
+    const [tournament, players, teamRows, teamMembers, pools, matches, medals, ageGroups, weightCategories, certificates, passes, kataRounds] = await Promise.all([
+      tournamentOf(tournamentId), rows('players'), rows('teams'), rows('teamMembers'), poolRows,
+      Promise.all([rows('categories'), poolRows]).then(([categories, drawn]) => boutsOf(categories, drawn)),
+      rows('medals'),
+      // For the step-by-step guide: how far each stage of the event has got.
+      rows('ageGroups'), rows('weightCategories'), rows('certificates'), rows('passes'), rows('kataRounds'),
     ])
+    const uncategorized = uncategorizedOf(tournament, players)
+    const known = { tournament, players, ageGroups, weightCategories, pools, kataRounds, uncategorized, divisions: divisionsOf({ ageGroups, weightCategories, players, pools }) }
     return {
       ageGroups: ageGroups.length,
       weightCategories: weightCategories.length,
@@ -3814,17 +3831,17 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       scheduledMatches: matches.filter((m) => m.mat || m.scheduledAt).length,
       matchesWithReferee: matches.filter((m) => m.refereeId).length,
       teams: teamRows.length,
-      teamMembers: (await stores.teamMembers.list({ tournamentId })).length,
+      teamMembers: teamMembers.length,
       ...playerCounts(players),
       // Taking part but with an entry in no category: the draw would leave them out.
-      uncategorized: await uncategorizedPlayers(tournamentId),
+      uncategorized,
       pools: pools.length,
       ...boutCounts(matches),
       ...medalCounts(medals),
       // What is called next: the event on the mats (Kata and Kumite take turns), still to be fought.
       nextMatches: matches.filter((m) => upNext(m) && (eventOfCategory(m) || runningEvent(tournament)) === runningEvent(tournament)).slice(0, 8),
       // The problems and to-dos shown at the top of every tab.
-      attention: await attention(tournamentId, { players, ageGroups, weightCategories, pools, kataRounds }),
+      attention: await attention(tournamentId, known),
     }
   }
 
