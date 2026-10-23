@@ -2073,6 +2073,19 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       ids.length ? stores.matches.search({ categoryId: { $in: ids } }).then((r) => r.rows) : [],
       ids.length ? stores.competitors.search({ categoryId: { $in: ids } }).then((r) => r.rows) : [],
     ])
+    return boutsWithNames({ categories, pools, bouts, entrants })
+      .filter((m) => (!filter.status || m.status === filter.status) && (!filter.mat || m.mat === Number(filter.mat)) && (!filter.divisionKey || m.divisionKey === filter.divisionKey))
+      // PRD point 20: an official sees the bouts they are on.
+      .filter((m) => !filter.officialId || m.refereeId === filter.officialId || (m.judgeIds || []).includes(filter.officialId))
+  }
+
+  /**
+   * A tournament's bouts as the screens list them, from its rows: each with
+   * its category, pool, result type and both sides' names and players, in
+   * match-number order.
+   */
+  function boutsWithNames({ categories, pools, bouts, entrants }) {
+    const ids = categories.map((c) => c.id)
     const poolOf = new Map(pools.map((p) => [p.id, p]))
     const competitors = new Map(entrants.map((c) => [c.id, c]))
     const boutsOf = new Map(ids.map((id) => [id, []]))
@@ -2094,11 +2107,40 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       }
     }
     const num = (m) => Number(String(m.matchNumber || '').replace(/\D/g, '')) || 0
-    return out
-      .filter((m) => (!filter.status || m.status === filter.status) && (!filter.mat || m.mat === Number(filter.mat)) && (!filter.divisionKey || m.divisionKey === filter.divisionKey))
-      // PRD point 20: an official sees the bouts they are on.
-      .filter((m) => !filter.officialId || m.refereeId === filter.officialId || (m.judgeIds || []).includes(filter.officialId))
-      .sort((a, b) => num(a) - num(b))
+    return out.sort((a, b) => num(a) - num(b))
+  }
+
+  /**
+   * Analytics' input for many tournaments (KAN-368): each one's players,
+   * teams, bouts (as listMatches gives them) and medals (as listMedals), in
+   * seven reads however many tournaments there are. Tournaments with no
+   * players are left out.
+   */
+  async function analyticsEvents(tournaments) {
+    if (!tournaments.length) return []
+    const ofThese = { tournamentId: { $in: tournaments.map((t) => t.id) } }
+    const [players, teams, categories, pools, medals] = await Promise.all(
+      [stores.players, stores.teams, stores.categories, stores.pools, stores.medals].map((store) => store.search(ofThese).then((r) => r.rows)),
+    )
+    const bridged = categories.filter((c) => c.divisionKey)
+    const ids = bridged.map((c) => c.id)
+    const [bouts, entrants] = ids.length
+      ? await Promise.all([stores.matches, stores.competitors].map((store) => store.search({ categoryId: { $in: ids } }).then((r) => r.rows)))
+      : [[], []]
+    const tournamentOf = new Map(bridged.map((c) => [c.id, c.tournamentId]))
+    const of = (rows, tid, idOf = (r) => r.tournamentId) => rows.filter((r) => idOf(r) === tid)
+    return tournaments
+      .map((tournament) => ({
+        tournament,
+        players: of(players, tournament.id),
+        teams: of(teams, tournament.id),
+        matches: boutsWithNames({
+          categories: of(bridged, tournament.id), pools: of(pools, tournament.id),
+          bouts: of(bouts, tournament.id, (m) => tournamentOf.get(m.categoryId)), entrants: of(entrants, tournament.id, (c) => tournamentOf.get(c.categoryId)),
+        }),
+        medals: of(medals, tournament.id).sort((a, b) => a.category.localeCompare(b.category) || a.rank - b.rank),
+      }))
+      .filter((e) => e.players.length)
   }
 
   const findBridgedMatch = async (tournamentId, matchId) => {
@@ -3882,7 +3924,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // links and coaches
     getLink, saveLink, linkInfo, openLink, assertLinkSession, coachOverview,
     // public, dashboard, audit
-    publicList, publicView, publicTournament, dashboard, dashboardSummaries, listNotifications, markNotificationsRead, sendWeighInReminder,
+    publicList, publicView, publicTournament, dashboard, dashboardSummaries, analyticsEvents, listNotifications, markNotificationsRead, sendWeighInReminder,
     auditTrail: (tournamentId) => audit.forTournament(tournamentId),
     logExport, record,
     // files

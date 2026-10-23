@@ -18,16 +18,9 @@ export function analyticsRoutes(stores, tms) {
     if (!can(req.user.role, P.REPORT_EXPORT)) throw forbidden()
     const account = req.user.role === 'super_admin' ? { role: 'super_admin' } : await findUserRecord(req.user.uid)
     if (!account) throw forbidden()
-    const events = []
-    for (const tournament of await stores.tournaments.list({})) {
-      if (!mayAccessTournament(account, tournament.id, tournament)) continue
-      const players = await stores.players.list({ tournamentId: tournament.id })
-      if (!players.length) continue
-      const [teams, matches, medals] = await Promise.all([
-        stores.teams.list({ tournamentId: tournament.id }), tms.listMatches(tournament.id), tms.listMedals(tournament.id),
-      ])
-      events.push({ tournament, players, teams, matches, medals })
-    }
+    const reach = (await stores.tournaments.list({})).filter((t) => mayAccessTournament(account, t.id, t))
+    // Every reachable tournament's data in a fixed number of reads (KAN-368).
+    const events = await tms.analyticsEvents(reach)
     res.setHeader('Cache-Control', 'no-store')
     res.json(buildAnalytics(events))
   })
