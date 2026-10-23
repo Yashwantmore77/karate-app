@@ -14,7 +14,7 @@ import Bracket from '../../components/tms/Bracket'
 import KataRoundTable from '../../components/tms/KataRoundTable'
 import { PageLoader, useLoading } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
-import { printBracketSheets, placesFromBracket } from '../../components/tms/bracketSheet'
+import { printBracketSheets, sheetsFromBracket } from '../../components/tms/bracketSheet'
 
 export const MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' }
 
@@ -220,9 +220,9 @@ export default function ResultsTab({ tournament, reload, version, action, role }
               <Grid size={{ xs: 12 }}>
                 <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                   <Typography variant="h4">Final stage</Typography>
-                  <Button size="small" variant="outlined" startIcon={<Print />} onClick={() => printBracketSheets([{
-                    title: String(tournament.association || tournament.organizer || tournament.name || '').toUpperCase(), event: d.label, ...placesFromBracket(d.bracket.rounds),
-                  }], `${d.label} — bracket sheet`)}>Print bracket sheet</Button>
+                  <Button size="small" variant="outlined" startIcon={<Print />} onClick={() => printBracketSheets(sheetsFromBracket(d.bracket.rounds, {
+                    title: String(tournament.association || tournament.organizer || tournament.name || '').toUpperCase(), event: d.label,
+                  }), `${d.label} — bracket sheet`)}>Print bracket sheet</Button>
                 </Stack>
                 <Bracket rounds={d.bracket.rounds} />
               </Grid>

@@ -10,7 +10,7 @@ import DataTable from '../../components/tms/DataTable'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
 import { useLoading } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
-import { printBracketSheets, sheetsForPlayers } from '../../components/tms/bracketSheet'
+import { printBracketSheets, sheetsForPlayers, sheetsFromPlaces } from '../../components/tms/bracketSheet'
 import PoolBoard from './PoolBoard'
 
 /** Sections 20-25: categorise, lock, draw pools, arrange and confirm each category, generate matches. */
@@ -130,9 +130,9 @@ export default function DrawTab({ tournament, reload, version, action, goTab }) 
           <PoolBoard key={d.key} tid={tid} division={d} pools={own} nameOf={nameOf} teamOf={teamOf}
             maxSize={own[0]?.poolSize || settings.poolSize} thirdPlace={!!settings.thirdPlaceMatch} drawLocked={drawLocked} action={action}
             onChanged={() => { reload(); load() }}
-            onPrint={() => printBracketSheets(own[0]?.places?.length <= 16
-              // A knockout sheet prints as laid out, byes where they are.
-              ? [{ title: sheetTitle, event: d.label, size: own[0].places.length, columns: [own[0].places.map((id) => (id ? nameOf(id) : ''))] }]
+            onPrint={() => printBracketSheets(own[0]?.places
+              // A knockout sheet prints as laid out, byes where they are, 16 places a page (KAN-256).
+              ? sheetsFromPlaces(own[0].places.map((id) => (id ? nameOf(id) : '')), { title: sheetTitle, event: d.label })
               : sheetsForPlayers({
                 title: sheetTitle, event: d.label,
                 groups: own.map((p) => ({ label: `Pool ${p.name}`, names: p.playerIds.map((id) => nameOf(id)) })),

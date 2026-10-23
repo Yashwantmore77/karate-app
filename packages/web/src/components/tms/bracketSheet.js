@@ -24,10 +24,15 @@ export function placesFromPlayers(names, size = sheetSize(names.length)) {
   return places
 }
 
-/** First-round (and later) places from a generated bracket: rounds[r].matches[m].aka / ao. */
-export function placesFromBracket(rounds) {
-  const main = (rounds || []).map((r) => r.matches.filter((m) => !m.thirdPlace))
-  const size = sheetSize((main[0]?.length || 1) * 2)
+// A bracket's rounds without the 3rd-place bout, and that bout's two names.
+const mainRounds = (rounds) => (rounds || []).map((r) => r.matches.filter((m) => !m.thirdPlace))
+const thirdOf = (rounds) => {
+  const third = (rounds || []).flatMap((r) => r.matches).find((m) => m.thirdPlace)
+  return third ? [third.aka?.name || '', third.ao?.name || ''] : ['', '']
+}
+
+// One sheet's names, column by column, for `size` first-round places from `main[0]` on.
+const columnsOf = (main, size) => {
   const columns = []
   for (let r = 0; (size >> r) >= 2; r += 1) {
     const slots = size >> r
@@ -37,8 +42,50 @@ export function placesFromBracket(rounds) {
     })
     columns.push(names)
   }
-  const third = (rounds || []).flatMap((r) => r.matches).find((m) => m.thirdPlace)
-  return { size, columns, third: third ? [third.aka?.name || '', third.ao?.name || ''] : ['', ''] }
+  return columns
+}
+
+/** First-round (and later) places from a generated bracket of up to 16 places: rounds[r].matches[m].aka / ao. */
+export function placesFromBracket(rounds) {
+  const main = mainRounds(rounds)
+  const size = sheetSize((main[0]?.length || 1) * 2)
+  return { size, columns: columnsOf(main, size), third: thirdOf(rounds) }
+}
+
+/**
+ * A bracket as printed sheets (KAN-256). Up to 16 places it is one sheet.
+ * A bigger one is a sheet per 16 places, each up to its own winner, then a
+ * last sheet with the rounds between those winners, the final and the
+ * 3rd-place bout: 32 places print as 16 + 16 + the final.
+ */
+export function sheetsFromBracket(rounds, { title, event }) {
+  const main = mainRounds(rounds)
+  const places = (main[0]?.length || 1) * 2
+  if (places <= 16) return [{ title, event, ...placesFromBracket(rounds) }]
+  const blocks = places / 16
+  const of = (n) => `Sheet ${n} of ${blocks + 1}`
+  return [
+    ...Array.from({ length: blocks }, (_, b) => ({
+      title, event, size: 16, sheet: of(b + 1),
+      columns: columnsOf(main.slice(0, 4).map((round, r) => round.slice(b * (8 >> r), (b + 1) * (8 >> r))), 16),
+    })),
+    { title, event, size: blocks, sheet: `Final rounds · ${of(blocks + 1)}`, columns: columnsOf(main.slice(4), blocks), third: thirdOf(rounds) },
+  ]
+}
+
+/**
+ * A knockout category's laid-out sheet as printed sheets: one up to 16
+ * places, otherwise 16 places a sheet in the order laid out, then a blank
+ * sheet for the rounds between their winners.
+ */
+export function sheetsFromPlaces(places, { title, event }) {
+  if (places.length <= 16) return [{ title, event, size: places.length, columns: [places] }]
+  const blocks = places.length / 16
+  const of = (n) => `Sheet ${n} of ${blocks + 1}`
+  return [
+    ...Array.from({ length: blocks }, (_, b) => ({ title, event, size: 16, sheet: of(b + 1), columns: [places.slice(b * 16, (b + 1) * 16)] })),
+    { title, event, size: blocks, sheet: `Final rounds · ${of(blocks + 1)}`, columns: [] },
+  ]
 }
 
 /**

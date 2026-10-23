@@ -443,7 +443,7 @@ On the Bracket tab:
 
 - **Arrange draw**: drag a player to another first-round place. An empty place is a bye. Every first-round bout needs at least one player. Allowed until the first bout of the bracket starts.
 - **Record results**: drag the winner into the next box, or tap a bout to record how it ended. Results scored on the console appear here too.
-- **Print**: the paper draw sheet.
+- **Print**: the paper draw sheet, with the results so far. A sheet holds 16 first-round places: a bigger bracket prints one sheet per 16 places, each up to its own winner, and a last sheet for the final rounds and the 3rd-place bout (32 places: Sheet 1 and 2 of 3, then the final).
 
 ## 8. Step 6 — Matches: mat, time and officials
 
