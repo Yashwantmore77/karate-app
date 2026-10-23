@@ -580,18 +580,18 @@ The referee opens the bout from their home screen, or an admin presses **Open sc
 | Mat | Which screens show this bout. Starts on the scheduled mat; another mat asks first |
 | Start scoreboard / Close scoreboard | Shows or hides this bout on the hall screens |
 | Decision | Kiken (withdrawal), Shikkaku (disqualification) or Hantei (referees' decision) |
-| Close | Confirms the result and saves it |
+| Close | Shows the result it would save; **Save result** saves it and ends the bout. Greyed out on a device that is not running the mat |
 
 How a bout ends:
 
 1. A fighter whose penalties reach **H** in any category loses (hansoku).
 2. A lead of **8 points** (the winning point gap) ends the bout at once.
 3. At **time up** the higher score wins. If level, the senshu holder wins (when senshu applies). Otherwise the "tie at time" setting decides: extra time, golden score (the first score in extra time wins), a referees' decision, or a draw. A draw is only a result in a pool bout: a knockout bout or a final must end with a winner.
-4. The referee confirms with **Close**; the result goes to the bracket and standings straight away. On a knockout bout or a final, **Close** on a level score opens the referee decision box instead: give **Hantei**, or cancel and fight extra time.
+4. The referee presses **Close**, checks the result shown and clicks **Save result**; the result goes to the bracket and standings straight away. If it cannot be saved (no connection, or the result was refused), the box says why and stays open: **Try again**. **Confirm result**, on the result shown above the console, saves it the same way. On a knockout bout or a final, **Close** on a level score opens the referee decision box instead: give **Hantei**, or cancel and fight extra time.
 
 Safety rules on the console:
 
-- While the clock runs, Reset time, Extra time, 60 seconds, KO Timer, the scoreboard switch, the mat and Close ask for confirmation. Scoring and Stop never do.
+- While the clock runs, Reset time, Extra time, 60 seconds, KO Timer, the scoreboard switch and the mat ask for confirmation. **Close** always shows the result before saving it. Scoring and Stop never ask.
 - Only one device controls a mat. Any other device shows the console read-only, with **Take over** for a referee or admin.
 - If the connection drops, keep scoring: the actions are sent, in order and with their times, when it returns.
 - A score sent to a finished bout is refused and recorded.

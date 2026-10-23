@@ -600,7 +600,7 @@ The referee, or a helper at the mat table, runs each bout on the console. Ao (bl
 5. When the referee gives a score, click it on that player's side (2): **Yuko (+1)**, **Waza-ari (+2)** or **Ippon (+3)**. The first score also gives that player **Senshu**.
 6. For a penalty, tick the box on that player's side (3): C, then K, HC and H. Category 1 and Category 2 are counted separately.
 7. Clicked the wrong button? Click **Undo** (4) to take back the last action.
-8. When the bout is over, click **Close** (8) and confirm the winner. The result reaches the draw and the screens at once.
+8. When the bout is over, click **Close** (8). A box shows the result it will save, for example "Asha Rao (AKA) wins on points, 3–1": check it and click **Save result**. The result reaches the draw and the screens at once. If it cannot be saved (no connection, or the result was refused), the box says why and stays open: click **Try again**.
 
 ![The scoring console: 1 Start, 2 points, 3 penalties, 4 Undo, 5 Mat, 6 Start scoreboard, 7 Decision, 8 Close](images/p5-console.webp)
 
@@ -616,7 +616,8 @@ How a bout ends:
 
 The console protects the bout:
 
-- While the clock runs, buttons that could spoil the bout (such as Reset time, Close or a change of mat) ask you to confirm. Points and Stop never ask.
+- While the clock runs, buttons that could spoil the bout (such as Reset time or a change of mat) ask you to confirm. **Close** always shows the result first. Points and Stop never ask.
+- Close is greyed out on a device that is not running the mat.
 - If the internet drops, keep scoring. The tablet sends every action, in order, when the connection returns.
 - Only one device runs a mat at a time. Any other device shows the console read-only, with **Take over** in case the first device fails.
 
