@@ -586,7 +586,7 @@ How a bout ends:
 1. A fighter whose penalties reach **H** in any category loses (hansoku).
 2. A lead of **8 points** (the winning point gap) ends the bout at once.
 3. At **time up** the higher score wins. If level, the senshu holder wins (when senshu applies). Otherwise the "tie at time" setting decides: extra time, golden score (the first score in extra time wins), a referees' decision, or a draw. A draw is only a result in a pool bout: a knockout bout or a final must end with a winner.
-4. The referee confirms with **Close**; the result goes to the bracket and standings straight away.
+4. The referee confirms with **Close**; the result goes to the bracket and standings straight away. On a knockout bout or a final, **Close** on a level score opens the referee decision box instead: give **Hantei**, or cancel and fight extra time.
 
 Safety rules on the console:
 

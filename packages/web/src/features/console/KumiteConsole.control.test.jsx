@@ -150,3 +150,26 @@ describe('the mat this console scores', () => {
     expect(matSends()).toEqual([['FIELD_NUMBER', { value: '2' }]])
   })
 })
+
+/** KAN-267: a knockout bout or a final cannot be closed level. */
+describe('KumiteConsole closing a level bout', () => {
+  it('asks for a decision instead of saving a draw when the bout needs a winner', async () => {
+    const user = userEvent.setup()
+    const onFinalize = vi.fn()
+    withMat({ holdsControl: true, controllerId: 'me' })
+    renderConsole({ onFinalize, needsWinner: true })
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onFinalize).not.toHaveBeenCalled()
+    expect(await screen.findByText(/a knockout bout or a final needs a winner/i)).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Referee decision' })).toBeInTheDocument()
+  })
+
+  it('still closes a level pool bout as a draw', async () => {
+    const user = userEvent.setup()
+    const onFinalize = vi.fn()
+    withMat({ holdsControl: true, controllerId: 'me' })
+    renderConsole({ onFinalize })
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ winner: 'tie', status: 'completed' }))
+  })
+})
