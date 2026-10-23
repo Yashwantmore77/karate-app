@@ -274,6 +274,14 @@ describe('PRD tournament management over HTTP', () => {
     expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200)
     const first = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches.filter((m) => m.round === 1)
     expect(first.map((m) => [m.akaPlayerId, m.aoPlayerId])).toEqual([[a, d], [b, c]])
+    // KAN-267: neither the result dialog nor the referee console can save a knockout bout as a draw.
+    const tie = await call('POST', `/tournaments/${t}/matches/${first[0].id}/correct`, { winner: 'tie', avgRed: 2, avgBlue: 2 }, tokens.admin)
+    expect([tie.status, tie.body.error]).toEqual([409, 'knockout_needs_winner'])
+    for (const winner of ['tie', 'draw']) {
+      const saved = await call('PATCH', `/matches/${first[0].id}`, { winner, avgRed: 2, avgBlue: 2 }, tokens.admin)
+      expect([saved.status, saved.body.error]).toEqual([409, 'knockout_needs_winner'])
+    }
+    expect((await call('PATCH', `/matches/${first[0].id}`, { winner: 'red', avgRed: 3, avgBlue: 2 }, tokens.admin)).status).toBe(200)
   })
 
   it('keeps a coach session out of the staff tournament screens (KAN-427)', async () => {

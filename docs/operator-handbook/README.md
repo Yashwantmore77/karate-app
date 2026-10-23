@@ -799,6 +799,7 @@ First look at **Needs attention** at the top of the tab: it names the problem an
 | A hall screen shows NOT LIVE | The mat's tablet is offline. Fix its Wi-Fi; the screen recovers by itself |
 | A judge sees "No kata round you are judging is open" | Start the round on the Kata panel (Job 22) and check that the judge has a seat |
 | A player does not come to the mat | The announcer marks them **Absent**. The referee records the result with **Decision**, or you use **Enter result** and choose No-show |
+| A knockout bout was cancelled, or "needs a winner" when you save a draw | A knockout bout or a final must have a winner; there is no Draw for it. Put a cancelled one back with **Change status → Scheduled** and fight it. Until then **Needs attention** says the bracket is waiting |
 | A player is injured and cannot go on | On Registrations, click the walking figure to withdraw them. Their remaining bouts go to their opponents |
 | "You do not have permission to do that" | Your role cannot do it. Ask an Admin |
 | A Tournament Admin cannot see a tournament | It has not been ticked for them. An Admin ticks it in Accounts, under "Tournaments this account may work" |

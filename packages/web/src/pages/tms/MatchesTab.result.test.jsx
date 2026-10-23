@@ -71,3 +71,32 @@ describe('the result dialog on a cancelled bout', () => {
     expect(within(dialog).getByLabelText(/Reason for the correction/)).toBeRequired()
   })
 })
+
+/** KAN-267: a knockout bout or a final needs a winner, so the dialog offers no Draw. */
+describe('Draw in the result dialog', () => {
+  beforeEach(() => {
+    data.matches.mockReset()
+    data.correctResult.mockReset().mockResolvedValue({})
+  })
+  const winners = async (user, dialog) => {
+    await user.click(within(dialog).getByRole('combobox', { name: 'Winner' }))
+    const names = (await screen.findAllByRole('option')).map((o) => o.textContent)
+    await user.keyboard('{Escape}')
+    return names
+  }
+
+  it('is offered on a pool bout', async () => {
+    const user = userEvent.setup()
+    const dialog = await openResult(user, { ...BOUT, status: 'scheduled' }, 'Enter result')
+    expect(await winners(user, dialog)).toEqual(['AKA — Aarav Patil', 'AO — Rohan Kulkarni', 'Draw'])
+  })
+
+  it('is not offered on a knockout bout or a final', async () => {
+    const user = userEvent.setup()
+    let dialog = await openResult(user, { ...BOUT, status: 'scheduled', stage: 'knockout', roundName: 'Semi-final' }, 'Enter result')
+    expect(await winners(user, dialog)).toEqual(['AKA — Aarav Patil', 'AO — Rohan Kulkarni'])
+    cleanup()
+    dialog = await openResult(user, { ...BOUT, status: 'scheduled', roundName: 'Final' }, 'Enter result')
+    expect(await winners(user, dialog)).toEqual(['AKA — Aarav Patil', 'AO — Rohan Kulkarni'])
+  })
+})

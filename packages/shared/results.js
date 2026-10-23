@@ -144,6 +144,12 @@ export const poolComplete = (bouts) =>
 
 // --- knockout ------------------------------------------------------------------
 
+/**
+ * A bout someone must win (KAN-267): a knockout bout sends its winner on, and
+ * a final decides the gold. A draw would leave the bracket waiting for nobody.
+ */
+export const needsWinner = (bout) => bout?.stage === 'knockout' || bout?.roundName === 'Final'
+
 export const nextPow2 = (n) => { let p = 1; while (p < n) p *= 2; return p }
 
 /** Standard bracket order for `size` slots: 1 v size, and 1 and 2 in opposite halves. */

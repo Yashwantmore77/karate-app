@@ -26,7 +26,7 @@ import { DomainError, rule, invalid, missing, denied } from './errors.js'
 import { DEFAULT_POOL_SIZE, DRAW_METHODS, POOL_MODES, drawPools, roundRobin, seededRandom, poolName, shuffle as shuffleWith, isUneven } from './pools.js'
 import {
   DEFAULT_RESULT_RULES, poolStandings, poolComplete, qualifierSeeds, buildBracket,
-  bracketMedals, poolMedals, medalTally, boutOutcome, nextPow2, seedOrder,
+  bracketMedals, poolMedals, medalTally, boutOutcome, nextPow2, seedOrder, needsWinner,
 } from './results.js'
 import {
   formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, withoutReadOnly,
@@ -2238,6 +2238,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       : { winner, status: 'completed', avgRed: avgRed ?? match.avgRed ?? 0, avgBlue: avgBlue ?? match.avgBlue ?? 0, result: { type: resultType, method: RESULT_METHOD[resultType] || 'manual', finishReason: why } }
     if (resultType !== 'CANCELLED' && !['red', 'blue', 'tie'].includes(winner)) throw invalid('invalid_winner')
     if (resultType !== 'CANCELLED' && resultType !== 'COMPLETED' && winner === 'tie') throw invalid('invalid_winner')
+    if (winner === 'tie' && resultType !== 'CANCELLED' && needsWinner(match)) throw rule('knockout_needs_winner')
     const after = await stores.matches.update(matchId, patch)
     await record(actor, { tournamentId, action: A.MATCH_RESULT_CHANGED, entity: 'match', entityId: matchId, before: { winner: match.winner, avgRed: match.avgRed, avgBlue: match.avgBlue, status: match.status, resultType: match.result?.type || null }, after: { ...patch, resultType }, reason })
     // PRD v1 §13 score events: an official correction is part of the bout's history.
@@ -3786,6 +3787,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         if (undrawn.length) out.push({ id: 'undrawn', level: 'warning', title: `${plural(undrawn.length, 'category', 'categories')} not drawn yet`, detail: 'Draw them before locking the draw, or their players have no bouts.', items: undrawn.map((d) => d.label), tab: 'draw', action: 'Draw the pools' })
       }
       if (pools.length) {
+        // KAN-267: a knockout bout with no winner sends nobody on.
+        const stuck = (known.matches || await listMatches(tournamentId)).filter((m) => needsWinner(m) && (m.status === 'cancelled' || m.winner === 'tie'))
+        if (stuck.length) out.push({ id: 'bracket_waiting', level: 'warning', title: `${plural(stuck.length, 'knockout bout')} with no winner: the bracket is waiting`, detail: 'A cancelled or drawn knockout bout sends nobody to the next round. Put it back in the queue (Change status → Scheduled) and fight it, or correct its result with a winner.', items: stuck.map((m) => `${m.matchNumber}: ${m.akaName} v ${m.aoName} (${m.status === 'cancelled' ? 'cancelled' : 'draw'})`), tab: 'matches', action: 'Open Matches' })
         const decided = new Set((await stores.medalOverrides.list({ tournamentId })).map((m) => m.divisionKey))
         const singles = all.filter((d) => d.singleEntry && !decided.has(d.key))
         if (singles.length) out.push({ id: 'single_entries', level: 'warning', title: `${plural(singles.length, 'category', 'categories')} with only one player`, detail: 'Decide each one on the Results tab: award the medal, or record "no competition".', items: singles.map((d) => d.label), tab: 'results', action: 'Decide single entries' })
@@ -3864,7 +3868,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       rows('ageGroups'), rows('weightCategories'), rows('certificates'), rows('passes'), rows('kataRounds'),
     ])
     const uncategorized = uncategorizedOf(tournament, players)
-    const known = { tournament, players, ageGroups, weightCategories, pools, kataRounds, uncategorized, divisions: divisionsOf({ ageGroups, weightCategories, players, pools }) }
+    const known = { tournament, players, ageGroups, weightCategories, pools, kataRounds, matches, uncategorized, divisions: divisionsOf({ ageGroups, weightCategories, players, pools }) }
     return {
       ageGroups: ageGroups.length,
       weightCategories: weightCategories.length,

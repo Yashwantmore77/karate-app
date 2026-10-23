@@ -7,7 +7,7 @@ import {
 import { Schedule, EditNote, SportsMma, SwapHoriz, History, PlaylistPlay } from '@mui/icons-material'
 import { matchLifecycle } from '@kumite/shared/lifecycle.js'
 import { humanize } from '../../components/tms/StatusBadge'
-import { boutOutcome } from '@kumite/shared/results.js'
+import { boutOutcome, needsWinner } from '@kumite/shared/results.js'
 import { settingsOf, parseDivisionKey } from '@kumite/shared/tms.js'
 import { tms, describeError } from '../../data/tms'
 import { listOfficials } from '../../data/officials'
@@ -174,7 +174,7 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
                 <IconButton size="small" aria-label="Change status" onClick={(e) => setStatusMenu({ anchor: e.currentTarget, m })}><PlaylistPlay fontSize="small" /></IconButton>
               )}
               <IconButton size="small" aria-label="Live score log" onClick={async () => setLog({ m, events: await tms.matchEvents(tid, m.id).catch(() => []) })}><History fontSize="small" /></IconButton>
-              <IconButton size="small" aria-label={decided(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner || 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '', finishReason: m.finishReason || '' })}><EditNote fontSize="small" /></IconButton>
+              <IconButton size="small" aria-label={decided(m) ? 'Correct result' : 'Enter result'} disabled={!m.redId || !m.blueId} onClick={() => setCorrect({ m, winner: m.winner && !(m.winner === 'tie' && needsWinner(m)) ? m.winner : 'red', resultType: m.resultType && m.resultType !== 'CANCELLED' ? m.resultType : 'COMPLETED', avgRed: m.avgRed ?? 0, avgBlue: m.avgBlue ?? 0, reason: '', finishReason: m.finishReason || '' })}><EditNote fontSize="small" /></IconButton>
             </Stack>
           ) },
         ]}
@@ -274,7 +274,8 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
               {correct?.resultType !== 'CANCELLED' && <TextField select fullWidth label="Winner" value={correct?.winner || 'red'} onChange={(e) => setCorrect({ ...correct, winner: e.target.value })}>
                 <MenuItem value="red">AKA — {correct?.m.akaName}</MenuItem>
                 <MenuItem value="blue">AO — {correct?.m.aoName}</MenuItem>
-                {correct?.resultType === 'COMPLETED' && <MenuItem value="tie">Draw</MenuItem>}
+                {/* A knockout bout or a final needs a winner (KAN-267). */}
+                {correct?.resultType === 'COMPLETED' && !needsWinner(correct.m) && <MenuItem value="tie">Draw</MenuItem>}
               </TextField>}
             </Grid>
             <Grid size={{ xs: 6 }}><TextField fullWidth type="number" label={`AKA ${scoreWord(correct?.m)}`} value={correct?.avgRed ?? 0} onChange={(e) => setCorrect({ ...correct, avgRed: e.target.value })} /></Grid>
