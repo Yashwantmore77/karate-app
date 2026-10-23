@@ -22,7 +22,7 @@ export default function OwnerRouter({ uid, profile }) {
   return (
     <Routes>
       <Route path="/" element={<AdminTournamentList uid={uid} profile={profile} basePath={BASE} />} />
-      <Route path="/analytics" element={<Analytics />} />
+      <Route path="/analytics" element={<Analytics profile={profile} />} />
       <Route path="/tournament/:tournamentId" element={<ToManage />} />
       <Route path="/tournament/:tournamentId/manage" element={<TournamentManager uid={uid} profile={profile} basePath={BASE} />} />
       <Route path="/tournament/:tournamentId/category/:categoryId" element={<AdminCategoryDetail uid={uid} basePath={BASE} />} />

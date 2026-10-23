@@ -743,6 +743,10 @@ Admins manage staff accounts and watch sign-ins. The super admin also takes back
 - **Players** (here, on each tournament's Dashboard and in Analytics) counts entries sent in: not drafts, rejected or withdrawn players. A withdrawn athlete stays in Analytics with the bouts they fought.
 - The totals leave out archived tournaments (they stay in the list). **Live now** counts tournaments at the Live stage. **Matches done** reads finished bouts out of all bouts that will be fought: a cancelled bout counts in neither number.
 - **Analytics** compares clubs (entries, medals, wins, losses, win rate, walkovers), athletes (one athlete across tournaments, by name and date of birth) and tournaments. Each list exports.
+- Where name and date of birth get an athlete wrong, an organiser (Admin, Tournament owner) puts it right in the athlete's detail (click the row on the Athletes tab):
+  - **Same athlete as…**: pick the other athlete (the same person under another spelling or birth date), then **Join**. Their tournaments, medals and bouts add up together.
+  - **Not this athlete**, on one tournament's line: that record is someone else who shares the name and birthday. It becomes an athlete of its own. A line joined by hand has no such button: undo the join instead.
+  - **Decided by hand** lists these decisions; **Undo** takes one back. Each is kept in the audit log of the tournaments it touches.
 - Won, Lost and Win % count only bouts that were fought. A bout won because the opponent did not come or had withdrawn (walkover, no-show, kiken) is no win or loss for either; the winner's are counted under **Walkovers**. A disqualification still counts: that bout was fought.
 
 ![The admin Dashboard: the whole system at a glance.](images/admin-dashboard.webp)
@@ -1123,6 +1127,8 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | No certificate with this ID was issued. | Check the ID or QR code; a certificate this check does not find was not issued by the app |
 | That account belongs to another organisation. | Work only with your own organisation's accounts and tournaments |
 | This organisation still has tournaments or accounts. | Super Admin: move or delete them first, then delete the organisation |
+| This record is already set apart from the athlete its name and date of birth give it. | Analytics: nothing to do; to put it back, click **Undo** next to it under **Decided by hand** |
+| This record was joined to the athlete by hand. Undo that decision to separate it. | Analytics: click **Undo** next to that join under **Decided by hand** |
 | That short name is already used. | Choose another short name |
 | A short name uses only lowercase letters, numbers and hyphens, with no spaces. | For example `maharashtra-ka`, not `Maharashtra KA` |
 | The name is missing, too short or too long. | Type a name of a sensible length: an organisation name is 2 to 120 characters, a tournament name 3 to 120 |

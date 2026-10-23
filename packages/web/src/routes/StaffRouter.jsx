@@ -15,7 +15,7 @@ export default function StaffRouter({ uid, profile }) {
     <Routes>
       <Route path="/" element={<TournamentSelector title={`${ROLE_LABEL[profile.role] || 'Staff'}: choose a tournament`} onPick={(t) => navigate(`${base}/tournament/${t.id}`)} />} />
       <Route path="/tournament/:tournamentId" element={<TournamentManager uid={uid} profile={profile} basePath={base} />} />
-      {can(profile.role, P.REPORT_EXPORT) && <Route path="/analytics" element={<Analytics />} />}
+      {can(profile.role, P.REPORT_EXPORT) && <Route path="/analytics" element={<Analytics profile={profile} />} />}
       <Route path="*" element={<Navigate to={base} />} />
     </Routes>
   )

@@ -141,8 +141,10 @@ export const ERROR_TEXT = {
   role_forbidden: 'Only a super admin can create that role.',
   terms_not_accepted: 'Accept the terms and conditions to register.',
   // PRD v1
+  already_apart: 'This record is already set apart from the athlete its name and date of birth give it.',
   already_in_pool: 'That player is already in this pool.',
   attendance_disabled: 'Attendance is switched off for this tournament (Settings).',
+  joined_by_hand: 'This record was joined to the athlete by hand. Undo that decision to separate it.',
   bracket_exists: 'The final stage has already been generated.',
   builtin_ruleset: 'A standard ruleset cannot be switched off. Edit it, or restore it as shipped.',
   bulk_has_errors: 'The file has errors. Fix them and upload again; nothing was imported.',
