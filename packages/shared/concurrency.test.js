@@ -197,3 +197,30 @@ describe('event day: reads per request (KAN-368)', () => {
     expect(reads).toEqual({ matches: 1, competitors: 1 })
   })
 })
+
+describe('Analytics in a few reads (KAN-368)', () => {
+  it('reads every tournament\'s players, teams, bouts and medals at once, the same as one by one', async () => {
+    const { raw, tms, t } = await drawn({ classes: 3, each: 4, poolSystem: null })
+    const [first] = await tms.listMatches(t.id)
+    await tms.correctResult(admin, t.id, first.id, { winner: 'red', resultType: 'COMPLETED', avgRed: 3, avgBlue: 1 })
+    const empty = await raw.tournaments.insert({ ...READY, name: 'Empty Cup' })
+    const one = {
+      tournament: await raw.tournaments.get(t.id),
+      players: await raw.players.list({ tournamentId: t.id }),
+      teams: await raw.teams.list({ tournamentId: t.id }),
+      matches: await tms.listMatches(t.id),
+      medals: await tms.listMedals(t.id),
+    }
+    let reads = 0
+    for (const name of ['players', 'teams', 'categories', 'pools', 'medals', 'matches', 'competitors']) {
+      for (const method of ['list', 'search']) {
+        const real = raw[name][method].bind(raw[name])
+        raw[name][method] = (...args) => { reads += 1; return real(...args) }
+      }
+    }
+    const events = await tms.analyticsEvents([one.tournament, empty])
+    expect(reads).toBe(7)
+    // The empty tournament has no players, so it is left out, as before.
+    expect(events).toEqual([one])
+  })
+})
