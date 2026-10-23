@@ -17,6 +17,7 @@ import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { teamProblems } from '@kumite/shared/tms.js'
 import { passwordProblem } from '@kumite/shared/accounts.js'
+import { OTHER_TEAMS_PLAYER } from '@kumite/shared/registration.js'
 import TeamMembers from '../../components/tms/TeamMembers'
 import { paymentsEnabled } from '@kumite/shared/features.js'
 
@@ -293,7 +294,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
         </DialogActions>
       </Dialog>
       <ConfirmDialog open={!!duplicates} title="Possible duplicate" confirmLabel="Register anyway"
-        message={duplicates ? `This player looks like someone already registered: ${duplicates.map((d) => `${d.name} (born ${d.dob}${d.club ? `, ${d.club}` : ''})`).join('; ')}. Register anyway? The organisers will review it.` : ''}
+        message={duplicates ? `This player looks like someone already registered: ${duplicates.map((d) => (d.otherTeam ? OTHER_TEAMS_PLAYER : `${d.name} (born ${d.dob}${d.club ? `, ${d.club}` : ''})`)).join('; ')}. Register anyway? The organisers will review it.` : ''}
         onClose={() => setDuplicates(null)} onConfirm={() => save(true)} />
       <Dialog open={!!account} onClose={() => setAccount(null)} maxWidth="xs" fullWidth>
         <DialogTitle>Your own login</DialogTitle>

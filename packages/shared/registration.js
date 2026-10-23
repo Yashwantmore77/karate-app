@@ -344,6 +344,9 @@ export const normalizeName = (s) => String(s || '').normalize('NFKD').replace(/[
  * PRD v1 §21 duplicate detection: name + DOB + club, or the same federation
  * ID. Returns the matching existing players.
  */
+/** How a coach is told of a possible duplicate in another team: never who it is. */
+export const OTHER_TEAMS_PLAYER = 'a player already registered by another team'
+
 export function possibleDuplicates(player, existing) {
   const fed = normalizeName(player.federationId)
   return existing.filter((p) => (
@@ -423,9 +426,10 @@ export function bulkTemplate(fields = DEFAULT_FIELDS) {
 
 /**
  * Section 15: validate and preview before anything is created. `teams` lets a
- * row name its team; `existing` catches a player already registered.
+ * row name its team; `existing` catches a player already registered. With
+ * `ownTeamId` (a coach's upload), a match in another team is not named.
  */
-export function validateBulkRows(rows, { fields = DEFAULT_FIELDS, teams = [], existing = [], defaultTeamId = null, defaultCountry = null, weightPrecision = null } = {}) {
+export function validateBulkRows(rows, { fields = DEFAULT_FIELDS, teams = [], existing = [], defaultTeamId = null, defaultCountry = null, weightPrecision = null, ownTeamId = null } = {}) {
   if (!rows.length) return { rows: [], valid: [], errors: [{ row: 0, field: null, message: 'The file is empty' }], warnings: [] }
   const [headers, ...body] = rows
   const keys = mapHeaders(headers, fields)
@@ -464,7 +468,8 @@ export function validateBulkRows(rows, { fields = DEFAULT_FIELDS, teams = [], ex
     }
     // Already registered: a warning to review, never a silent merge (PRD v1 §28).
     const dupes = player.name ? possibleDuplicates(player, existing) : []
-    const rowWarnings = dupes.length ? [{ field: 'name', message: `Possible duplicate of ${dupes.map((d) => `${d.name}${d.playerNumber ? ` (${d.playerNumber})` : ''}`).join(', ')}` }] : []
+    const named = dupes.map((d) => (ownTeamId && d.teamId !== ownTeamId ? OTHER_TEAMS_PLAYER : `${d.name}${d.playerNumber ? ` (${d.playerNumber})` : ''}`))
+    const rowWarnings = dupes.length ? [{ field: 'name', message: `Possible duplicate of ${[...new Set(named)].join(', ')}` }] : []
     rowErrors.forEach((e) => errors.push({ row: rowNumber, ...e }))
     rowWarnings.forEach((w) => warnings.push({ row: rowNumber, ...w }))
     out.push({ row: rowNumber, player: { ...player, teamId, ...(dupes.length ? { duplicateOf: dupes.map((d) => d.id) } : {}) }, errors: rowErrors, warnings: rowWarnings })

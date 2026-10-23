@@ -92,6 +92,29 @@ describe('PRD v1 §5-6 lifecycle and configuration', () => {
     expect(zonedInstant('2026-12-31', 'Asia/Kolkata', { endOfDay: true }).toISOString()).toBe('2026-12-31T18:29:59.000Z')
   })
 
+  it('never shows a coach who another team\'s possible duplicate is (KAN-427)', async () => {
+    const { tms, t, team } = await world()
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
+    const other = await tms.teams.create(admin, t.id, { name: 'XYZ Dojo', club: 'XYZ Dojo' })
+    const coachA = { uid: 'a', role: 'coach', tournamentId: t.id, teamId: team.id }
+    const coachB = { uid: 'b', role: 'coach', tournamentId: t.id, teamId: other.id }
+    const kid = { name: 'Rohan Sharma', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 31, federationId: 'MH-1001' }
+    await tms.createPlayer(coachA, t.id, kid)
+
+    // Team B guesses team A's federation ID: told only that another team has the player.
+    const guess = await tms.createPlayer(coachB, t.id, { ...kid, name: 'Someone Else', dob: '2014-03-03' }).catch((e) => e)
+    expect(guess).toMatchObject({ code: 'possible_duplicate', details: { matches: [{ otherTeam: true }] } })
+    expect(JSON.stringify(guess.details)).not.toMatch(/Rohan|2014-06-15|ABC/)
+    // Their own team's duplicate, and the organisers, still see who it is.
+    await expect(tms.createPlayer(coachA, t.id, { ...kid, federationId: null })).rejects.toMatchObject({ details: { matches: [{ name: 'Rohan Sharma', dob: '2014-06-15' }] } })
+    await expect(tms.createPlayer(admin, t.id, { ...kid, teamId: other.id })).rejects.toMatchObject({ details: { matches: [{ name: 'Rohan Sharma' }] } })
+
+    // The bulk upload preview says the same, row by row.
+    const csv = 'Name,DOB,Gender,Events,Weight,Federation ID\nSomeone Else,2014-03-03,M,kumite,31,MH-1001'
+    const preview = await tms.previewBulk(coachB, t.id, csv)
+    expect(preview.warnings.map((w) => w.message)).toEqual(['Possible duplicate of a player already registered by another team'])
+  })
+
   it('hides private tournaments and lists unlisted ones only by link', async () => {
     const { tms, t, stores } = await world()
     await stores.tournaments.update(t.id, { lifecycleStatus: 'REGISTRATION_OPEN', slug: 'prd-open', settings: { publicVisibility: 'unlisted' } })

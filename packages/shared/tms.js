@@ -1160,7 +1160,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       // confirm, never a silent merge.
       const dupes = possibleDuplicates(player, existing)
       if (dupes.length && !cfg.settings.allowDuplicatePlayers && !confirmDuplicate) {
-        throw rule('possible_duplicate', { matches: dupes.map((d) => ({ id: d.id, name: d.name, dob: d.dob, club: d.club, playerNumber: d.playerNumber, teamId: d.teamId })) })
+        // A coach sees who it is only in their own team: another team's
+        // player is never named, nor their birth date (security review).
+        throw rule('possible_duplicate', { matches: dupes.map((d) => (isCoach(actor) && d.teamId !== teamId ? { otherTeam: true } : { id: d.id, name: d.name, dob: d.dob, club: d.club, playerNumber: d.playerNumber, teamId: d.teamId })) })
       }
       assertAgeEligible(actor, player, cfg)
 
@@ -1293,6 +1295,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       defaultTeamId: isCoach(actor) ? actor.teamId : teamId,
       defaultCountry: tournament.country || null,
       weightPrecision: settingsOf(tournament).weightPrecision,
+      ownTeamId: isCoach(actor) ? actor.teamId : null,
     })
     // A row entering an event this tournament does not hold is an error here,
     // before anything is imported.

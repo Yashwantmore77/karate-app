@@ -326,6 +326,8 @@ Only the actions that make sense for a player's current status are shown.
 
 The same name and date of birth (and the same club, when both have one), or the same Federation ID, is flagged as a possible duplicate. The person entering it must confirm it, and it is listed under **Possible duplicates** for review. The setting "Allow possible duplicates without review" turns this off.
 
+On the coach portal, a possible duplicate in another team is shown only as "a player already registered by another team": a coach never sees another team's player's name, date of birth or club. The organisers see the full details under Possible duplicates.
+
 ### Bulk upload
 
 Upload a spreadsheet with one row per player under **Bulk upload**. The preview lists every error by row. Nothing is imported until the file has no errors, and possible duplicates must be confirmed.
