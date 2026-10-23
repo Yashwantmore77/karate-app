@@ -178,3 +178,22 @@ describe('event day: requests at the same moment', () => {
     expect(repeated(numbers)).toEqual([])
   })
 })
+
+describe('event day: reads per request (KAN-368)', () => {
+  it('lists every bout of every category in a fixed number of reads, however many categories there are', async () => {
+    const { raw, tms, t } = await drawn({ classes: 4, each: 4, poolSystem: null })
+    const reads = { matches: 0, competitors: 0 }
+    for (const name of Object.keys(reads)) {
+      for (const method of ['list', 'search']) {
+        const real = raw[name][method].bind(raw[name])
+        raw[name][method] = (...args) => { reads[name] += 1; return real(...args) }
+      }
+    }
+    const bouts = await tms.listMatches(t.id)
+    // Four pools of four: six bouts each, numbered in order, with names and pools.
+    expect(bouts).toHaveLength(24)
+    expect(bouts.map((m) => m.matchNumber)).toEqual(Array.from({ length: 24 }, (_, i) => `M-${String(i + 1).padStart(3, '0')}`))
+    expect(bouts.every((m) => m.akaName && m.aoName && m.poolName && m.divisionKey)).toBe(true)
+    expect(reads).toEqual({ matches: 1, competitors: 1 })
+  })
+})
