@@ -514,6 +514,7 @@ Use **Enter result** when a bout is decided off the console. Choose how it ended
 - Changing a finished bout needs a reason and the score-correction privilege. Both are written to the audit log.
 - A cancelled bout counts as finished too: the dialog says it was cancelled and why, and saving a result on it is a correction that needs a reason. To fight it instead, use **Change status → Scheduled** to put it back in the queue.
 - A knockout bout, or a final, needs a winner: **Draw** is offered only for pool bouts. A cancelled knockout bout sends nobody on, so **Needs attention** lists it ("the bracket is waiting") until it is fought or given a winner.
+- Changing who won a knockout bout is refused once a later bout that follows from it has a result (the next round, or the 3rd-place bout for a semi-final's loser). The message names those bouts: correct them first (cancel them if the wrong players fought), then this one. The later bouts then get the right players. A new score with the same winner is always fine.
 - Once a category's results are published, a change also needs the result-override privilege. Once results are locked, nothing changes until they are unlocked: a category locked on its own is unlocked on the Results tab (with a reason); when the tournament is Completed, it goes back to Live (with a reason).
 - A bout that was fought can be deleted only by an admin, with a reason and the correction privilege, and never from a locked draw.
 
@@ -1082,6 +1083,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | This bout has started; corners can no longer be swapped. | Swap only before the bout starts |
 | This bout is already decided. | Use Correct result, with a reason |
 | A knockout bout or a final needs a winner. Give the decision (hantei) or fight extra time; a draw is not a result here. | Choose AKA or AO as the winner: by the referees' decision, or after extra time or golden score |
+| A later bout already has a result that follows from this bout. Correct that bout first, then this one. | The message names the later bouts (for example M-007). Correct them, or cancel them if the wrong players fought, then correct this bout; put the cancelled ones back with Change status → Scheduled |
 | Another device is running this mat | If that device is gone or wrong, press **Take over** |
 | Give a finish reason for a walkover, no-show, kiken, disqualification, override or cancellation. | Type what happened, for example "AO did not report after three calls" or "Wrong pairing" |
 | Changing a completed result needs a reason (Rule 6). | Type the reason; the change goes to the audit log |
