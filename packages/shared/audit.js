@@ -36,6 +36,7 @@ export const AUDIT_ACTIONS = {
   PLAYERS_CATEGORIZED: 'players.categorized',
   MATCHES_GENERATED: 'matches.generated',
   MATCH_SCHEDULED: 'match.scheduled',
+  CORNERS_SWAPPED: 'match.corners_swapped',
   BRACKET_GENERATED: 'bracket.generated',
   BRACKET_ARRANGED: 'bracket.arranged',
   RESULTS_PUBLISHED: 'results.published',
