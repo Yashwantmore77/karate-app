@@ -429,4 +429,55 @@ describe('analytics across tournaments', () => {
     // no reporting permission, no analytics
     expect((await call('GET', '/analytics', undefined, await login('referee@kata.local'))).status).toBe(403)
   })
+
+  it('lets an organiser join two records of one athlete, set one apart, and undo it, in its own tournaments only (KAN-369)', async () => {
+    // Meera, then Meera spelt "Mira", then another girl called Meera born the same day.
+    const records = []
+    let first
+    for (const [slug, name, club] of [['link-spring', 'Meera Joshi', 'ABC Karate'], ['link-summer', 'Mira Joshi', 'ABC Karate'], ['link-autumn', 'Meera Joshi', 'XYZ Dojo']]) {
+      const t = await tournament(slug)
+      first ||= t
+      const team = (await call('POST', `/tournaments/${t}/teams`, { name: club, club }, tokens.admin)).body.team
+      const { player } = (await call('POST', `/tournaments/${t}/players`, { teamId: team.id, name, dob: '2014-02-02', gender: 'F', events: ['kata'] }, tokens.admin)).body
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+      records.push(player.id)
+    }
+    const [spring, summer, autumn] = records
+    const athletes = async () => (await call('GET', '/analytics', undefined, tokens.admin)).body.athletes
+      .map((a) => ({ records: a.history.map((h) => h.playerId).sort(), decisions: a.decisions.map((d) => d.kind) }))
+      .sort((a, b) => b.records.length - a.records.length)
+    // By name and birthday: both Meeras are one athlete, Mira another.
+    expect(await athletes()).toEqual([{ records: [spring, autumn].sort(), decisions: [] }, { records: [summer], decisions: [] }])
+
+    const same = await call('POST', '/analytics/athlete-links', { kind: 'same', playerIds: [spring, summer] }, tokens.admin)
+    expect(same.status, JSON.stringify(same.body)).toBe(201)
+    expect((await athletes())[0]).toEqual({ records: records.slice().sort(), decisions: ['same'] })
+
+    const apart = await call('POST', '/analytics/athlete-links', { kind: 'apart', playerIds: [autumn] }, tokens.admin)
+    expect(apart.status).toBe(201)
+    expect(await athletes()).toEqual([{ records: [spring, summer].sort(), decisions: ['same'] }, { records: [autumn], decisions: ['apart'] }])
+    expect((await call('POST', '/analytics/athlete-links', { kind: 'apart', playerIds: [autumn] }, tokens.admin)).body.error).toBe('already_apart')
+    expect((await call('POST', '/analytics/athlete-links', { kind: 'same', playerIds: [spring] }, tokens.admin)).body.error).toBe('invalid_playerIds')
+    // Mira was joined by hand: setting her apart would change nothing while that stands.
+    expect((await call('POST', '/analytics/athlete-links', { kind: 'apart', playerIds: [summer] }, tokens.admin)).body.error).toBe('joined_by_hand')
+    // Each decision is in the audit log of the tournaments it touches.
+    const log = (await call('GET', `/tournaments/${first}/audit`, undefined, tokens.admin)).body
+    expect(JSON.stringify(log)).toContain('athlete.linked')
+
+    // Only an organiser changes them, and only for records it can see.
+    expect((await call('POST', '/analytics/athlete-links', { kind: 'same', playerIds: [spring, autumn] }, tokens.viewer)).status).toBe(403)
+    const stamp = Date.now()
+    const other = (await call('POST', '/organizations', { name: 'Goa KA', slug: `gka-${stamp}` }, tokens.superadmin)).body.organization
+    await call('POST', '/users', { email: `goa${stamp}@x.local`, password: 'password1', role: 'admin', organizationId: other.id }, tokens.superadmin)
+    const outsider = await login(`goa${stamp}@x.local`, 'password1')
+    expect((await call('POST', '/analytics/athlete-links', { kind: 'same', playerIds: [spring, autumn] }, outsider)).status).toBe(404)
+    expect((await call('DELETE', `/analytics/athlete-links/${same.body.link.id}`, undefined, outsider)).status).toBe(404)
+    expect((await call('GET', '/analytics', undefined, outsider)).body.athletes).toEqual([])
+
+    // Undone: Mira is on her own again; the other Meera stays apart.
+    expect((await call('DELETE', `/analytics/athlete-links/${same.body.link.id}`, undefined, tokens.admin)).status).toBe(204)
+    const after = await athletes()
+    expect(after).toHaveLength(3)
+    expect(after).toEqual(expect.arrayContaining([{ records: [spring], decisions: [] }, { records: [summer], decisions: [] }, { records: [autumn], decisions: ['apart'] }]))
+  })
 })

@@ -52,3 +52,43 @@ describe('analytics: who counts as an entry', () => {
     expect(out.athletes.map((x) => x.name)).not.toContain('Draft Only')
   })
 })
+
+/** KAN-369 point 4: an organiser says which records are one athlete. */
+describe('analytics: records joined or set apart by hand', () => {
+  const cup = (id, name, date, players, matches = []) => ({ tournament: { id, name, date }, players, teams: [], matches, medals: [] })
+  const events = [
+    cup('t1', 'Spring Cup', '2026-04-01', [player('p1', 'Meera Joshi', 'ABC Karate')]),
+    // Meera spelt "Mira", and another girl called Meera born the same day, who wins their bout.
+    cup('t2', 'Autumn Cup', '2026-10-01', [player('p2', 'Mira Joshi', 'ABC Karate'), player('p3', 'Meera Joshi', 'XYZ Dojo')], [bout('m1', 'p3', 'p2', 'red')]),
+  ]
+  const links = [
+    { id: 'l1', kind: 'same', playerIds: ['p1', 'p2'] },
+    { id: 'l2', kind: 'apart', playerIds: ['p3'] },
+    // About a record in a tournament this account does not see: left out.
+    { id: 'l3', kind: 'same', playerIds: ['p1', 'elsewhere'] },
+  ]
+  const records = (out) => out.athletes.map((a) => a.history.map((h) => h.playerId)).sort()
+
+  it('goes by name and birthday until told otherwise', () => {
+    expect(records(buildAnalytics(events))).toEqual([['p1', 'p3'], ['p2']])
+  })
+
+  it('joins and separates records as decided, each bout staying with its own record', () => {
+    const out = buildAnalytics(events, links)
+    expect(records(out)).toEqual([['p1', 'p2'], ['p3']])
+    const meera = out.athletes.find((a) => a.history.some((h) => h.playerId === 'p1'))
+    const other = out.athletes.find((a) => a.history.some((h) => h.playerId === 'p3'))
+    expect(meera).toMatchObject({ name: 'Mira Joshi', tournaments: 2, won: 0, lost: 1 })
+    expect(meera.history.map((h) => [h.tournament, h.lost])).toEqual([['Spring Cup', 0], ['Autumn Cup', 1]])
+    expect(other).toMatchObject({ name: 'Meera Joshi', club: 'XYZ Dojo', won: 1, lost: 0 })
+  })
+
+  it('lists the decisions on each athlete, by name and tournament, so they can be undone', () => {
+    const out = buildAnalytics(events, links)
+    const meera = out.athletes.find((a) => a.history.some((h) => h.playerId === 'p1'))
+    expect(meera.decisions).toEqual([{ id: 'l1', kind: 'same', records: [{ playerId: 'p1', name: 'Meera Joshi', tournament: 'Spring Cup' }, { playerId: 'p2', name: 'Mira Joshi', tournament: 'Autumn Cup' }] }])
+    expect(out.athletes.find((a) => a.name === 'Meera Joshi').decisions.map((d) => d.id)).toEqual(['l2'])
+    expect(JSON.stringify(out)).not.toContain('elsewhere')
+    expect(JSON.stringify(out)).not.toContain('2010-01-01')
+  })
+})
