@@ -455,11 +455,14 @@ export function matchRoutes(stores, tms = null) {
     const schedule = await resolveSchedule(patch, existing.categoryId, existing, req.params.id)
     const match = await matches.update(req.params.id, { ...patch, ...schedule })
 
-    // Rule 6 holds for every match, not only those from a PRD draw.
-    if (correcting && audit && category) {
+    // Rule 6 holds for every match, not only those from a PRD draw. A first
+    // result (the console closing a bout) is logged too, like one entered by
+    // hand on the Matches tab (KAN-286).
+    const entered = !correcting && isFinished(match) && !isFinished(existing)
+    if ((correcting || entered) && audit && category) {
       await audit.record({
         tournamentId: category.tournamentId, actor: req.user, action: AUDIT_ACTIONS.MATCH_RESULT_CHANGED,
-        entity: 'match', entityId: match.id, before: existing, after: match, reason: correctionReason,
+        entity: 'match', entityId: match.id, before: existing, after: match, reason: correctionReason || null,
         requestMeta: { ip: clientIp(req), userAgent: userAgent(req) },
       })
     }

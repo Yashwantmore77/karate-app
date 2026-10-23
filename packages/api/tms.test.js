@@ -292,6 +292,32 @@ describe('PRD tournament management over HTTP', () => {
     expect([dialog.status, dialog.body.error]).toEqual([409, 'later_bout_decided'])
   })
 
+  it('logs a result the referee console saves, like one entered by hand (KAN-286)', async () => {
+    const { t, link } = await setUpTournament()
+    const coach = await openCoach(link)
+    for (let i = 0; i < 3; i += 1) {
+      const { body: { player } } = await call('POST', '/coach/players', { name: `Console ${i}`, dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)
+      await call('POST', `/tournaments/${t}/players/${player.id}/registration`, { action: 'approve' }, tokens.admin)
+    }
+    await call('POST', `/tournaments/${t}/locks/entries`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/pools/generate`, {}, tokens.admin)
+    await call('POST', `/tournaments/${t}/locks/draw`, { locked: true }, tokens.admin)
+    await call('POST', `/tournaments/${t}/matches/generate`, {}, tokens.admin)
+    const [bout] = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches
+    const logged = async () => (await call('GET', `/tournaments/${t}/audit`, undefined, tokens.admin)).body.audit.filter((e) => e.entityId === bout.id && e.action === 'match.result_changed')
+    // Points scored on the console are not a result yet: nothing logged.
+    await call('PATCH', `/matches/${bout.id}`, { avgRed: 2, avgBlue: 1 }, tokens.admin)
+    expect(await logged()).toHaveLength(0)
+    const closed = await call('PATCH', `/matches/${bout.id}`, { status: 'completed', winner: 'red', avgRed: 2, avgBlue: 1, result: { type: 'COMPLETED', method: 'points' } }, tokens.admin)
+    expect(closed.status, JSON.stringify(closed.body)).toBe(200)
+    const [entry] = await logged()
+    // Who saved it, from which device, and what changed.
+    expect(entry).toMatchObject({ actorRole: 'admin', ip: expect.any(String), userAgent: expect.any(String), changes: { status: { from: 'scheduled', to: 'completed' }, winner: { from: null, to: 'red' } } })
+    // The console closing the same result twice adds nothing.
+    await call('PATCH', `/matches/${bout.id}`, { status: 'completed', winner: 'red', avgRed: 2, avgBlue: 1 }, tokens.admin)
+    expect(await logged()).toHaveLength(1)
+  })
+
   it('keeps a coach session out of the staff tournament screens (KAN-427)', async () => {
     const { t, link } = await setUpTournament()
     const coach = await openCoach(link)
