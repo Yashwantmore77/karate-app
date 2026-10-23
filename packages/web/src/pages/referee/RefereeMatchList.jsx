@@ -65,7 +65,7 @@ const drawMessage = (err) => {
 /** How many bouts a full round robin of `n` entrants is. */
 const roundRobinSize = (n) => (n * (n - 1)) / 2
 
-export default function RefereeMatchList({ uid, profile }) {
+export default function RefereeMatchList({ profile }) {
   const navigate = useNavigate()
   const { categoryId } = useParams()
 

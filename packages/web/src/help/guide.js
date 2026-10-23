@@ -117,7 +117,7 @@ export const WORKFLOW = [
 export function workflowState(tournament, stats) {
   const s = stats || {}
   const steps = WORKFLOW.map((step) => {
-    let value = false
+    let value
     try { value = step.done(tournament, s) } catch { value = false }
     return { ...step, state: value === 'skip' ? 'skip' : value ? 'done' : 'todo' }
   })

@@ -338,6 +338,7 @@ export function withDefaults(input, fields) {
  * case, spacing, punctuation and accents ignored (PRD v1 §21).
  */
 export const normalizeName = (s) => String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  // eslint-disable-next-line no-misleading-character-class -- the whole Devanagari block, vowel signs included, is kept
   .toLowerCase().replace(/[^a-z0-9\u0900-\u097f]+/g, ' ').trim()
 
 /**
