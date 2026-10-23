@@ -2172,7 +2172,12 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (!['same', 'apart'].includes(kind)) throw invalid('invalid_kind')
     if (ids.length !== (kind === 'same' ? 2 : 1)) throw invalid('invalid_playerIds')
     const players = await recordsReached(ids, reaches)
-    if (kind === 'apart' && (await stores.athleteLinks.list({ kind })).some((l) => l.playerIds.includes(ids[0]))) throw rule('already_apart')
+    if (kind === 'apart') {
+      const about = (await stores.athleteLinks.list({})).filter((l) => l.playerIds.includes(ids[0]))
+      if (about.some((l) => l.kind === 'apart')) throw rule('already_apart')
+      // Set apart, it would still be joined by hand: that decision is the one to undo.
+      if (about.some((l) => l.kind === 'same')) throw rule('joined_by_hand')
+    }
     const link = await stores.athleteLinks.insert({ kind, playerIds: ids, createdAt: iso() })
     await recordAthleteDecision(actor, players, kind === 'same' ? A.ATHLETES_LINKED : A.ATHLETE_SET_APART, link)
     return link

@@ -458,6 +458,8 @@ describe('analytics across tournaments', () => {
     expect(await athletes()).toEqual([{ records: [spring, summer].sort(), decisions: ['same'] }, { records: [autumn], decisions: ['apart'] }])
     expect((await call('POST', '/analytics/athlete-links', { kind: 'apart', playerIds: [autumn] }, tokens.admin)).body.error).toBe('already_apart')
     expect((await call('POST', '/analytics/athlete-links', { kind: 'same', playerIds: [spring] }, tokens.admin)).body.error).toBe('invalid_playerIds')
+    // Mira was joined by hand: setting her apart would change nothing while that stands.
+    expect((await call('POST', '/analytics/athlete-links', { kind: 'apart', playerIds: [summer] }, tokens.admin)).body.error).toBe('joined_by_hand')
     // Each decision is in the audit log of the tournaments it touches.
     const log = (await call('GET', `/tournaments/${first}/audit`, undefined, tokens.admin)).body
     expect(JSON.stringify(log)).toContain('athlete.linked')
