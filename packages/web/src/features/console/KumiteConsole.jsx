@@ -11,6 +11,7 @@ import {
 import { initialMatchState, UNDO } from '@kumite/shared/commands.js'
 import { toMinutesSeconds, parseDuration } from '@kumite/shared/format.js'
 import { displayRepo } from '../../data/display'
+import { describeError } from '../../data/tms'
 import { useMatchChannel } from '../../hooks/useMatchChannel'
 import { useMatchClock } from '../../hooks/useMatchClock'
 import { useServerNow } from '../../hooks/useServerNow'
@@ -102,6 +103,8 @@ export default function KumiteConsole({
   const [decisionOpen, setDecisionOpen] = useState(false)
   // Close was pressed on a level bout that needs a winner: the decision box says so.
   const [mustDecide, setMustDecide] = useState(false)
+  // Ending the bout (KAN-286): the result to save, while it is checked, saved, or refused.
+  const [ending, setEnding] = useState(null)
   const serverNow = useServerNow()
 
   const view = state || initialMatchState()
@@ -204,18 +207,14 @@ export default function KumiteConsole({
     send('SCOREBOARD', { active: next })
   }
 
-  const handleClose = () => {
+  // The result ending the bout now would save.
+  const finalResult = () => {
     // A referee decision (kiken, shikkaku, hantei) beats the score, so take the
     // verdict the authority already published rather than recomputing it.
     const { winner } = view.outcome
       ?? evaluateOutcome(view.match, view.rules || DEFAULT_RULES, { expired: true })
-    if (needsWinner && winner !== 'aka' && winner !== 'ao') {
-      setMustDecide(true)
-      setDecisionOpen(true)
-      return
-    }
     const method = view.outcome?.method
-    onFinalize({
+    return {
       // Kiken (withdrawal) is recorded as a walkover and shikkaku as a
       // disqualification, the PRD's own terms for them (section 27).
       result: { method: method || 'points', type: method === 'kiken' ? 'WALKOVER' : method === 'shikkaku' ? 'DISQUALIFIED' : 'COMPLETED' },
@@ -223,8 +222,42 @@ export default function KumiteConsole({
       winner: winner === 'aka' ? 'red' : winner === 'ao' ? 'blue' : 'tie',
       avgRed: view.match.scores.aka,
       avgBlue: view.match.scores.ao,
-    })
+    }
+  }
+  // A level bout that needs a winner goes to the decision box instead (KAN-267).
+  const undecided = (save) => {
+    if (!needsWinner || save.winner !== 'tie') return false
+    setMustDecide(true)
+    setDecisionOpen(true)
+    return true
+  }
+  // The save is waited for: refused or lost, the console stays and says why (KAN-286).
+  const finish = async (save) => {
+    setEnding({ save, saving: true, error: null })
+    try {
+      await onFinalize(save)
+    } catch (err) {
+      setEnding({ save, saving: false, error: describeError(err) })
+      return
+    }
+    setEnding(null)
     onBack()
+  }
+  // Close: shows the result it would save and saves it only once confirmed.
+  const handleClose = () => {
+    const save = finalResult()
+    if (!undecided(save)) setEnding({ save, saving: false, error: null })
+  }
+  // Confirm result on the outcome shown above the console is itself the confirmation.
+  const confirmShown = () => {
+    const save = finalResult()
+    if (!undecided(save)) finish(save)
+  }
+  const resultText = (save) => {
+    const [aka, ao] = [save.avgRed, save.avgBlue]
+    if (save.winner === 'tie') return `A draw, ${aka}–${ao}.`
+    const name = save.winner === 'red' ? `${redComp?.name || 'AKA'} (AKA)` : `${blueComp?.name || 'AO'} (AO)`
+    return `${name} wins ${OUTCOME_LABEL[save.result.method] || 'on points'}, ${aka}–${ao}.`
   }
 
   // Anything that disrupts a match in progress needs confirming while the
@@ -430,7 +463,8 @@ export default function KumiteConsole({
           severity={outcomeName ? 'success' : 'info'}
           sx={{ mb: 2, fontWeight: 700 }}
           action={!observing && (
-            <Button color="inherit" size="small" onClick={handleClose}>Confirm result</Button>
+            <Button color="inherit" size="small" disabled={disabled || !!ending?.saving} onClick={confirmShown}
+              data-tip="Saves this result and ends the bout." data-tip-needs={disabled ? 'Only the device running this mat can end the bout.' : undefined}>Confirm result</Button>
           )}
         >
           {outcomeName
@@ -605,7 +639,9 @@ export default function KumiteConsole({
               Decision
             </Button>
 
-            <Button variant="outlined" onClick={guarded('Close and finalize the match', handleClose)} sx={utilityButtonSx}>Close</Button>
+            <Button variant="outlined" disabled={disabled} onClick={handleClose} sx={utilityButtonSx}
+              data-tip="Ends the bout and saves its result. A box shows the result first; nothing is saved until you click Save result."
+              data-tip-needs={disabled ? 'Only the device running this mat can end the bout.' : undefined}>Close</Button>
           </Stack>
         </Grid>
 
@@ -662,6 +698,20 @@ export default function KumiteConsole({
             </Button>
           )}
           <Button onClick={closeDecision}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!ending} onClose={() => { if (!ending?.saving) setEnding(null) }} maxWidth="xs" fullWidth>
+        <DialogTitle>End the bout and save the result?</DialogTitle>
+        <DialogContent>
+          {ending && <Typography sx={{ fontWeight: 700 }}>{resultText(ending.save)}</Typography>}
+          {clockRunning && <Typography color="warning.main" sx={{ mt: 1 }}>The clock is still running at {mainClock.display}.</Typography>}
+          {ending?.error && <Alert severity="error" sx={{ mt: 2 }}>The result was not saved: {ending.error}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={ending?.saving} onClick={() => setEnding(null)}>Cancel</Button>
+          <Button variant="contained" disabled={ending?.saving} onClick={() => finish(ending.save)}
+            data-tip="Saves this result: the bout ends and its result goes to the draw and the screens.">{ending?.error ? 'Try again' : 'Save result'}</Button>
         </DialogActions>
       </Dialog>
 

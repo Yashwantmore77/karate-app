@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, waitForElementToBeRemoved } from '@testing-library/react'
+import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { initialMatchState } from '@kumite/shared/commands.js'
 
@@ -170,6 +170,52 @@ describe('KumiteConsole closing a level bout', () => {
     withMat({ holdsControl: true, controllerId: 'me' })
     renderConsole({ onFinalize })
     await user.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save result' }))
     expect(onFinalize).toHaveBeenCalledWith(expect.objectContaining({ winner: 'tie', status: 'completed' }))
+  })
+})
+
+/** KAN-286: ending a bout from the console saves nothing by accident, and never fails silently. */
+describe('KumiteConsole ending a bout', () => {
+  it('shows the result it will save, and saves it only when confirmed', async () => {
+    const user = userEvent.setup()
+    const onFinalize = vi.fn(async () => ({}))
+    const onBack = vi.fn()
+    withMat({ holdsControl: true, controllerId: 'me' })
+    renderConsole({ onFinalize, onBack })
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    const box = await screen.findByRole('dialog', { name: 'End the bout and save the result?' })
+    expect(within(box).getByText('A draw, 0–0.')).toBeInTheDocument()
+    await user.click(within(box).getByRole('button', { name: 'Cancel' }))
+    await waitForElementToBeRemoved(() => screen.queryByRole('dialog'))
+    expect(onFinalize).not.toHaveBeenCalled()
+    expect(onBack).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save result' }))
+    expect(onFinalize).toHaveBeenCalledTimes(1)
+    expect(onBack).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays open and says why when the save is refused, and can try again', async () => {
+    const user = userEvent.setup()
+    const refusal = Object.assign(new Error('correction_reason_required'), { code: 'correction_reason_required' })
+    const onFinalize = vi.fn().mockRejectedValueOnce(refusal).mockResolvedValueOnce({})
+    const onBack = vi.fn()
+    withMat({ holdsControl: true, controllerId: 'me' })
+    renderConsole({ onFinalize, onBack })
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save result' }))
+    expect(await screen.findByText(/The result was not saved:/)).toBeInTheDocument()
+    expect(onBack).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onFinalize).toHaveBeenCalledTimes(2)
+    expect(onBack).toHaveBeenCalledTimes(1)
+  })
+
+  it('cannot end a bout from a console that does not run the mat', () => {
+    withMat({ holdsControl: false, contested: true, controllerId: 'someone-else' })
+    renderConsole()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
   })
 })

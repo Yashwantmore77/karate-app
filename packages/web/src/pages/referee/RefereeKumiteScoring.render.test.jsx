@@ -97,7 +97,7 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
     expect(within(akaPanel).getByText('2')).toBeInTheDocument()
   })
 
-  it('finalizes the match and persists the winner when Close is clicked', async () => {
+  it('finalizes the match and persists the winner when Close is confirmed', async () => {
     const user = userEvent.setup()
     await renderPage()
 
@@ -105,6 +105,12 @@ describe('RefereeMatchControl - kumite template shows the WKF scoring console', 
     await user.click(within(aoPanel).getByRole('button', { name: 'Ippon' }))
 
     await user.click(screen.getByRole('button', { name: 'Close' }))
+    // KAN-286: the result is shown first, and saved only on Save result.
+    const box = await screen.findByRole('dialog', { name: 'End the bout and save the result?' })
+    expect(fake.rows('matches').find((m) => m.id === matchId).status).not.toBe('completed')
+    expect(within(box).getByText(/\(AO\) wins on points, 0–3\./)).toBeInTheDocument()
+    await user.click(within(box).getByRole('button', { name: 'Save result' }))
+    await waitForElementToBeRemoved(() => screen.queryByRole('dialog'))
 
     const updated = fake.rows('matches').find((m) => m.id === matchId)
     expect(updated.status).toBe('completed')
