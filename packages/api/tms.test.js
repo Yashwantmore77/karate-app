@@ -288,6 +288,19 @@ describe('PRD tournament management over HTTP', () => {
     expect((await call('GET', `/tournaments/${t}/results`, undefined, tokens.referee)).status).toBe(200)
   })
 
+  it('gives the admin home every tournament\'s numbers in one request (KAN-368)', async () => {
+    const { t, link } = await setUpTournament()
+    const coach = await openCoach(link)
+    await call('POST', '/coach/players', { name: 'Summary Kid', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33 }, coach)
+    const res = await call('GET', '/tournaments/summaries', undefined, tokens.admin)
+    expect(res.status, JSON.stringify(res.body)).toBe(200)
+    const dash = (await call('GET', `/tournaments/${t}/dashboard`, undefined, tokens.admin)).body.dashboard
+    expect(res.body.summaries[t]).toMatchObject({ players: dash.players, pendingVerification: dash.pendingVerification, teams: dash.teams, matches: dash.matches })
+    expect(res.body.summaries[t].players).toBe(1)
+    expect((await call('GET', '/tournaments/summaries', undefined, tokens.referee)).status).toBe(403)
+    expect((await call('GET', '/tournaments/summaries', undefined, coach)).status).toBe(403)
+  })
+
   it('assigns officials to a match and records a walkover and a cancellation', async () => {
     const { t, link } = await setUpTournament()
     const coach = await openCoach(link)
