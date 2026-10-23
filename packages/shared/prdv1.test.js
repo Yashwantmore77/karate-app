@@ -434,6 +434,37 @@ describe('PRD v1 §12-13 draw and matches', () => {
     expect(await pool.tms.correctResult(admin, pool.t.id, bout.id, { winner: 'tie', avgRed: 1, avgBlue: 1 })).toMatchObject({ winner: 'tie', status: 'completed' })
   })
 
+  it('will not change who won a bracket bout once a later bout has a result from it (KAN-248)', async () => {
+    const { tms, t } = await ready({ players: 4, settings: { poolSystem: 'knockout', thirdPlaceMatch: true } })
+    const [pool] = await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.confirmDivision(admin, t.id, pool.divisionKey)
+    const knockout = async () => (await tms.listMatches(t.id)).filter((m) => m.stage === 'knockout')
+    const [semi1, semi2] = (await knockout()).filter((m) => m.round === 1)
+    await tms.correctResult(admin, t.id, semi1.id, { winner: 'red', avgRed: 3, avgBlue: 1 })
+    await tms.correctResult(admin, t.id, semi2.id, { winner: 'red', avgRed: 3, avgBlue: 1 })
+    const final = (await knockout()).find((m) => m.roundName === 'Final')
+    const third = (await knockout()).find((m) => m.thirdPlace)
+    // Before the final and the 3rd-place bout are fought, a semi-final can still change.
+    await tms.correctResult(admin, t.id, semi1.id, { winner: 'blue', avgRed: 1, avgBlue: 3 }, 'Scores were swapped')
+    expect((await knockout()).find((m) => m.id === final.id).akaPlayerId).toBe(semi1.aoPlayerId)
+    await tms.correctResult(admin, t.id, final.id, { winner: 'red', avgRed: 4, avgBlue: 0 })
+    await tms.correctResult(admin, t.id, third.id, { winner: 'red', avgRed: 2, avgBlue: 0 })
+
+    // Now the final (from its winner) and the 3rd-place bout (from its loser) follow from it.
+    const refused = tms.correctResult(admin, t.id, semi1.id, { winner: 'red', avgRed: 3, avgBlue: 1 }, 'Back again')
+    await expect(refused).rejects.toMatchObject({ code: 'later_bout_decided', details: { matches: expect.arrayContaining([final.matchNumber, third.matchNumber]) } })
+    await expect(tms.correctResult(admin, t.id, semi1.id, { resultType: 'CANCELLED', finishReason: 'Wrong pairing' }, 'Wrong pairing')).rejects.toMatchObject({ code: 'later_bout_decided' })
+    // The same winner with another score is fine.
+    await tms.correctResult(admin, t.id, semi1.id, { winner: 'blue', avgRed: 0, avgBlue: 5 }, 'Score typo')
+    // Cancel the later bouts first, and the semi-final can change: they then get the right players.
+    await tms.correctResult(admin, t.id, final.id, { resultType: 'CANCELLED', finishReason: 'Wrong finalist' }, 'Wrong finalist')
+    await tms.correctResult(admin, t.id, third.id, { resultType: 'CANCELLED', finishReason: 'Wrong player' }, 'Wrong player')
+    await tms.correctResult(admin, t.id, semi1.id, { winner: 'red', avgRed: 3, avgBlue: 1 }, 'Back again')
+    const after = await knockout()
+    expect(after.find((m) => m.id === final.id).akaPlayerId).toBe(semi1.akaPlayerId)
+    expect(after.find((m) => m.id === third.id).akaPlayerId).toBe(semi1.aoPlayerId)
+  })
+
   it('keeps a knockout bout\'s corners swapped by hand, and logs the swap as such (KAN-265)', async () => {
     const { tms, t, stores } = await ready({ players: 4, settings: { poolSystem: 'knockout' } })
     const [pool] = await tms.generatePools(admin, t.id, { seed: 1 })

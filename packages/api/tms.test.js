@@ -282,6 +282,14 @@ describe('PRD tournament management over HTTP', () => {
       expect([saved.status, saved.body.error]).toEqual([409, 'knockout_needs_winner'])
     }
     expect((await call('PATCH', `/matches/${first[0].id}`, { winner: 'red', avgRed: 3, avgBlue: 2 }, tokens.admin)).status).toBe(200)
+    // KAN-248: once the final has a result, a semi-final's winner cannot change under it.
+    for (const semi of first) await call('POST', `/tournaments/${t}/matches/${semi.id}/correct`, { winner: 'red', avgRed: 3, avgBlue: 0 }, tokens.admin)
+    const final = (await call('GET', `/tournaments/${t}/matches`, undefined, tokens.admin)).body.matches.find((m) => m.round === 2)
+    await call('POST', `/tournaments/${t}/matches/${final.id}/correct`, { winner: 'red', avgRed: 3, avgBlue: 0 }, tokens.admin)
+    const swap = await call('PATCH', `/matches/${first[0].id}`, { winner: 'blue', correctionReason: 'Wrong corner' }, tokens.admin)
+    expect([swap.status, swap.body.error, swap.body.details?.matches]).toEqual([409, 'later_bout_decided', [final.matchNumber]])
+    const dialog = await call('POST', `/tournaments/${t}/matches/${first[0].id}/correct`, { winner: 'blue', avgRed: 0, avgBlue: 3, reason: 'Wrong corner' }, tokens.admin)
+    expect([dialog.status, dialog.body.error]).toEqual([409, 'later_bout_decided'])
   })
 
   it('keeps a coach session out of the staff tournament screens (KAN-427)', async () => {

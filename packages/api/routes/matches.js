@@ -430,6 +430,8 @@ export function matchRoutes(stores, tms = null) {
     if (correcting) {
       if (!can(role, P.SCORE_CORRECT)) throw forbidden('score_correction_forbidden')
       if (tms && category?.divisionKey) await tms.assertResultEditable({ ...req.user, role }, category.tournamentId, category.divisionKey, correctionReason)
+      // KAN-248: not while a later bracket bout already follows from this result.
+      if (tms && category?.divisionKey && ('winner' in patch || patch.status === 'cancelled')) await tms.assertLaterBoutsOpen(category.tournamentId, category.divisionKey, existing, patch.status === 'cancelled' ? null : patch.winner ?? existing.winner)
     }
     // PRD v1 §13: only the transitions the match lifecycle allows.
     const from = existing.status || 'scheduled'
