@@ -459,7 +459,7 @@ export const HELP = {
     text: 'Standard and custom rule sets (match duration, scoring, pool system…). Editing creates a new version; tournaments keep the version they started with. Standard rulesets can be restored.',
   },
   'admin.organizations': { title: 'Organisations', text: 'Federations or associations. Each has its own tournaments and staff.' },
-  'analytics': { title: 'Analytics', text: 'Tables of clubs, athletes and tournaments: entries, bouts and medals, across every tournament you can see. Click a row for the detail.' },
+  'analytics': { title: 'Analytics', text: 'Tables of clubs, athletes and tournaments: entries, bouts and medals, across every tournament you can see. Click a row for the detail. An athlete is matched by name and date of birth; in an athlete\'s detail an organiser can join two records of one person, or set apart someone else who shares the name and birthday.' },
 
   // --- staff -------------------------------------------------------------
   'referee.categories': {
