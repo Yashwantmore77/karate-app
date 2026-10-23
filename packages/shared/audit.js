@@ -19,6 +19,10 @@ export const AUDIT_ACTIONS = {
   POOLS_ARRANGED: 'pools.arranged',
   CATEGORY_CONFIRMED: 'draw.category_confirmed',
   CATEGORY_REOPENED: 'draw.category_reopened',
+  // Analytics: which player records are one athlete (KAN-369).
+  ATHLETES_LINKED: 'athlete.linked',
+  ATHLETE_SET_APART: 'athlete.set_apart',
+  ATHLETE_DECISION_UNDONE: 'athlete.decision_undone',
   MATCH_RESULT_CHANGED: 'match.result_changed',
   SCORE_UNDONE: 'match.score_undone',
   TOURNAMENT_UPDATED: 'tournament.updated',

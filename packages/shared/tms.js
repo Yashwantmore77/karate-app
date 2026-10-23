@@ -2158,6 +2158,46 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       .filter((e) => e.players.length)
   }
 
+  /**
+   * The organiser's decisions about which player records are one athlete in
+   * Analytics (KAN-369): "same" joins two records, "apart" takes one out of
+   * the athlete its name and birthday give it. Each can be undone. `reaches`
+   * says which tournaments the caller may see: a record in any other is not
+   * found.
+   */
+  const athleteLinks = () => stores.athleteLinks.list({})
+
+  async function addAthleteLink(actor, { kind, playerIds }, { reaches = () => true } = {}) {
+    const ids = [...new Set(playerIds)]
+    if (!['same', 'apart'].includes(kind)) throw invalid('invalid_kind')
+    if (ids.length !== (kind === 'same' ? 2 : 1)) throw invalid('invalid_playerIds')
+    const players = await recordsReached(ids, reaches)
+    if (kind === 'apart' && (await stores.athleteLinks.list({ kind })).some((l) => l.playerIds.includes(ids[0]))) throw rule('already_apart')
+    const link = await stores.athleteLinks.insert({ kind, playerIds: ids, createdAt: iso() })
+    await recordAthleteDecision(actor, players, kind === 'same' ? A.ATHLETES_LINKED : A.ATHLETE_SET_APART, link)
+    return link
+  }
+
+  async function removeAthleteLink(actor, id, { reaches = () => true } = {}) {
+    const link = await load('athleteLinks', id)
+    const players = await recordsReached(link.playerIds, reaches)
+    await stores.athleteLinks.remove(id)
+    await recordAthleteDecision(actor, players, A.ATHLETE_DECISION_UNDONE, link)
+  }
+
+  const recordsReached = async (ids, reaches) => {
+    const players = await Promise.all(ids.map((id) => load('players', id)))
+    if (!players.every((p) => reaches(p.tournamentId))) throw missing()
+    return players
+  }
+
+  // Logged in each tournament the records come from.
+  const recordAthleteDecision = async (actor, players, action, link) => {
+    for (const tournamentId of new Set(players.map((p) => p.tournamentId))) {
+      await record(actor, { tournamentId, action, entity: 'athleteLink', entityId: link.id, after: { kind: link.kind, players: players.map((p) => p.name) } })
+    }
+  }
+
   const findBridgedMatch = async (tournamentId, matchId) => {
     const match = await load('matches', matchId)
     const category = await load('categories', match.categoryId)
@@ -3940,7 +3980,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // links and coaches
     getLink, saveLink, linkInfo, openLink, assertLinkSession, coachOverview,
     // public, dashboard, audit
-    publicList, publicView, publicTournament, dashboard, dashboardSummaries, analyticsEvents, listNotifications, markNotificationsRead, sendWeighInReminder,
+    publicList, publicView, publicTournament, dashboard, dashboardSummaries, analyticsEvents, athleteLinks, addAthleteLink, removeAthleteLink, listNotifications, markNotificationsRead, sendWeighInReminder,
     auditTrail: (tournamentId) => audit.forTournament(tournamentId),
     logExport, record,
     // files
@@ -3952,7 +3992,7 @@ export const TMS_COLLECTIONS = [
   'ageGroups', 'weightCategories', 'teams', 'players', 'pools', 'brackets', 'medals',
   'certificates', 'registrationLinks', 'notifications', 'auditLog', 'files',
   'kataRounds', 'kataScores', 'medalOverrides', 'matchEvents', 'organizations',
-  'rulesets', 'divisionResults', 'liveStates', 'passes', 'teamMembers',
+  'rulesets', 'divisionResults', 'liveStates', 'passes', 'teamMembers', 'athleteLinks',
 ]
 
 export { DomainError, poolName }
