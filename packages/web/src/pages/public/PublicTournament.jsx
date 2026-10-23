@@ -11,6 +11,9 @@ import Bracket from '../../components/tms/Bracket'
 import KataRoundTable from '../../components/tms/KataRoundTable'
 import { StandingsTable, MedalList, TallyTable } from '../tms/ResultsTab'
 import { PageLoader } from '../../components/Loader'
+import MatCard from '../../components/tms/MatCard'
+import { matQueues } from '../../components/tms/matQueues'
+import { useMatScoreboards } from '../../hooks/useMatScoreboards'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
@@ -23,7 +26,7 @@ const TIP = {
   teams: 'The teams (clubs) taking part.',
   players: 'Everyone taking part, by team and category.',
   draw: 'The pools and brackets for each category.',
-  live: 'What is on each mat now and what comes next.',
+  live: 'Each mat: the bout on it now with its live score, and the bouts coming next.',
   results: 'Standings and medals for each category, once published.',
   medals: 'Medals counted by club, district and state.',
   certificates: 'Find and download your certificate by name.',
@@ -76,6 +79,7 @@ export default function PublicTournament() {
   const [category, setCategory] = useState('')
   const [district, setDistrict] = useState('')
   const [by, setBy] = useState('club')
+  const scoreOf = useMatScoreboards()
 
   useEffect(() => {
     let alive = true
@@ -97,6 +101,7 @@ export default function PublicTournament() {
   const live = data.matches.filter((m) => ['live', 'open', 'paused'].includes(m.status))
   const upcoming = data.matches.filter((m) => !['live', 'open', 'paused', 'completed', 'cancelled'].includes(m.status))
   const done = data.matches.filter((m) => m.status === 'completed')
+  const queues = matQueues(data.matches, t.runningEvent, (m) => !!scoreOf(m))
   const inCategory = (key) => !category || key === category
   const teamDistrict = Object.fromEntries(data.teams.map((tm) => [tm.id, tm.district]))
   const districtOf = (p) => p.district || teamDistrict[p.teamId] || ''
@@ -278,16 +283,12 @@ export default function PublicTournament() {
 
         {tab === 'live' && (
           <Stack spacing={3}>
-            {live.length > 0 && (
+            {/* KAN-428: mat by mat, with the live score as the scoreboard shows it. */}
+            {queues.length > 0 && (
               <Grid container spacing={2}>
-                {live.map((m) => (
-                  <Grid key={m.id} size={{ xs: 12, md: 6 }}>
-                    <Paper sx={{ p: 2, textAlign: 'center' }}>
-                      <Typography color="text.secondary">MAT {m.mat} · {m.matchNumber} · {m.category}</Typography>
-                      <Typography variant="h2" sx={{ color: AKA, mt: 1 }}>AKA {m.aka}</Typography>
-                      <Typography color="text.secondary">vs</Typography>
-                      <Typography variant="h2" sx={{ color: AO }}>AO {m.ao}</Typography>
-                    </Paper>
+                {queues.map((mq) => (
+                  <Grid key={mq.mat} size={{ xs: 12, sm: 6, lg: 4 }}>
+                    <MatCard mat={mq.mat} now={mq.now} next={mq.next} board={mq.now ? scoreOf(mq.now) : null} />
                   </Grid>
                 ))}
               </Grid>
