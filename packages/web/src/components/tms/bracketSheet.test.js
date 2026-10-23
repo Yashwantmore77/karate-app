@@ -1,4 +1,4 @@
-import { bracketSvg, placesFromPlayers, placesFromBracket, sheetsForPlayers, sheetSize } from './bracketSheet'
+import { bracketSvg, placesFromPlayers, placesFromBracket, sheetsForPlayers, sheetSize, sheetsFromBracket, sheetsFromPlaces } from './bracketSheet'
 
 describe('printed draw sheet', () => {
   it('signs off with four judges and the referee', () => {
@@ -40,5 +40,33 @@ describe('printed draw sheet', () => {
     expect(sheet.columns[0]).toEqual(['A', 'B', 'C', 'D'])
     expect(sheet.columns[1]).toEqual(['A', 'D'])
     expect(sheet.third).toEqual(['B', 'C'])
+  })
+
+  /** KAN-256: 17 to 32 players used to print only the first 16 places. */
+  it('prints a 32-place bracket as two sheets of 16 and a sheet for the final, every name on it', () => {
+    const P = Array.from({ length: 32 }, (_, i) => `P${i + 1}`)
+    const side = (name) => (name ? { name } : null)
+    // Each round, AKA always wins: round r keeps every 2^r-th player.
+    const round = (r) => ({ matches: Array.from({ length: 16 >> r }, (_, i) => ({ aka: side(P[i * 2 ** (r + 1)]), ao: side(P[i * 2 ** (r + 1) + 2 ** r]) })) })
+    const rounds = [0, 1, 2, 3, 4].map(round)
+    rounds[4].matches.push({ thirdPlace: true, aka: side('P9'), ao: side('P25') })
+    const sheets = sheetsFromBracket(rounds, { title: 'T', event: 'E' })
+    expect(sheets.map((s) => [s.size, s.sheet])).toEqual([[16, 'Sheet 1 of 3'], [16, 'Sheet 2 of 3'], [2, 'Final rounds · Sheet 3 of 3']])
+    // All 32 first-round names, each once, in bracket order.
+    expect([...sheets[0].columns[0], ...sheets[1].columns[0]]).toEqual(P)
+    // The results so far stay with their half: who went through, round by round.
+    expect(sheets[1].columns.map((c) => c.filter(Boolean))).toEqual([P.slice(16), ['P17', 'P19', 'P21', 'P23', 'P25', 'P27', 'P29', 'P31'], ['P17', 'P21', 'P25', 'P29'], ['P17', 'P25']])
+    expect(sheets[2]).toMatchObject({ columns: [['P1', 'P17']], third: ['P9', 'P25'] })
+    expect(bracketSvg(sheets[2])).toContain('P17')
+    // Up to 16 places it is still one sheet.
+    expect(sheetsFromBracket(rounds.slice(1), { title: 'T', event: 'E' })).toHaveLength(1)
+  })
+
+  it('prints a knockout sheet of 32 places as laid out, 16 places a page', () => {
+    const places = Array.from({ length: 32 }, (_, i) => (i % 8 === 7 ? '' : `P${i + 1}`))
+    const sheets = sheetsFromPlaces(places, { title: 'T', event: 'E' })
+    expect(sheets.map((s) => [s.size, s.sheet])).toEqual([[16, 'Sheet 1 of 3'], [16, 'Sheet 2 of 3'], [2, 'Final rounds · Sheet 3 of 3']])
+    expect([...sheets[0].columns[0], ...sheets[1].columns[0]]).toEqual(places)
+    expect(sheetsFromPlaces(places.slice(0, 8), { title: 'T', event: 'E' })).toEqual([{ title: 'T', event: 'E', size: 8, columns: [places.slice(0, 8)] }])
   })
 })

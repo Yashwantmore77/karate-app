@@ -461,7 +461,7 @@ For both:
 - A pool with more players than the maximum asks you for a reason, which is kept in the audit log.
 - **Save sheet** or **Save pools** keeps your changes without confirming, so you can come back to them.
 - Changes not saved yet show **Not saved**. If you click another tab or the back arrow then, the app asks first: **Leave** drops the changes, **Cancel** keeps you on the Draw tab. Closing or reloading the browser asks too.
-- **Print draw sheet** prints the sheet as it is saved, for the mat table.
+- **Print draw sheet** prints the sheet as it is saved, for the mat table. A knockout category of more than 16 places prints 16 places a page, then a page for the final rounds.
 - To change a confirmed category, click **Reopen** and type a reason. Its bouts are deleted until you confirm it again. This is not possible once one of its bouts has a result.
 
 ### Job 14: Lock the draw

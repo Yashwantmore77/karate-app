@@ -9,7 +9,7 @@ import { can, PERMISSION as P } from '@kumite/shared/permissions.js'
 import { tms, describeError } from '../../data/tms'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { PageLoader } from '../../components/Loader'
-import { printBracketSheets, placesFromBracket } from '../../components/tms/bracketSheet'
+import { printBracketSheets, sheetsFromBracket } from '../../components/tms/bracketSheet'
 import { RESULT_TYPE_LABEL } from './MatchesTab'
 import { BOX_W, BOX_H, AKA, AO, boardHeight, boardCentres } from '../../components/tms/bracketBoard'
 
@@ -262,7 +262,7 @@ export default function BracketTab({ tournament, version, action, role }) {
             </ToggleButtonGroup>
             {arranging && <Button startIcon={<Undo />} disabled={!dirty} onClick={() => { setLayout(null); setPicked(null); setError(null) }}>Undo changes</Button>}
             {arranging && <Button variant="contained" startIcon={<Save />} disabled={!dirty} onClick={save}>Save draw</Button>}
-            <Button startIcon={<Print />} onClick={() => printBracketSheets([{ title: String(tournament.association || tournament.organizer || tournament.name || '').toUpperCase(), event: label, ...placesFromBracket(bracket.rounds) }], `${label} — bracket sheet`)}>Print</Button>
+            <Button startIcon={<Print />} onClick={() => printBracketSheets(sheetsFromBracket(bracket.rounds, { title: String(tournament.association || tournament.organizer || tournament.name || '').toUpperCase(), event: label }), `${label} — bracket sheet`)}>Print</Button>
           </Stack>
         </Stack>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
