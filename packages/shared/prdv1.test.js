@@ -465,6 +465,38 @@ describe('PRD v1 §12-13 draw and matches', () => {
     expect(after.find((m) => m.id === third.id).akaPlayerId).toBe(semi1.aoPlayerId)
   })
 
+  it('keeps a knockout bout\'s corners swapped by hand, and logs the swap as such (KAN-265)', async () => {
+    const { tms, t, stores } = await ready({ players: 4, settings: { poolSystem: 'knockout' } })
+    const [pool] = await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.confirmDivision(admin, t.id, pool.divisionKey)
+    const semi = async () => (await tms.listMatches(t.id)).find((m) => m.stage === 'knockout' && m.round === 1)
+    const before = await semi()
+    await tms.swapCorners(admin, t.id, before.id)
+    // Looking at the bracket used to put the corners back.
+    await tms.bracketView(t.id, pool.divisionKey)
+    const swapped = await semi()
+    expect([swapped.redId, swapped.blueId]).toEqual([before.blueId, before.redId])
+    expect((await stores.auditLog.list({ action: 'match.corners_swapped' }))).toHaveLength(1)
+    // AKA, now the player who was AO, wins and goes through.
+    await tms.correctResult(admin, t.id, swapped.id, { winner: 'red', avgRed: 3, avgBlue: 1 })
+    const other = (await tms.listMatches(t.id)).find((m) => m.stage === 'knockout' && m.round === 1 && m.id !== swapped.id)
+    await tms.correctResult(admin, t.id, other.id, { winner: 'red', avgRed: 3, avgBlue: 1 })
+    const final = (await tms.listMatches(t.id)).find((m) => m.roundName === 'Final')
+    expect([final?.redId, final?.blueId]).toContain(before.blueId)
+  })
+
+  it('swaps a knockout bout back, and the bracket follows', async () => {
+    const { tms, t } = await ready({ players: 4, settings: { poolSystem: 'knockout' } })
+    const [pool] = await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.confirmDivision(admin, t.id, pool.divisionKey)
+    const semi = async () => (await tms.listMatches(t.id)).find((m) => m.stage === 'knockout' && m.round === 1)
+    const before = await semi()
+    await tms.swapCorners(admin, t.id, before.id)
+    await tms.swapCorners(admin, t.id, before.id)
+    await tms.bracketView(t.id, pool.divisionKey)
+    expect([(await semi()).redId, (await semi()).blueId]).toEqual([before.redId, before.blueId])
+  })
+
   it('plays a third-place match for one bronze', async () => {
     const { tms, t } = await ready({ settings: { poolSize: 4, thirdPlaceMatch: true } })
     await tms.generatePools(admin, t.id, { seed: 3 })

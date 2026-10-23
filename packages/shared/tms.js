@@ -2425,9 +2425,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const { match } = await findBridgedMatch(tournamentId, matchId)
     if (boutOutcome(match) || match.status === 'cancelled') throw rule('match_finished')
     if (['live', 'open', 'paused'].includes(match.status)) throw rule('match_in_progress')
-    const patch = { redId: match.blueId, blueId: match.redId, akaPlayerId: match.aoPlayerId ?? null, aoPlayerId: match.akaPlayerId ?? null }
+    const patch = {
+      redId: match.blueId, blueId: match.redId, akaPlayerId: match.aoPlayerId ?? null, aoPlayerId: match.akaPlayerId ?? null,
+      // A bracket bout's corners follow its tree; this tells the bracket they were swapped (KAN-265).
+      ...(match.stage === 'knockout' ? { cornersSwapped: !match.cornersSwapped } : {}),
+    }
     const after = await stores.matches.update(matchId, patch)
-    await record(actor, { tournamentId, action: A.MATCH_SCHEDULED, entity: 'match', entityId: matchId, before: { redId: match.redId, blueId: match.blueId }, after: { redId: patch.redId, blueId: patch.blueId }, reason: reason || 'Corners swapped' })
+    await record(actor, { tournamentId, action: A.CORNERS_SWAPPED, entity: 'match', entityId: matchId, before: { redId: match.redId, blueId: match.blueId }, after: { redId: patch.redId, blueId: patch.blueId }, reason: reason || 'Corners swapped' })
     return after
   }
 
@@ -2887,11 +2891,13 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       const existing = stored.get(slot.key)
       const isBye = slot.round === 1 && (!aka || !ao)
       if (existing) {
-        if (!boutOutcome(existing) && cornersDiffer(existing, aka, ao)) {
+        // Corners swapped by hand stay swapped (KAN-265).
+        const [red, blue] = existing.cornersSwapped ? [ao, aka] : [aka, ao]
+        if (!boutOutcome(existing) && cornersDiffer(existing, red, blue)) {
           if (!write) return CHANGES
-          await stores.matches.update(existing.id, { redId: aka, blueId: ao })
+          await stores.matches.update(existing.id, { redId: red, blueId: blue })
         }
-        merged.set(slot.key, { ...existing, ...slot, aka: boutOutcome(existing) ? existing.redId : aka, ao: boutOutcome(existing) ? existing.blueId : ao, status: existing.status, winner: existing.winner })
+        merged.set(slot.key, { ...existing, ...slot, aka: boutOutcome(existing) ? existing.redId : red, ao: boutOutcome(existing) ? existing.blueId : blue, status: existing.status, winner: existing.winner })
       } else if (!isBye && aka && ao) {
         if (!write) return CHANGES
         if (number == null) number = await nextMatchNumber(tournamentId)
@@ -2922,11 +2928,12 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         const slot = { key: key3, round: top, slot: 2, name: 'Third Place', thirdPlace: true }
         const existing = stored.get(key3)
         if (existing) {
-          if (!boutOutcome(existing) && cornersDiffer(existing, aka, ao)) {
+          const [red, blue] = existing.cornersSwapped ? [ao, aka] : [aka, ao]
+          if (!boutOutcome(existing) && cornersDiffer(existing, red, blue)) {
             if (!write) return CHANGES
-            await stores.matches.update(existing.id, { redId: aka, blueId: ao })
+            await stores.matches.update(existing.id, { redId: red, blueId: blue })
           }
-          merged.set(key3, { ...existing, ...slot, aka: boutOutcome(existing) ? existing.redId : aka, ao: boutOutcome(existing) ? existing.blueId : ao, status: existing.status, winner: existing.winner })
+          merged.set(key3, { ...existing, ...slot, aka: boutOutcome(existing) ? existing.redId : red, ao: boutOutcome(existing) ? existing.blueId : blue, status: existing.status, winner: existing.winner })
         } else if (aka && ao) {
           if (!write) return CHANGES
           if (number == null) number = await nextMatchNumber(tournamentId)
