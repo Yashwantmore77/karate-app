@@ -92,6 +92,21 @@ describe('PRD v1 §5-6 lifecycle and configuration', () => {
     expect(zonedInstant('2026-12-31', 'Asia/Kolkata', { endOfDay: true }).toISOString()).toBe('2026-12-31T18:29:59.000Z')
   })
 
+  it('keeps seeds for the organisers: a coach or partner cannot seed a player (KAN-427)', async () => {
+    const { tms, t, team } = await world()
+    await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')
+    const coach = { uid: 'c', role: 'coach', tournamentId: t.id, teamId: team.id }
+    const partner = { uid: `partner:${t.id}`, role: 'partner' }
+    const body = { name: 'Coach Kid', dob: '2014-05-05', gender: 'M', events: ['kumite'], weight: 31 }
+    const mine = await tms.createPlayer(coach, t.id, { ...body, seed: 1 })
+    expect(mine.seed).toBeNull()
+    const theirs = await tms.createPlayer(partner, t.id, { ...body, name: 'Partner Kid', teamId: team.id, seed: 1 })
+    expect(theirs.seed).toBeNull()
+    // The organisers seed; the coach's edit keeps their seed.
+    expect((await tms.updatePlayer(admin, t.id, mine.id, { seed: 2 })).seed).toBe(2)
+    expect((await tms.updatePlayer(coach, t.id, mine.id, { seed: 1, weight: 32 })).seed).toBe(2)
+  })
+
   it('never shows a coach who another team\'s possible duplicate is (KAN-427)', async () => {
     const { tms, t, team } = await world()
     await tms.setLifecycle(admin, t.id, 'REGISTRATION_OPEN')

@@ -881,6 +881,7 @@ The app checks every action on the server, so a rule cannot be skipped from any 
 | Drawing pools | Entries locked; draw not locked |
 | Redraw | Needs the redraw privilege and a confirmation; impossible once a bout in the category has a result |
 | Seeded draw | Only when seeding is allowed in Settings |
+| Seeds | Set by the organisers only; a seed sent from the coach portal or a partner import is ignored |
 | Moving a player | Only between pools of the same category, before the draw is locked and before the category is confirmed; a pool over the maximum needs a reason |
 | Pools | At least two players each; an empty pool is dropped when saved; a knockout category is one list, drawn as its sheet |
 | Knockout sheet | Every player in one box; every first-round bout has at least one player; byes only when allowed |
