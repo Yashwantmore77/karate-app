@@ -2869,7 +2869,6 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
             categoryId: bracket.categoryId, tournamentId, stage: 'knockout', round: top, roundName: 'Third Place', thirdPlace: true,
             bracketKey: key3, redId: aka, blueId: ao, matchNumber: `M-${pad(number)}`, mat, status: 'scheduled', winner: null,
           })
-          number += 1
           merged.set(key3, { ...row, ...slot, aka, ao })
         } else {
           merged.set(key3, { ...slot, aka, ao, status: 'pending' })

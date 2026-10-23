@@ -38,7 +38,7 @@ const validationSchema = Yup.object({
  * same split (POST and DELETE /tournaments stay behind the admin gate); this
  * keeps a button from offering what the API would refuse.
  */
-export default function AdminTournamentList({ uid, profile = null, basePath = '/admin' }) {
+export default function AdminTournamentList({ profile = null, basePath = '/admin' }) {
   const mayAddOrRemove = profile?.role !== 'tournament_owner'
   const navigate = useNavigate()
   const [openModal, setOpenModal] = useState(false)

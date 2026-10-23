@@ -23,7 +23,7 @@ const validationSchema = Yup.object({
   age: Yup.number().typeError('Age must be a number').positive('Age must be positive').integer('Age must be a whole number').required('Age required'),
 })
 
-export default function AdminCategoryDetail({ uid, basePath = '/admin' }) {
+export default function AdminCategoryDetail({ basePath = '/admin' }) {
   const navigate = useNavigate()
   const { tournamentId, categoryId } = useParams()
   const [tournament, setTournament] = useState(null)

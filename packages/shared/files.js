@@ -40,4 +40,5 @@ export function checkFile({ name, type, data }) {
 }
 
 /** Strips anything path-like or control characters from a display name. */
+// eslint-disable-next-line no-control-regex -- the control characters are what it strips
 export const safeFileName = (name) => String(name).replace(/[\\/\u0000-\u001f"<>|:*?]+/g, '_').slice(0, 120)

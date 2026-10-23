@@ -6,7 +6,7 @@ import { issueReset } from './auth/resets.js'
 
 // Findings of the security review, each pinned by a test.
 
-let http, port, stores
+let http, port
 const call = async (method, path, body, token, headers = {}) => {
   const res = await fetch(`http://localhost:${port}/api/v1${path}`, {
     method,
@@ -20,7 +20,6 @@ const login = async (email, password = 'test123') => (await call('POST', '/auth/
 beforeEach(async () => {
   const app = createApp()
   http = app.http
-  stores = app.stores
   port = await new Promise((resolve) => http.listen(0, () => resolve(http.address().port)))
 })
 afterEach(() => new Promise((resolve) => http.close(resolve)))

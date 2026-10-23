@@ -55,7 +55,7 @@ export const TABS = [
 /** The events a tournament holds (the same rule the server applies to entries). */
 export const eventsOf = (t) => tournamentEvents(t)
 
-export default function TournamentManager({ uid, profile, basePath = '/admin' }) {
+export default function TournamentManager({ profile, basePath = '/admin' }) {
   const navigate = useNavigate()
   const { tournamentId } = useParams()
   const [params, setParams] = useSearchParams()

@@ -75,8 +75,6 @@ export const PERMISSION = {
 const P = PERMISSION
 const ALL = Object.values(P)
 
-const TOURNAMENT_ADMIN = ALL.filter((p) => p !== P.USER_MANAGE)
-
 export const ROLE_PERMISSIONS = {
   super_admin: ALL,
   // Full system access, backups and rulesets included. An installation's first
