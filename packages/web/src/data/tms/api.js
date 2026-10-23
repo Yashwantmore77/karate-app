@@ -91,6 +91,8 @@ export const tms = {
     (await send('PUT', `${T(tid)}/players/${pid}/entries/${event}`, { ...entry, reason: reason || null })).player,
   categorize: (tid) => send('POST', `${T(tid)}/categorize`, {}),
   divisions: async (tid) => (await get(`${T(tid)}/divisions`)).divisions,
+  // The admin home's numbers for every tournament the account reaches, in one call.
+  summaries: async () => (await get('/tournaments/summaries')).summaries,
   pools: async (tid) => (await get(`${T(tid)}/pools`)).pools,
   generatePools: (tid, opts) => send('POST', `${T(tid)}/pools/generate`, opts),
   // The Draw tab's pool editor: save a category's pools, confirm it (its matches are made), reopen it.

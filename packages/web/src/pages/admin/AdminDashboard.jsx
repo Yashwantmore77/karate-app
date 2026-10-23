@@ -29,9 +29,9 @@ export default function AdminDashboard({ profile }) {
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const list = await tournamentStore.list().catch(() => [])
-      const out = await Promise.all(list.map(async (t) => ({ t, d: await tms.dashboard(t.id).catch(() => null) })))
-      if (alive) setRows(out)
+      // Every tournament's numbers in one request (KAN-368), not one per tournament.
+      const [list, summaries] = await Promise.all([tournamentStore.list().catch(() => []), tms.summaries().catch(() => ({}))])
+      if (alive) setRows(list.map((t) => ({ t, d: summaries[t.id] || null })))
     })()
     return () => { alive = false }
   }, [])

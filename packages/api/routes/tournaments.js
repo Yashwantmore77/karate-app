@@ -7,7 +7,7 @@ import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { DEFAULT_SLOT_MINUTES, SLOT_MIN_MINUTES, SLOT_MAX_MINUTES } from '../lib/schedule.js'
 import { tournamentProblems } from '@kumite/shared/tms.js'
-import { badRequest, conflict } from '../lib/errors.js'
+import { badRequest, conflict, forbidden } from '../lib/errors.js'
 import { AUDIT_ACTIONS } from '../lib/audit.js'
 import { withMeta } from './tms.js'
 
@@ -102,6 +102,16 @@ export function tournamentRoutes(stores, tms) {
       q, searchFields: ['name', 'location'], page, limit,
     })
     res.json({ tournaments: rows, ...pageMeta({ page, limit, total }) })
+  })
+
+  // The admin home's numbers for every tournament the account reaches, in
+  // one request (KAN-368) rather than a full dashboard per tournament.
+  router.get('/summaries', requireTournamentAdmin(), async (req, res) => {
+    const everything = req.user.role === 'super_admin'
+    const account = everything ? null : await findUserRecord(req.user.uid)
+    if (!everything && !account) throw forbidden()
+    const reach = (await tournaments.list()).filter((t) => everything || mayAccessTournament(account, t.id, t))
+    res.json({ summaries: await tms.dashboardSummaries(reach.map((t) => t.id)) })
   })
 
   router.get('/:id', async (req, res) => {
