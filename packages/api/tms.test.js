@@ -276,6 +276,18 @@ describe('PRD tournament management over HTTP', () => {
     expect(first.map((m) => [m.akaPlayerId, m.aoPlayerId])).toEqual([[a, d], [b, c]])
   })
 
+  it('keeps a coach session out of the staff tournament screens (KAN-427)', async () => {
+    const { t, link } = await setUpTournament()
+    const coach = await openCoach(link)
+    for (const path of ['', '/results', '/medals', '/matches', '/pools', '/brackets', '/age-groups']) {
+      expect((await call('GET', `/tournaments/${t}${path}`, undefined, coach)).status, path).toBe(403)
+    }
+    expect((await call('GET', '/tournaments', undefined, coach)).status).toBe(403)
+    // The coach portal still works, and staff still read these.
+    expect((await call('GET', '/coach/me', undefined, coach)).status).toBe(200)
+    expect((await call('GET', `/tournaments/${t}/results`, undefined, tokens.referee)).status).toBe(200)
+  })
+
   it('assigns officials to a match and records a walkover and a cancellation', async () => {
     const { t, link } = await setUpTournament()
     const coach = await openCoach(link)

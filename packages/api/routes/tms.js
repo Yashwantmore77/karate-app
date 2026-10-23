@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireAuth, requirePermission, tournamentAccess } from '../auth/middleware.js'
 import { findUserRecord, listAssignableOfficials } from '../auth/users.js'
 import { mayAccessTournament } from '../auth/middleware.js'
+import { staffOnly } from '../auth/categoryAccess.js'
 import { validate } from '../lib/validate.js'
 import { notFound, badRequest } from '../lib/errors.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
@@ -192,7 +193,9 @@ export function tmsRoutes(tms, stores) {
     return t
   }
   const router = Router()
-  router.use(requireAuth)
+  // Staff screens: a coach session has its own portal (/coach) and never
+  // reads the draw, results or medals from here (KAN-427).
+  router.use(requireAuth, staffOnly)
   router.param('tid', tournamentAccess(findUserRecord))
 
   const tid = (req) => req.params.tid

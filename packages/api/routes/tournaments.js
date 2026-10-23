@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireAuth, requireRole, requireTournamentAdmin, tournamentAccess, mayAccessTournament } from '../auth/middleware.js'
 import { reachesOnlyAssigned } from '@kumite/shared/permissions.js'
 import { findUserRecord, listCoachAccounts, deleteUser } from '../auth/users.js'
+import { staffOnly } from '../auth/categoryAccess.js'
 import { bodyReader, loadOrFail } from './resource.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { DEFAULT_SLOT_MINUTES, SLOT_MIN_MINUTES, SLOT_MAX_MINUTES } from '../lib/schedule.js'
@@ -77,13 +78,12 @@ export function tournamentRoutes(stores, tms) {
 
   // Reading the schedule is open to any signed-in role: a judge needs to see
   // what is on before they can be sent to a mat.
-  router.use(requireAuth)
+  // A coach session belongs to one tournament and reads it through /coach.
+  router.use(requireAuth, staffOnly)
 
   router.param('id', tournamentAccess(findUserRecord))
 
   router.get('/', async (req, res) => {
-    // A coach session belongs to one tournament and reads it through /coach.
-    if (req.user.role === 'coach') return res.status(403).json({ error: 'forbidden' })
     const { page, limit, q } = readPageQuery(req.query)
     const account = await findUserRecord(req.user.uid)
     // An account limited to some tournaments (PRD section 4) pages through
