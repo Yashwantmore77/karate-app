@@ -513,6 +513,7 @@ Use **Enter result** when a bout is decided off the console. Choose how it ended
 
 - Changing a finished bout needs a reason and the score-correction privilege. Both are written to the audit log.
 - A cancelled bout counts as finished too: the dialog says it was cancelled and why, and saving a result on it is a correction that needs a reason. To fight it instead, use **Change status → Scheduled** to put it back in the queue.
+- A knockout bout, or a final, needs a winner: **Draw** is offered only for pool bouts. A cancelled knockout bout sends nobody on, so **Needs attention** lists it ("the bracket is waiting") until it is fought or given a winner.
 - Once a category's results are published, a change also needs the result-override privilege. Once results are locked, nothing changes until they are unlocked: a category locked on its own is unlocked on the Results tab (with a reason); when the tournament is Completed, it goes back to Live (with a reason).
 - A bout that was fought can be deleted only by an admin, with a reason and the correction privilege, and never from a locked draw.
 
@@ -584,7 +585,7 @@ How a bout ends:
 
 1. A fighter whose penalties reach **H** in any category loses (hansoku).
 2. A lead of **8 points** (the winning point gap) ends the bout at once.
-3. At **time up** the higher score wins. If level, the senshu holder wins (when senshu applies). Otherwise the "tie at time" setting decides: extra time, golden score (the first score in extra time wins), a referees' decision, or a draw.
+3. At **time up** the higher score wins. If level, the senshu holder wins (when senshu applies). Otherwise the "tie at time" setting decides: extra time, golden score (the first score in extra time wins), a referees' decision, or a draw. A draw is only a result in a pool bout: a knockout bout or a final must end with a winner.
 4. The referee confirms with **Close**; the result goes to the bracket and standings straight away.
 
 Safety rules on the console:
@@ -1080,6 +1081,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | Finish what is under way before switching the session. | Finish or send back the called and live bouts, or complete the open kata round |
 | This bout has started; corners can no longer be swapped. | Swap only before the bout starts |
 | This bout is already decided. | Use Correct result, with a reason |
+| A knockout bout or a final needs a winner. Give the decision (hantei) or fight extra time; a draw is not a result here. | Choose AKA or AO as the winner: by the referees' decision, or after extra time or golden score |
 | Another device is running this mat | If that device is gone or wrong, press **Take over** |
 | Give a finish reason for a walkover, no-show, kiken, disqualification, override or cancellation. | Type what happened, for example "AO did not report after three calls" or "Wrong pairing" |
 | Changing a completed result needs a reason (Rule 6). | Type the reason; the change goes to the audit log |

@@ -400,6 +400,40 @@ describe('PRD v1 §12-13 draw and matches', () => {
     await expect(tms.arrangeSheet(admin, t.id, key, mine)).rejects.toMatchObject({ code: 'draw_locked' })
   })
 
+  it('refuses a draw on a knockout bout, and flags a cancelled one as holding up the bracket (KAN-267)', async () => {
+    const { tms, t } = await ready({ players: 4, settings: { poolSystem: 'knockout' } })
+    const [pool] = await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.confirmDivision(admin, t.id, pool.divisionKey)
+    const [semi] = (await tms.listMatches(t.id)).filter((m) => m.stage === 'knockout' && m.round === 1)
+    await expect(tms.correctResult(admin, t.id, semi.id, { winner: 'tie', avgRed: 2, avgBlue: 2 })).rejects.toMatchObject({ code: 'knockout_needs_winner' })
+    expect((await tms.attention(t.id)).map((a) => a.id)).not.toContain('bracket_waiting')
+    // Cancelled, it sends nobody on: Needs attention says the bracket is waiting.
+    await tms.correctResult(admin, t.id, semi.id, { resultType: 'CANCELLED', finishReason: 'Mat closed' })
+    expect((await tms.attention(t.id)).find((a) => a.id === 'bracket_waiting')).toMatchObject({ tab: 'matches', items: [`${semi.matchNumber}: ${semi.akaName} v ${semi.aoName} (cancelled)`] })
+    expect((await tms.dashboard(t.id)).attention.map((a) => a.id)).toContain('bracket_waiting')
+    // Given a winner, it goes away.
+    await tms.correctResult(admin, t.id, semi.id, { winner: 'red', avgRed: 3, avgBlue: 1 }, 'Fought after all')
+    expect((await tms.attention(t.id)).map((a) => a.id)).not.toContain('bracket_waiting')
+  })
+
+  it('refuses a draw in a final of two, and still allows one in a pool (KAN-267)', async () => {
+    const { tms, t } = await ready({ players: 2, settings: { poolSystem: 'round_robin' } })
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    const [final] = await tms.listMatches(t.id)
+    expect(final).toMatchObject({ stage: 'pool', roundName: 'Final' })
+    await expect(tms.correctResult(admin, t.id, final.id, { winner: 'tie', avgRed: 1, avgBlue: 1 })).rejects.toMatchObject({ code: 'knockout_needs_winner' })
+    // Three in a pool: a drawn bout is a result (1 point each).
+    const pool = await ready({ players: 3, settings: { poolSystem: 'round_robin' } })
+    await pool.tms.generatePools(admin, pool.t.id, { seed: 1 })
+    await pool.tms.setDrawLock(admin, pool.t.id, true)
+    await pool.tms.generateMatches(admin, pool.t.id)
+    const [bout] = await pool.tms.listMatches(pool.t.id)
+    expect(bout.roundName).toBeUndefined()
+    expect(await pool.tms.correctResult(admin, pool.t.id, bout.id, { winner: 'tie', avgRed: 1, avgBlue: 1 })).toMatchObject({ winner: 'tie', status: 'completed' })
+  })
+
   it('plays a third-place match for one bronze', async () => {
     const { tms, t } = await ready({ settings: { poolSize: 4, thirdPlaceMatch: true } })
     await tms.generatePools(admin, t.id, { seed: 3 })

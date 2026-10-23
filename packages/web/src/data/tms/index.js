@@ -145,6 +145,7 @@ export const ERROR_TEXT = {
   already_in_pool: 'That player is already in this pool.',
   attendance_disabled: 'Attendance is switched off for this tournament (Settings).',
   joined_by_hand: 'This record was joined to the athlete by hand. Undo that decision to separate it.',
+  knockout_needs_winner: 'A knockout bout or a final needs a winner. Give the decision (hantei) or fight extra time; a draw is not a result here.',
   bracket_exists: 'The final stage has already been generated.',
   builtin_ruleset: 'A standard ruleset cannot be switched off. Edit it, or restore it as shipped.',
   bulk_has_errors: 'The file has errors. Fix them and upload again; nothing was imported.',

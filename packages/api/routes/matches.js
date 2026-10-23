@@ -15,6 +15,7 @@ import { matchLifecycle, EXCEPTIONAL_RESULTS } from '@kumite/shared/lifecycle.js
 import { forbidden } from '../lib/errors.js'
 import { categoryGuards, staffOnly } from '../auth/categoryAccess.js'
 import { runningEvent, eventOfCategory } from '@kumite/shared/tms.js'
+import { needsWinner } from '@kumite/shared/results.js'
 
 // Used when a tournament predates the setting, so an older record still gets a
 // sensible panel size instead of no limit at all.
@@ -433,6 +434,8 @@ export function matchRoutes(stores, tms = null) {
     // PRD v1 §13: only the transitions the match lifecycle allows.
     const from = existing.status || 'scheduled'
     if (patch.status && patch.status !== from && !correcting && !matchLifecycle.can(from, patch.status)) throw conflict('invalid_transition', { from, to: patch.status })
+    // KAN-267: a knockout bout or a final needs a winner; a draw would leave the bracket waiting.
+    if (['tie', 'draw'].includes(patch.winner) && needsWinner({ ...existing, ...patch })) throw conflict('knockout_needs_winner')
     // Kata and Kumite take turns: a bout of the event not on the mats cannot be started.
     if (['called', 'ready', 'open', 'live'].includes(patch.status) && patch.status !== from && category?.divisionKey) {
       const tournament = await tournaments.get(category.tournamentId)
