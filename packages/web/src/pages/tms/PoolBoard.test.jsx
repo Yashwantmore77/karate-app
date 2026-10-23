@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, fireEvent, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import PoolBoard from './PoolBoard'
+import { hasUnsaved } from '../../components/tms/unsaved'
 
 const data = vi.hoisted(() => ({ arrangePools: vi.fn(), arrangeSheet: vi.fn(), confirmPools: vi.fn(), reopenPools: vi.fn() }))
 vi.mock('../../data/tms', () => ({ tms: data }))
@@ -138,5 +139,22 @@ describe('the pool editor on the Draw tab', () => {
     expect(screen.getByText(/A first-round bout has nobody in it/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Save sheet' })).toBeDisabled()
+  })
+
+  it('has the browser ask before the page closes while the draw is changed and not saved', async () => {
+    const user = userEvent.setup()
+    setup()
+    const closing = () => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    expect(closing()).toBe(false)
+    drag('Aarav Patil', 'B')
+    expect(hasUnsaved()).toBe(true)
+    expect(closing()).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(hasUnsaved()).toBe(false)
+    expect(closing()).toBe(false)
   })
 })

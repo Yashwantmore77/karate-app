@@ -4,6 +4,7 @@ import { Add, Print, CheckCircle, LockOpen } from '@mui/icons-material'
 import { poolName } from '@kumite/shared/pools.js'
 import { tms } from '../../data/tms'
 import ConfirmDialog from '../../components/tms/ConfirmDialog'
+import { useUnsaved } from '../../components/tms/unsaved'
 import DrawSheet from './DrawSheet'
 
 const layoutOf = (pools) => pools.map((p) => ({ id: p.id, playerIds: p.playerIds }))
@@ -36,6 +37,8 @@ export default function PoolBoard({ tid, division, pools, nameOf, teamOf, maxSiz
   const confirmed = pools.length > 0 && pools.every((p) => p.confirmedAt)
   const knockout = pools[0]?.poolSystem === 'knockout'
   const editable = !confirmed && !drawLocked
+  // Leaving the tab or the page with the draw changed asks first.
+  useUnsaved(editable && changed)
   const emptyBout = !!sheet && places.some((id, i) => i % 2 === 0 && !id && !places[i + 1])
   const lonely = !sheet && kept.some((p) => p.playerIds.length < 2)
   const overMax = !sheet && kept.some((p) => p.playerIds.length > maxSize)

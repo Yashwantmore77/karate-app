@@ -1,6 +1,6 @@
 # Karate Tournament App — Operator Handbook
 
-_Last updated 21 October 2026._
+_Last updated 23 October 2026._
 
 **Download:** [Operator-Handbook.pdf](Operator-Handbook.pdf), to print or to send to the person running the tournament.
 
@@ -460,6 +460,7 @@ For both:
 - When the last category is confirmed, the draw locks by itself and the teams are told the draw is published. You can skip Jobs 14 and 15.
 - A pool with more players than the maximum asks you for a reason, which is kept in the audit log.
 - **Save sheet** or **Save pools** keeps your changes without confirming, so you can come back to them.
+- Changes not saved yet show **Not saved**. If you click another tab or the back arrow then, the app asks first: **Leave** drops the changes, **Cancel** keeps you on the Draw tab. Closing or reloading the browser asks too.
 - **Print draw sheet** prints the sheet as it is saved, for the mat table.
 - To change a confirmed category, click **Reopen** and type a reason. Its bouts are deleted until you confirm it again. This is not possible once one of its bouts has a result.
 
