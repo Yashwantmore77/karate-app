@@ -93,11 +93,15 @@ export default function KumiteConsole({
   matchId, redComp, blueComp, tournamentExpired, mode = 'control', onBack, onFinalize, rules = null, displayInfo = null,
   // The mat the bout is scheduled on, and how many mats the tournament has.
   scheduledMat = null, matCount = null,
+  // A knockout bout or a final cannot end level (KAN-267).
+  needsWinner = false,
 }) {
   const observing = mode === 'observe'
   const [state, send, mat] = useMatchChannel(matchId, { control: !observing })
   const [pendingAction, setPendingAction] = useState(null)
   const [decisionOpen, setDecisionOpen] = useState(false)
+  // Close was pressed on a level bout that needs a winner: the decision box says so.
+  const [mustDecide, setMustDecide] = useState(false)
   const serverNow = useServerNow()
 
   const view = state || initialMatchState()
@@ -184,9 +188,13 @@ export default function KumiteConsole({
     moveToMat(value)
   }
 
+  const closeDecision = () => {
+    setDecisionOpen(false)
+    setMustDecide(false)
+  }
   const declare = (cmd, side) => {
     send(cmd, { side })
-    setDecisionOpen(false)
+    closeDecision()
   }
 
   const toggleScoreboard = () => {
@@ -201,6 +209,11 @@ export default function KumiteConsole({
     // verdict the authority already published rather than recomputing it.
     const { winner } = view.outcome
       ?? evaluateOutcome(view.match, view.rules || DEFAULT_RULES, { expired: true })
+    if (needsWinner && winner !== 'aka' && winner !== 'ao') {
+      setMustDecide(true)
+      setDecisionOpen(true)
+      return
+    }
     const method = view.outcome?.method
     onFinalize({
       // Kiken (withdrawal) is recorded as a walkover and shikkaku as a
@@ -601,9 +614,14 @@ export default function KumiteConsole({
         </Grid>
       </Grid>
 
-      <Dialog open={decisionOpen} onClose={() => setDecisionOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={decisionOpen} onClose={closeDecision} maxWidth="xs" fullWidth>
         <DialogTitle>Referee decision</DialogTitle>
         <DialogContent>
+          {mustDecide && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              The scores are level, and a knockout bout or a final needs a winner. Give the decision (Hantei) below, or cancel and fight extra time.
+            </Alert>
+          )}
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
             These override the score. Kiken and shikkaku name the contestant who is out.
           </Typography>
@@ -639,11 +657,11 @@ export default function KumiteConsole({
         </DialogContent>
         <DialogActions>
           {view.decision && (
-            <Button onClick={() => { send('CLEAR_DECISION'); setDecisionOpen(false) }}>
+            <Button onClick={() => { send('CLEAR_DECISION'); closeDecision() }}>
               Clear decision
             </Button>
           )}
-          <Button onClick={() => setDecisionOpen(false)}>Cancel</Button>
+          <Button onClick={closeDecision}>Cancel</Button>
         </DialogActions>
       </Dialog>
 

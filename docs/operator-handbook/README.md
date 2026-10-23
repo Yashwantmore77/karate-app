@@ -612,6 +612,7 @@ How a bout ends:
 - At time up, the higher score wins. In a tie, the player with Senshu wins.
 - A player whose penalties reach H loses the bout.
 - For a withdrawal, a disqualification or a referees' decision, click **Decision** (7) and choose Kiken, Shikkaku or Hantei.
+- A knockout bout or a final cannot end level. If the scores are level when you click **Close**, the Decision box opens instead and says so: choose **Hantei** for the winner, or cancel and fight extra time.
 
 The console protects the bout:
 

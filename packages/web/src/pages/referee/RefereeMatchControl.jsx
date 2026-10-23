@@ -8,7 +8,7 @@ import { useMatchRecord } from '../../hooks/useMatchRecord'
 import { isExpired } from '../../utils/dateUtils'
 import KumiteConsole from '../../features/console/KumiteConsole'
 import { settingsOf, parseDivisionKey } from '@kumite/shared/tms.js'
-import { boutOutcome } from '@kumite/shared/results.js'
+import { boutOutcome, needsWinner } from '@kumite/shared/results.js'
 import { tms } from '../../data/tms'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
@@ -102,6 +102,7 @@ export default function RefereeMatchControl() {
         displayInfo={displayInfo}
         scheduledMat={match.mat ?? null}
         matCount={category?.divisionKey && tournament ? settingsOf(tournament).mats : null}
+        needsWinner={needsWinner(match)}
       />
     </Box>
   )
