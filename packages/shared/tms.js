@@ -2065,16 +2065,26 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
   /** Every bout in the tournament, with names, for the queue and public pages. */
   async function listMatches(tournamentId, filter = {}) {
     const categories = (await stores.categories.list({ tournamentId })).filter((c) => c.divisionKey)
-    const pools = new Map((await stores.pools.list({ tournamentId })).map((p) => [p.id, p]))
+    const ids = categories.map((c) => c.id)
+    // Every category's bouts and entrants in two reads, not two per category:
+    // the dashboard rebuilds after every save (KAN-368).
+    const [pools, bouts, entrants] = await Promise.all([
+      stores.pools.list({ tournamentId }),
+      ids.length ? stores.matches.search({ categoryId: { $in: ids } }).then((r) => r.rows) : [],
+      ids.length ? stores.competitors.search({ categoryId: { $in: ids } }).then((r) => r.rows) : [],
+    ])
+    const poolOf = new Map(pools.map((p) => [p.id, p]))
+    const competitors = new Map(entrants.map((c) => [c.id, c]))
+    const boutsOf = new Map(ids.map((id) => [id, []]))
+    for (const m of bouts) boutsOf.get(m.categoryId)?.push(m)
     const out = []
     for (const category of categories) {
-      const competitors = new Map((await stores.competitors.list({ categoryId: category.id })).map((c) => [c.id, c]))
-      for (const m of await stores.matches.list({ categoryId: category.id })) {
+      for (const m of boutsOf.get(category.id)) {
         out.push({
           ...m,
           divisionKey: category.divisionKey,
           categoryName: category.name,
-          poolName: m.poolId ? pools.get(m.poolId)?.name : null,
+          poolName: m.poolId ? poolOf.get(m.poolId)?.name : null,
           resultType: m.result?.type || (m.status === 'cancelled' ? 'CANCELLED' : boutOutcome(m) ? 'COMPLETED' : null),
           akaName: competitors.get(m.redId)?.name || null,
           aoName: competitors.get(m.blueId)?.name || null,
