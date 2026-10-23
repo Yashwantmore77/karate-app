@@ -2230,6 +2230,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (EXCEPTIONAL_RESULTS.includes(resultType) && !(finishReason || reason)) throw invalid('finish_reason_required')
     if (resultType === 'MANUAL_OVERRIDE' && actor && !can(actor.role, P.RESULT_OVERRIDE)) throw denied('result_override_forbidden')
     await assertResultEditable(actor, tournamentId, category.divisionKey, reason)
+    if (finished) await assertLaterBoutsOpen(tournamentId, category.divisionKey, match, resultType === 'CANCELLED' ? null : winner)
     // Section 27: a cancelled bout has no winner and counts for nobody; a
     // walkover or disqualification is a finished bout with a winner.
     const why = finishReason || (resultType !== 'COMPLETED' ? reason : null)
@@ -2816,6 +2817,24 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     await record(actor, { tournamentId, action: A.BRACKET_GENERATED, entity: 'tournament', entityId: tournamentId, after: { divisionKey: key, qualifiers: seeds.length, qualification: mode, thirdPlace: !!cfg.settings.thirdPlaceMatch } })
     await fillBracket(tournamentId, key)
     return {}
+  }
+
+  /**
+   * KAN-248: a bracket bout's result decides who fights later (its winner the
+   * next round, a semi-final's loser the 3rd-place bout). Once such a bout has
+   * a result, changing who won here would leave the bracket contradicting
+   * itself and the medals wrong: refused, naming the bouts to correct first.
+   */
+  async function assertLaterBoutsOpen(tournamentId, key, match, winner) {
+    const side = (w) => ({ red: 'aka', aka: 'aka', blue: 'ao', ao: 'ao' }[w] || null)
+    const [, round, slot] = /^R(\d+)-(\d+)$/.exec(match.bracketKey || '') || []
+    if (match.stage !== 'knockout' || !round || side(winner) === side(match.winner)) return
+    const bracket = (await stores.brackets.list({ tournamentId, divisionKey: key }))[0]
+    if (!bracket) return
+    const top = Math.log2(bracket.layout?.length || nextPow2(bracket.entries.length))
+    const later = [`R${Number(round) + 1}-${Math.ceil(Number(slot) / 2)}`, ...(bracket.thirdPlace && Number(round) === top - 1 ? [`R${top}-3P`] : [])]
+    const decided = (await stores.matches.list({ categoryId: match.categoryId })).filter((m) => m.stage === 'knockout' && later.includes(m.bracketKey) && boutOutcome(m))
+    if (decided.length) throw rule('later_bout_decided', { matches: decided.map((m) => m.matchNumber) })
   }
 
   /**
@@ -3979,7 +3998,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     // categorisation and draw
     categorize, overrideCategory, divisions, listPools, generatePools, movePlayer, arrangePools, arrangeSheet, confirmDivision, reopenDivision, drawImpact, setQualifiers, decideSingleEntry,
     // matches and results
-    generateMatches, listMatches, correctResult, attention, swapCorners, callMatch, setRunningEvent, overrideMedals, recordLiveEvent, liveEvents,
+    generateMatches, listMatches, correctResult, assertLaterBoutsOpen, attention, swapCorners, callMatch, setRunningEvent, overrideMedals, recordLiveEvent, liveEvents,
     setMatchStatus, markAttendance, withdrawPlayer, saveLiveState, loadLiveState, liveCommandBlock, recordBlockedCommand,
     kataDivisions, kataRoundView, createKataRound, submitKataScore, completeKataRound, kataRounds: kataRoundsOf,
     assignKataJudges, startKataRound, overrideKataScore, setKataPenalty, results, generateBracket, bracketView, syncBracket, arrangeBracket, listBrackets,

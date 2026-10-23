@@ -795,6 +795,7 @@ First look at **Needs attention** at the top of the tab: it names the problem an
 | "Time clash" when you schedule a bout | Choose another time or mat. The message says who clashes |
 | "That event is not on the mats now" | Finish the current event, then click **Switch to Kata** or **Switch to Kumite** at the top |
 | A wrong score on the console | Click **Undo** straight away. After the bout is closed, an Admin uses **Correct result** on the Matches tab and types the reason |
+| "A later bout already has a result" when you correct a knockout bout | Its winner (or a semi-final's loser) has already fought the next bout. Correct or cancel that later bout first, as the message names it, then this one. Put a cancelled bout back with **Change status → Scheduled** |
 | The mat's tablet lost the internet during a bout | Keep scoring. The tablet sends everything when it is back online |
 | "Another device is running this mat" | If that device has failed or left, click **Take over** |
 | A hall screen shows NOT LIVE | The mat's tablet is offline. Fix its Wi-Fi; the screen recovers by itself |

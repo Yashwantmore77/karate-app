@@ -31,6 +31,8 @@ export function describeError(err) {
     const name = (v) => String(v).replace(/_/g, ' ').toLowerCase()
     return `This cannot go from "${name(details.from)}" to "${name(details.to)}". Only the actions offered on screen are possible at this stage.`
   }
+  // KAN-248: a bracket result that later bouts already follow from.
+  if (code === 'later_bout_decided' && details?.matches?.length) return `${details.matches.join(' and ')} already ${details.matches.length === 1 ? 'has a result' : 'have results'} that follow${details.matches.length === 1 ? 's' : ''} from this bout. Correct ${details.matches.length === 1 ? 'that bout' : 'those bouts'} first (cancel ${details.matches.length === 1 ? 'it' : 'them'} if the wrong players fought), then this one.`
   if (code === 'no_weight_category') return `No weight class${details?.ageGroup ? ` in ${details.ageGroup}` : ''} covers ${details?.weight ?? 'this'} kg, so the player cannot pass into one. Add the class in Categories (or change the player's category in Registrations), then record the weigh-in again.`
   if (code === 'event_not_running' && details?.event) return `${EVENT_NAME[details.event]} is not on the mats now: ${EVENT_NAME[details.running]} is. Switch the session to ${EVENT_NAME[details.event]} first.`
   if (code === 'event_in_progress' && details?.event) {
@@ -145,6 +147,7 @@ export const ERROR_TEXT = {
   already_in_pool: 'That player is already in this pool.',
   attendance_disabled: 'Attendance is switched off for this tournament (Settings).',
   joined_by_hand: 'This record was joined to the athlete by hand. Undo that decision to separate it.',
+  later_bout_decided: 'A later bout already has a result that follows from this bout. Correct that bout first, then this one.',
   knockout_needs_winner: 'A knockout bout or a final needs a winner. Give the decision (hantei) or fight extra time; a draw is not a result here.',
   bracket_exists: 'The final stage has already been generated.',
   builtin_ruleset: 'A standard ruleset cannot be switched off. Edit it, or restore it as shipped.',
