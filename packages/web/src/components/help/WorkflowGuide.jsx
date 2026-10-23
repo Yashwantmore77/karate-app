@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Paper, Box, Typography, Button, LinearProgress, Stack, Tooltip, Alert, AlertTitle } from '@mui/material'
 import { ArrowBack, ArrowForward, MenuBook, ExpandLess, ExpandMore, PlayArrow, CheckCircle } from '@mui/icons-material'
-import { tms } from '../../data/tms'
-import { onRequest } from '../../data/http'
 import { TAB_GUIDE, workflowState } from '../../help/guide'
 import GuideDialog from './GuideDialog'
 
@@ -87,20 +85,9 @@ function Attention({ items, current, labelOf, canGo, onGo }) {
  * is for, what comes before and after it, and the next step still to do for
  * this tournament. "Full guide" lists every step with a tick when done.
  */
-export default function WorkflowGuide({ tournament, version, tabs, current, goTab, role }) {
-  const [stats, setStats] = useState(null)
+export default function WorkflowGuide({ tournament, stats, tabs, current, goTab, role }) {
   const [hidden, setHidden] = useState(readHidden)
   const [open, setOpen] = useState(false)
-  const tid = tournament.id
-
-  const load = useCallback(() => tms.dashboard(tid).then(setStats).catch(() => setStats({})), [tid])
-  useEffect(() => { load() }, [load, version])
-  // A save, an approval or a weigh-in can fix a problem (or make one): look again once it is done.
-  useEffect(() => {
-    let timer = null
-    const off = onRequest(({ method }) => (method === 'GET' ? null : () => { clearTimeout(timer); timer = setTimeout(load, 400) }))
-    return () => { off(); clearTimeout(timer) }
-  }, [load])
 
   const flow = useMemo(() => workflowState(tournament, stats), [tournament, stats])
   const labelOf = (key) => tabs.find((t) => t.key === key)?.label

@@ -28,6 +28,7 @@ import { PageLoader } from '../../components/Loader'
 import { ExportAuditContext } from '../../components/tms/exportAudit'
 import { tms } from '../../data/tms'
 import WorkflowGuide from '../../components/help/WorkflowGuide'
+import useDashboard from './useDashboard'
 
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
 // only when the signed-in role holds its permission (section 3).
@@ -75,6 +76,8 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   }, [tournamentId])
 
   useEffect(() => { reload() }, [reload])
+  // One copy of the dashboard numbers for the guide bar and the Dashboard tab.
+  const dashboard = useDashboard(tournamentId, version)
 
   // A tab for one event (kata panel, weigh-in) shows only when the tournament holds that event.
   const events = eventsOf(tournament)
@@ -114,9 +117,9 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
         </Tabs>
       </PageBar>
       <Container maxWidth="xl" sx={{ py: 3 }}>
-        {current && <WorkflowGuide tournament={tournament} version={version} tabs={tabs} current={current} goTab={(key) => setParams({ tab: key })} role={role} />}
+        {current && <WorkflowGuide tournament={tournament} stats={dashboard} tabs={tabs} current={current} goTab={(key) => setParams({ tab: key })} role={role} />}
         <ExportAuditContext.Provider value={logExport}>
-          {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} action={action} role={role} basePath={basePath} goTab={(key) => setParams({ tab: key })} />}
+          {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} dashboard={dashboard} action={action} role={role} basePath={basePath} goTab={(key) => setParams({ tab: key })} />}
         </ExportAuditContext.Provider>
       </Container>
       {action.feedback}

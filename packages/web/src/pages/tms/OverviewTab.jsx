@@ -15,8 +15,7 @@ import { explainAction } from '../../help/actions'
 const ORDER = Object.values(TOURNAMENT_STATUS)
 
 /** Section 46 dashboard plus the controls that move the tournament along (sections 6, 21, 24). */
-export default function OverviewTab({ tournament, reload, version, action, role }) {
-  const [stats, setStats] = useState(null)
+export default function OverviewTab({ tournament, reload, version, dashboard: stats, action, role }) {
   const [notes, setNotes] = useState([])
   const [confirm, setConfirm] = useState(null)
   const tid = tournament.id
@@ -26,7 +25,6 @@ export default function OverviewTab({ tournament, reload, version, action, role 
   const [windowInfo, setWindowInfo] = useState(null)
   useEffect(() => {
     tms.registrationWindow(tid).then(setWindowInfo).catch(() => setWindowInfo(null))
-    tms.dashboard(tid).then(setStats).catch(() => setStats({}))
     tms.notifications(tid).then(setNotes).catch(() => setNotes([]))
   }, [tid, version])
 
