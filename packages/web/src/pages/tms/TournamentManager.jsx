@@ -28,6 +28,8 @@ import { PageLoader } from '../../components/Loader'
 import { ExportAuditContext } from '../../components/tms/exportAudit'
 import { tms } from '../../data/tms'
 import WorkflowGuide from '../../components/help/WorkflowGuide'
+import ConfirmDialog from '../../components/tms/ConfirmDialog'
+import { hasUnsaved } from '../../components/tms/unsaved'
 import useDashboard from './useDashboard'
 
 // PRD section 51's admin navigation, as tabs on one tournament. A tab shows
@@ -62,6 +64,8 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   const [tournament, setTournament] = useState(null)
   const [missing, setMissing] = useState(false)
   const [version, setVersion] = useState(0)
+  // Where to go once the user agrees to drop changes not saved yet.
+  const [leaving, setLeaving] = useState(null)
   const action = useAction()
   // PRD v1 §4: an account may hold a different role inside this one tournament.
   const role = profile?.tournamentRoles?.[tournamentId] || profile?.role || 'admin'
@@ -83,6 +87,8 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
   const events = eventsOf(tournament)
   const tabs = useMemo(() => TABS.filter((t) => [].concat(t.perm).some((p) => can(role, p)) && (!t.event || events.includes(t.event))), [role, events.join()])
   const current = tabs.find((t) => t.key === params.get('tab')) || tabs[0]
+  const leave = (go) => (hasUnsaved() ? setLeaving(() => go) : go())
+  const goTab = (key) => leave(() => setParams({ tab: key }))
 
   if (missing) return <Container sx={{ py: 4 }}><Alert severity="error">Tournament not found.</Alert></Container>
   if (!tournament) return <PageLoader label="Loading tournament…" />
@@ -94,7 +100,7 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
     <Box sx={{ minHeight: '100vh' }}>
       <PageBar>
         <Toolbar sx={{ gap: 1, flexWrap: 'wrap', py: 1 }}>
-          <IconButton color="inherit" aria-label="Back" onClick={() => navigate(basePath)}>
+          <IconButton color="inherit" aria-label="Back" onClick={() => leave(() => navigate(basePath))}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -112,17 +118,20 @@ export default function TournamentManager({ uid, profile, basePath = '/admin' })
             <EventSession tournament={tournament} role={role} action={action} reload={reload} dense />
           </Stack>
         </Toolbar>
-        <Tabs value={current?.key || false} onChange={(_e, key) => setParams({ tab: key })} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ px: 1 }}>
+        <Tabs value={current?.key || false} onChange={(_e, key) => goTab(key)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ px: 1 }}>
           {tabs.map((t) => <Tab key={t.key} value={t.key} label={t.label} data-tip={t.tip} />)}
         </Tabs>
       </PageBar>
       <Container maxWidth="xl" sx={{ py: 3 }}>
-        {current && <WorkflowGuide tournament={tournament} stats={dashboard} tabs={tabs} current={current} goTab={(key) => setParams({ tab: key })} role={role} />}
+        {current && <WorkflowGuide tournament={tournament} stats={dashboard} tabs={tabs} current={current} goTab={goTab} role={role} />}
         <ExportAuditContext.Provider value={logExport}>
-          {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} dashboard={dashboard} action={action} role={role} basePath={basePath} goTab={(key) => setParams({ tab: key })} />}
+          {Current && <Current key={current.key} tournament={tournament} reload={reload} version={version} dashboard={dashboard} action={action} role={role} basePath={basePath} goTab={goTab} />}
         </ExportAuditContext.Provider>
       </Container>
       {action.feedback}
+      <ConfirmDialog open={!!leaving} title="Leave without saving?" confirmLabel="Leave" danger
+        message='Some changes on this tab are not saved (they are marked "Not saved"). Leave and lose them, or Cancel and save them first.'
+        onClose={() => setLeaving(null)} onConfirm={() => { setLeaving(null); leaving() }} />
     </Box>
   )
 }

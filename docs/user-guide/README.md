@@ -1,6 +1,6 @@
 # Karate Tournament App — User Guide
 
-_Last updated 20 October 2026._
+_Last updated 23 October 2026._
 
 New to the app? Start with the [operator handbook](../operator-handbook/README.md), which walks through every job click by click.
 
@@ -388,6 +388,7 @@ Locking entries freezes the player list. The draw then puts each category's play
    - A **knockout** category shows its draw sheet, like the paper one: Aka and Ao boxes for the first round, then the later rounds, 1st, 2nd and 3rd. Drag a player onto another box to swap them, or onto an empty box (a bye). On a tablet, tap one box, then the other.
    - A category fought in **pools** shows its pools. Drag a player onto another pool; on a tablet, tap the player, then tap **Move here** on the pool they go to. **Add pool** adds an empty pool for you to fill.
    - Nothing is saved until you press **Save sheet** / **Save pools** or **Confirm**. **Discard** puts the draw back as it was.
+   - Changes not saved yet show **Not saved**. Leaving the tab or the page then asks first, so they are not lost by mistake.
 4. **Confirm** each category. Its pools become final and its bouts are created at once, while the other categories stay open. When every drawn category is confirmed, the draw locks by itself.
 5. Or do it all at once: **Lock the draw** on the Dashboard (**Lock draw**), then **Generate matches** (Draw / Pools, step 3). This creates every bout of every drawn category that has none yet.
 
@@ -1032,6 +1033,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | This category is confirmed. Reopen it (with a reason) to change its pools. | Click **Reopen** on the category and give a reason |
 | This category is not confirmed. | Nothing to reopen; change its pools directly |
 | The pools were changed on another screen. Discard your changes and try again. | Click **Discard**, then make your change again |
+| Leave without saving? Some changes on this tab are not saved (they are marked "Not saved"). | **Cancel**, then **Save** or **Confirm** them; or **Leave** to drop them |
 | Every pool needs at least two players. Move the last player out, or move another one in. | Empty the pool, or give it a second player |
 | A knockout category is one list. Arrange its bouts on the Bracket tab. | Use **Arrange draw** on the Bracket tab |
 | This category is fought in pools, not as a knockout sheet. | Move players between its pools instead, or set the category to Knockout before drawing it |
