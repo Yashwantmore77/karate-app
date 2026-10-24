@@ -1005,6 +1005,7 @@ When something is wrong, look first at **Needs attention** at the top of the tab
 | The file has errors. Fix them and upload again; nothing was imported. | Fix the rows listed in the preview and upload again |
 | Some tournament details are not valid. | Correct the fields named after the message, then save again |
 | Tournament not found. | It was deleted, or the link is wrong; open it from the Tournaments list |
+| This organisation is inactive. A super admin must make it active before it can have new tournaments. | A super admin: Organisations, edit the organisation, turn Active on |
 | This tournament does not hold that event. | Choose an event the tournament holds (its type: Kata, Kumite or both) |
 | Players have already entered an event this type would drop. Move or remove those entries first, or keep Kata + Kumite. | Keep Kata + Kumite, or move or remove those entries first |
 | Changing the Master Age Date re-ages players. Review the preview and confirm. | Check the preview of players whose age group changes, then confirm |
