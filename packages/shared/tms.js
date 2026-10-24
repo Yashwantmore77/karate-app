@@ -3660,9 +3660,11 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const organizations = stores.organizations ? await stores.organizations.list({}) : []
     const byId = new Map(organizations.map((o) => [o.id, o]))
     const only = org ? organizations.find((o) => o.slug === org) : null
-    if (org && !only) return []
+    // A mistyped short name says so, rather than reading as an empty list (KAN-375).
+    if (org && !only) throw missing('organization_not_found')
+    // KAN-375: an inactive organisation's tournaments leave the public list.
     return (await stores.tournaments.list())
-      .filter((t) => lifecycleOf(t) !== T.DRAFT && settingsOf(t).publicVisibility === 'public' && (!only || t.organizationId === only.id))
+      .filter((t) => lifecycleOf(t) !== T.DRAFT && settingsOf(t).publicVisibility === 'public' && (!only || t.organizationId === only.id) && byId.get(t.organizationId)?.active !== false)
       .map((t) => ({ ...publicTournament(t), organization: byId.get(t.organizationId) ? { name: byId.get(t.organizationId).name, slug: byId.get(t.organizationId).slug } : null }))
   }
 
