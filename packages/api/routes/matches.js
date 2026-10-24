@@ -16,6 +16,7 @@ import { forbidden } from '../lib/errors.js'
 import { categoryGuards, staffOnly } from '../auth/categoryAccess.js'
 import { runningEvent, eventOfCategory } from '@kumite/shared/tms.js'
 import { needsWinner } from '@kumite/shared/results.js'
+import { createKeyedLock } from '@kumite/shared/lock.js'
 
 // Used when a tournament predates the setting, so an older record still gets a
 // sensible panel size instead of no limit at all.
@@ -75,6 +76,7 @@ export function matchRoutes(stores, tms = null) {
   const { tournaments, categories, competitors, matches } = stores
   const audit = stores.auditLog ? createAuditLog(stores.auditLog) : null
   const guard = categoryGuards(stores)
+  const withScheduleLock = createKeyedLock()
 
   /**
    * A match may only point at competitors entered in its own category.
@@ -272,11 +274,13 @@ export function matchRoutes(stores, tms = null) {
     guard.assertNotDrawn(await guard.scope(req.user, req.params.categoryId, { write: 'structure' }))
     await assertCompetitorsInCategory(fields, req.params.categoryId)
     await assertPeopleMakeSense(fields, req.params.categoryId)
-    const schedule = await resolveSchedule(fields, req.params.categoryId, {}, null)
-    const match = await matches.insert({
-      ...fields,
-      ...schedule,
-      categoryId: req.params.categoryId,
+    const match = await withScheduleLock('matches', async () => {
+      const schedule = await resolveSchedule(fields, req.params.categoryId, {}, null)
+      return matches.insert({
+        ...fields,
+        ...schedule,
+        categoryId: req.params.categoryId,
+      })
     })
     res.status(201).json({ match })
   })
@@ -452,8 +456,10 @@ export function matchRoutes(stores, tms = null) {
     }
 
     await assertPeopleMakeSense(patch, existing.categoryId, existing)
-    const schedule = await resolveSchedule(patch, existing.categoryId, existing, req.params.id)
-    const match = await matches.update(req.params.id, { ...patch, ...schedule })
+    const match = await withScheduleLock('matches', async () => {
+      const schedule = await resolveSchedule(patch, existing.categoryId, existing, req.params.id)
+      return matches.update(req.params.id, { ...patch, ...schedule })
+    })
 
     // Rule 6 holds for every match, not only those from a PRD draw. A first
     // result (the console closing a bout) is logged too, like one entered by
