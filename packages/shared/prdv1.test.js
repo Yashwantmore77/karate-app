@@ -1056,6 +1056,10 @@ describe('live scores on the public page (KAN-428)', () => {
     expect(bouts[onMat.id].scoreboard).toEqual({ akaScore: 3, aoScore: 1, senshu: 'aka', clock, outcome: null, heartbeatAt: 5000 })
     expect(bouts[ended.id].scoreboard).toBeNull()
     expect(bouts[waiting.id].scoreboard).toBeNull()
+    // Each fighter by the public id the player list uses, so a spectator can follow them.
+    const listed = new Set((await tms.publicView(t.id)).players.map((p) => p.id))
+    expect(bouts[waiting.id]).toMatchObject({ akaId: waiting.akaPlayerId, aoId: waiting.aoPlayerId })
+    expect(listed.has(bouts[waiting.id].akaId) && listed.has(bouts[waiting.id].aoId)).toBe(true)
 
     // A bout that is not on a mat any more has no live score, whatever a scoreboard still shows.
     await stores.matches.update(onMat.id, { status: 'completed' })

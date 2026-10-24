@@ -3697,6 +3697,8 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         id: m.id, matchNumber: m.matchNumber, mat: m.mat, scheduledAt: m.scheduledAt || null, category: m.categoryName, divisionKey: m.divisionKey, event: eventOfCategory(m),
         pool: m.poolName, round: m.round, stage: m.stage, roundName: m.roundName || null, status: m.status, resultType: m.resultType,
         aka: m.akaName, ao: m.aoName, winner: m.winner || null, akaScore: m.avgRed ?? null, aoScore: m.avgBlue ?? null, calledAt: m.calledAt || null,
+        // The players' public ids, as in `players`, so a spectator can follow an athlete (KAN-428).
+        akaId: m.akaPlayerId || null, aoId: m.aoPlayerId || null,
         scoreboard: scoreboards.get(m.id) || null,
       })),
       results: res.map((d) => ({

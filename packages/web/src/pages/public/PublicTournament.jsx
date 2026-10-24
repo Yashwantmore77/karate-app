@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
 import {
   Container, Box, Typography, Tabs, Tab, Paper, Grid, Stack, TextField, MenuItem, Alert, Button,
-  Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Chip,
+  Table, TableHead, TableRow, TableCell, TableBody, TableContainer, Chip, IconButton,
 } from '@mui/material'
+import { Star, StarBorder } from '@mui/icons-material'
 import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
 import StatusBadge, { humanize } from '../../components/tms/StatusBadge'
@@ -14,6 +15,8 @@ import { PageLoader } from '../../components/Loader'
 import MatCard from '../../components/tms/MatCard'
 import { matQueues } from '../../components/tms/matQueues'
 import { useMatScoreboards } from '../../hooks/useMatScoreboards'
+import FollowingCard from '../../components/tms/FollowingCard'
+import { useFollowing } from '../../hooks/useFollowing'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
@@ -80,6 +83,7 @@ export default function PublicTournament() {
   const [district, setDistrict] = useState('')
   const [by, setBy] = useState('club')
   const scoreOf = useMatScoreboards()
+  const follow = useFollowing(data?.tournament.id)
 
   useEffect(() => {
     let alive = true
@@ -132,6 +136,18 @@ export default function PublicTournament() {
     </TableContainer>
   )
 
+  // KAN-428: follow an athlete or a club on this phone. Called, not rendered
+  // as a component, so the button keeps its focus when pressed.
+  const followButton = (kind, id, name) => {
+    const on = follow[kind].includes(id)
+    return (
+      <IconButton size="small" color={on ? 'warning' : 'default'} aria-label={`${on ? 'Stop following' : 'Follow'} ${name}`} aria-pressed={on} onClick={() => follow.toggle(kind, id)}
+        data-tip={on ? 'Stop following on this phone.' : `Follow: shows ${kind === 'teams' ? "this club's athletes" : 'this athlete'} at the top of the page, with the next bout, mat and latest result. Kept on this phone.`}>
+        {on ? <Star fontSize="small" /> : <StarBorder fontSize="small" />}
+      </IconButton>
+    )
+  }
+
   const filters = (
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
       <TextField size="small" label="Search player, team, match" value={q} onChange={(e) => setQ(e.target.value)} sx={{ minWidth: 240 }} />
@@ -167,6 +183,7 @@ export default function PublicTournament() {
           <Button size="small" component={RouterLink} to="/tournaments">All tournaments</Button>
           <Button size="small" component={RouterLink} to={`/live?t=${encodeURIComponent(t.slug || t.id)}`}>Live board</Button>
         </Stack>
+        <FollowingCard data={data} follow={follow} queues={queues} scoreOf={scoreOf} />
         <Tabs value={tab} onChange={(_e, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ mb: 3 }}>
           {SECTIONS.filter((s) => s !== 'certificates' || t.publicCertificates).map((s) => <Tab key={s} value={s} label={LABEL[s]} data-tip={TIP[s]} />)}
         </Tabs>
@@ -231,10 +248,10 @@ export default function PublicTournament() {
           {filters}
           <TableContainer component={Paper}>
             <Table size="small">
-              <TableHead><TableRow><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>District</TableCell><TableCell>State</TableCell><TableCell>Country</TableCell><TableCell align="right">Players</TableCell></TableRow></TableHead>
+              <TableHead><TableRow><TableCell padding="checkbox" /><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>District</TableCell><TableCell>State</TableCell><TableCell>Country</TableCell><TableCell align="right">Players</TableCell></TableRow></TableHead>
               <TableBody>
                 {data.teams.filter((tm) => matchesQuery(tm.name, tm.club) && inDistrict(tm.district)).map((tm) => (
-                  <TableRow key={tm.id}><TableCell>{tm.name}</TableCell><TableCell>{tm.club || '—'}</TableCell><TableCell>{tm.district || '—'}</TableCell><TableCell>{tm.state || '—'}</TableCell><TableCell>{tm.country || '—'}</TableCell>
+                  <TableRow key={tm.id}><TableCell padding="checkbox">{followButton('teams', tm.id, tm.name)}</TableCell><TableCell>{tm.name}</TableCell><TableCell>{tm.club || '—'}</TableCell><TableCell>{tm.district || '—'}</TableCell><TableCell>{tm.state || '—'}</TableCell><TableCell>{tm.country || '—'}</TableCell>
                     <TableCell align="right">{data.players.filter((p) => p.teamId === tm.id).length}</TableCell></TableRow>
                 ))}
               </TableBody>
@@ -248,10 +265,10 @@ export default function PublicTournament() {
             {filters}
             <TableContainer component={Paper}>
               <Table size="small">
-                <TableHead><TableRow><TableCell>Player</TableCell><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>District</TableCell><TableCell>State</TableCell><TableCell>Categories</TableCell></TableRow></TableHead>
+                <TableHead><TableRow><TableCell padding="checkbox" /><TableCell>Player</TableCell><TableCell>Team</TableCell><TableCell>Club</TableCell><TableCell>District</TableCell><TableCell>State</TableCell><TableCell>Categories</TableCell></TableRow></TableHead>
                 <TableBody>
                   {data.players.filter((p) => matchesQuery(p.name, p.id, teamName[p.teamId], p.club, districtOf(p)) && inDistrict(districtOf(p)) && (!category || p.categories.includes(data.categories.find((c) => c.key === category)?.label))).map((p) => (
-                    <TableRow key={p.id}><TableCell>{p.name}</TableCell><TableCell>{teamName[p.teamId] || '—'}</TableCell><TableCell>{p.club || '—'}</TableCell><TableCell>{districtOf(p) || '—'}</TableCell><TableCell>{p.state || '—'}</TableCell><TableCell>{p.categories.join(', ')}</TableCell></TableRow>
+                    <TableRow key={p.id}><TableCell padding="checkbox">{followButton('players', p.id, p.name)}</TableCell><TableCell>{p.name}</TableCell><TableCell>{teamName[p.teamId] || '—'}</TableCell><TableCell>{p.club || '—'}</TableCell><TableCell>{districtOf(p) || '—'}</TableCell><TableCell>{p.state || '—'}</TableCell><TableCell>{p.categories.join(', ')}</TableCell></TableRow>
                   ))}
                 </TableBody>
               </Table>
@@ -284,6 +301,7 @@ export default function PublicTournament() {
         {tab === 'live' && (
           <Stack spacing={3}>
             {/* KAN-428: mat by mat, with the live score as the scoreboard shows it. */}
+            {!follow.players.length && !follow.teams.length && <Alert severity="info">Tap ☆ beside an athlete on the Players tab, or a club on the Teams tab, to see when they fight at the top of this page.</Alert>}
             {queues.length > 0 && (
               <Grid container spacing={2}>
                 {queues.map((mq) => (
