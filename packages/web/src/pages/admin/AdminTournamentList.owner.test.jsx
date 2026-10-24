@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import AdminTournamentList from './AdminTournamentList'
 import * as fake from '../../test/fakeDomain'
 
@@ -13,9 +15,11 @@ const OWNED = {
 
 const renderAs = (role) =>
   render(
-    <MemoryRouter>
-      <AdminTournamentList uid="uid-1" profile={{ role }} basePath={role === 'tournament_owner' ? '/tournament_owner' : '/admin'} />
-    </MemoryRouter>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <MemoryRouter>
+        <AdminTournamentList uid="uid-1" profile={{ role }} basePath={role === 'tournament_owner' ? '/tournament_owner' : '/admin'} />
+      </MemoryRouter>
+    </LocalizationProvider>
   )
 
 /**
