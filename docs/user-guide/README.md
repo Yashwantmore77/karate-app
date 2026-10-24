@@ -257,15 +257,18 @@ Players come in three ways: coaches enter them through the registration link, th
 
 ### What a coach does
 
-1. Open the link and enter its password. More than 10 tries in a minute are refused.
+1. Open the link, type its password and the coach's own email, and press **Continue**. More than 10 tries in a minute are refused. That email is what tells the link apart from one coach to the next: typing it again later, even after closing the tab, returns to the same team instead of starting a second one. An email that already has its own login (below) is sent to the sign-in page instead of opening the link.
 2. **Register the team**: team name, club or dojo, club code, head coach, contact person, mobile, email, district, division, state, country, Federation ID and address. Read the rules and terms, tick "I have read and accept", and press **Register team**.
-3. **Add players**, one by one: name, date of birth, gender, events (Kata, Kumite or both), weight for Kumite, Belt and any extra fields the organiser added. Club, coach, district, division, state and country come from the team registration.
-4. Add **team members**: team manager, coach, judge or referee (one person can hold several roles).
-5. Watch each player's status. A rejected or returned player shows the reason; fix it and send it again.
+3. Right after, a dialog offers **Create my own login** — an email and password that opens this same team on the main sign-in page, with no link or password needed afterwards. It can be skipped, but a coach who does and later closes the tab without it has only the email check in step 1 to get back in.
+4. **Add players**, one by one: name, date of birth, gender, events (Kata, Kumite or both), weight for Kumite, Belt and any extra fields the organiser added. Club, coach, district, division, state and country come from the team registration.
+5. Add **team members**: team manager, coach, judge or referee (one person can hold several roles).
+6. Watch each player's status. A rejected or returned player shows the reason; fix it and send it again.
 
-![The coach opens the link and enters its password.](images/coach-portal.webp)
+![The coach opens the link, types its password and their own email, and presses Continue.](images/coach-portal.webp)
 
-*The coach opens the link and enters its password.*
+*The coach opens the link, types its password and their own email, and presses Continue.*
+
+**Settings → Registration link** also lists, further down, every team that has created its own login — useful only if a coach is genuinely locked out (lost access to its email), since revoking one just means they make a new login next time they open the link with that same email.
 
 ![The coach registers the team, then adds players.](images/coach-team.webp)
 

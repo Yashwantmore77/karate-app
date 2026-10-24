@@ -66,6 +66,8 @@ export default function SetupTab({ tournament, reload, action }) {
   const [linkLoaded, setLinkLoaded] = useState(false)
   const [linkPassword, setLinkPassword] = useState('')
   const [linkExpiry, setLinkExpiry] = useState('')
+  const [coachAccounts, setCoachAccounts] = useState([])
+  const [revokeTarget, setRevokeTarget] = useState(null)
   const [rulesets, setRulesets] = useState([])
   const [rulesetId, setRulesetId] = useState(tournament.rulesetId || '')
   const [editing, setEditing] = useState(null)
@@ -77,6 +79,7 @@ export default function SetupTab({ tournament, reload, action }) {
     tms.link(tid).then((l) => { setLink(l); setLinkExpiry(l?.expiresAt?.slice(0, 10) || '') }).catch(() => {}).finally(() => setLinkLoaded(true))
     tms.rulesets().then(setRulesets).catch(() => {})
     tms.partnerKey(tid).then(setPartnerKey).catch(() => {})
+    tms.coachAccounts(tid).then(setCoachAccounts).catch(() => {})
   }, [tid])
 
   const detailsPatch = () => {
@@ -339,6 +342,44 @@ export default function SetupTab({ tournament, reload, action }) {
           </Stack>
         )}
       </Paper>
+
+      <Paper sx={{ p: 2 }}>
+        <HelpTitle id="setup.coachAccounts" variant="h3" gutterBottom>Team logins</HelpTitle>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Teams that have created their own login, so they can sign in instead of using the link. Revoke one only if a coach is genuinely locked out (e.g. lost access to its email) - they can make a new login next time they open the link.
+        </Typography>
+        {coachAccounts.length === 0 ? (
+          <Typography color="text.secondary">No team has created its own login yet.</Typography>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow><TableCell>Team</TableCell><TableCell>Email</TableCell><TableCell align="right">Actions</TableCell></TableRow>
+              </TableHead>
+              <TableBody>
+                {coachAccounts.map((a) => (
+                  <TableRow key={a.uid}>
+                    <TableCell>{a.teamName || '—'}</TableCell>
+                    <TableCell>{a.email}</TableCell>
+                    <TableCell align="right">
+                      <IconButton aria-label={`Revoke ${a.email}`} size="small" onClick={() => setRevokeTarget(a)}><Delete fontSize="small" /></IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Paper>
+      <ConfirmDialog open={!!revokeTarget} danger title={`Revoke ${revokeTarget?.email}'s login?`}
+        message="They can make a new one next time they open the registration link with this same email - the team itself is unaffected."
+        confirmLabel="Revoke" onClose={() => setRevokeTarget(null)}
+        onConfirm={async () => {
+          const target = revokeTarget
+          setRevokeTarget(null)
+          await action.run(() => tms.revokeCoachAccount(tid, target.uid), 'Login revoked')
+          tms.coachAccounts(tid).then(setCoachAccounts).catch(() => {})
+        }} />
 
       <Paper sx={{ p: 2 }}>
         <HelpTitle id="setup.form" variant="h3" gutterBottom>Registration form</HelpTitle>

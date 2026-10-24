@@ -135,6 +135,10 @@ export const tms = {
   generateCertificates: (tid, types) => send('POST', `${T(tid)}/certificates/generate`, types ? { types } : {}),
   link: async (tid) => (await get(`${T(tid)}/registration-link`)).link,
   saveLink: async (tid, body) => (await send('PUT', `${T(tid)}/registration-link`, body)).link,
+  // KAN-430: which teams have their own login yet, for an organiser helping
+  // a coach who is genuinely stuck.
+  coachAccounts: async (tid) => (await get(`${T(tid)}/coach-accounts`)).accounts,
+  revokeCoachAccount: (tid, uid) => send('DELETE', `${T(tid)}/coach-accounts/${encodeURIComponent(uid)}`),
   dashboard: async (tid) => (await get(`${T(tid)}/dashboard`)).dashboard,
   notifications: async (tid) => (await get(`${T(tid)}/notifications`)).notifications,
   markRead: (tid) => send('POST', `${T(tid)}/notifications/read`, {}),
@@ -177,8 +181,14 @@ export const tms = {
     certificates: async (idOrSlug, q) => (await get(`/public/tournaments/${encodeURIComponent(idOrSlug)}/certificates${qs({ q })}`, { anonymous: true })).certificates,
     certificatePdfUrl: (idOrSlug, id) => apiUrl(`/public/tournaments/${encodeURIComponent(idOrSlug)}/certificates/${encodeURIComponent(id)}.pdf`),
     linkInfo: (token) => get(`/public/register/${encodeURIComponent(token)}`, { anonymous: true }),
-    async openLink(token, password) {
-      const res = await send('POST', `/public/register/${encodeURIComponent(token)}/session`, { password }, { anonymous: true })
+    // KAN-430: `email` is the coach's own identity on a link every coach in
+    // the tournament shares. `hasAccount: true` means the server found a
+    // coach login already made under that email - no session, sign in
+    // instead. Otherwise the session resumes that email's own team, if one
+    // already exists, rather than letting a second one be started.
+    async openLink(token, password, email) {
+      const res = await send('POST', `/public/register/${encodeURIComponent(token)}/session`, { password, email }, { anonymous: true })
+      if (res.hasAccount) return { hasAccount: true }
       return { token: res.token, tournamentId: res.tournamentId }
     },
   },

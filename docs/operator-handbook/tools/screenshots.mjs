@@ -303,8 +303,8 @@ await shot('p2-link', async () => {
 await shot('p2-coach', async () => {
   const link = (await api('GET', `/tournaments/${t['district-open'].id}/registration-link`, null, tokens.admin)).body.link
   const page = await open(null, `${BASE}/register/${link.token}`, { settle: 2500, height: 600 })
-  await mark(page, [[page.getByLabel(/password/i).first(), 1], [btn(page, 'Continue'), 2]])
-  await save(page, 'p2-coach', { x: 330, y: 0, width: 620, height: 300 })
+  const boxes = await mark(page, [[page.getByLabel('Your email'), 1], [page.getByLabel(/password/i).first(), 2], [btn(page, 'Continue'), 3]])
+  await save(page, 'p2-coach', around(page, boxes, { x0: 330, x1: 950, pad: 30 }))
 })
 await shot('p2-approve', async () => {
   const page = await open('admin', manage('district-open', 'registrations'), { wait: 'Needs attention', height: 900 })
