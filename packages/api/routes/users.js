@@ -71,7 +71,9 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
   router.get('/', async (req, res) => {
     const { page, limit, q } = readPageQuery(req.query)
     const organizationId = (await scopeOf(req)) || (req.user.role === 'super_admin' && typeof req.query.organizationId === 'string' ? req.query.organizationId : null)
-    const { rows, total } = await listUsers({ q, page, limit, organizationId })
+    // KAN-431: a coach's own login (PRD v1 §7) is an account too - visible
+    // here alongside staff, not only on its tournament's Setup tab.
+    const { rows, total } = await listUsers({ q, page, limit, organizationId, includeCoaches: true })
     res.json({ users: rows, ...pageMeta({ page, limit, total }) })
   })
 

@@ -15,14 +15,18 @@ const users = vi.hoisted(() => ({
   remove: vi.fn(),
 }))
 vi.mock('../../data/users', () => users)
+vi.mock('../../data/domain', () => import('../../test/fakeDomain'))
 
 const AdminUserList = (await import('./AdminUserList')).default
+const fakeDomain = await import('../../test/fakeDomain')
 
 const ROSTER = [
   { uid: 'admin-1', email: 'admin@kata.local', role: 'admin' },
   { uid: 'ref-1', email: 'referee@kata.local', role: 'referee' },
   { uid: 'judge-1', email: 'judge1@kata.local', role: 'judge', seat: 1 },
 ]
+
+const COACH = { uid: 'coach-1', email: 'coach@team.local', role: 'coach', tournamentId: 't1', teamId: 'team-1' }
 
 const renderPage = (uid = 'admin-1') =>
   render(
@@ -33,6 +37,8 @@ const renderPage = (uid = 'admin-1') =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  fakeDomain.reset()
+  fakeDomain.seed({ tournaments: [{ id: 't1', name: 'Spring Cup' }] })
   users.page.mockResolvedValue({ rows: ROSTER, total: ROSTER.length, pages: 1, page: 1 })
   users.create.mockResolvedValue({ uid: 'new-1' })
   users.update.mockResolvedValue({ uid: 'judge-1' })
@@ -150,4 +156,40 @@ describe('AdminUserList', () => {
     expect(await screen.findByText(/only an administrator can manage accounts/i)).toBeInTheDocument()
   })
 
+  describe('a coach login (KAN-431)', () => {
+    beforeEach(() => {
+      users.page.mockResolvedValue({ rows: [...ROSTER, COACH], total: ROSTER.length + 1, pages: 1, page: 1 })
+    })
+
+    it('shows the one tournament it belongs to, not "All"', async () => {
+      renderPage()
+      await screen.findByText('coach@team.local')
+      expect(screen.getByText('Spring Cup')).toBeInTheDocument()
+    })
+
+    it('limits the edit dialog to email and password', async () => {
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(await screen.findByRole('button', { name: /edit coach@team.local/i }))
+
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByText(/edit coach login/i)).toBeInTheDocument()
+      expect(within(dialog).getByText(/Spring Cup/)).toBeInTheDocument()
+      expect(within(dialog).queryByLabelText(/^role$/i)).not.toBeInTheDocument()
+      expect(within(dialog).queryByLabelText(/seat/i)).not.toBeInTheDocument()
+
+      await user.clear(within(dialog).getByLabelText(/email/i))
+      await user.type(within(dialog).getByLabelText(/email/i), 'newcoach@team.local')
+      await user.click(within(dialog).getByRole('button', { name: /save account/i }))
+
+      expect(users.update).toHaveBeenCalledWith('coach-1', { email: 'newcoach@team.local' })
+    })
+
+    it('can still be deleted or impersonated like any other account', async () => {
+      renderPage()
+      await screen.findByText('coach@team.local')
+      expect(screen.getByRole('button', { name: /delete coach@team.local/i })).toBeEnabled()
+      expect(screen.getByRole('button', { name: /impersonate coach@team.local/i })).toBeEnabled()
+    })
+  })
 })
