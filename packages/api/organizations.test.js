@@ -63,6 +63,12 @@ describe('organisations (PRD point 33)', () => {
     const orgs = (await call('GET', '/organizations', undefined, root)).body.organizations
     expect(orgs.find((o) => o.id === a.id)).toMatchObject({ tournaments: 1, accounts: 2 })
     expect((await call('DELETE', `/organizations/${a.id}`, undefined, root)).status).toBe(409)
+    // KAN-375: an inactive organisation takes no new tournaments; its own carry on.
+    expect((await call('PATCH', `/organizations/${b.id}`, { active: false }, root)).status).toBe(200)
+    const refused = await call('POST', '/tournaments', { ...t, name: 'B Cup' }, adminB)
+    expect([refused.status, refused.body.error]).toEqual([409, 'organization_inactive'])
+    expect((await call('GET', `/tournaments/${tb.id}`, undefined, adminB)).status).toBe(200)
+    expect((await call('POST', '/tournaments', { ...t, name: 'A Cup' }, adminA)).status).toBe(201)
   })
 
   it('keeps the backup and the system audit trail inside the organisation', async () => {

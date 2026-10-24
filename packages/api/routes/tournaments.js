@@ -124,7 +124,10 @@ export function tournamentRoutes(stores, tms) {
     const { organizationId, ...rest } = req.body || {}
     const account = await findUserRecord(req.user.uid)
     const org = account?.organizationId || (req.user.role === 'super_admin' && typeof organizationId === 'string' ? organizationId.slice(0, 80) : null)
-    if (org && stores.organizations && !(await stores.organizations.get(org))) return res.status(400).json({ error: 'invalid_organizationId' })
+    const orgRow = org && stores.organizations ? await stores.organizations.get(org) : null
+    if (org && stores.organizations && !orgRow) return res.status(400).json({ error: 'invalid_organizationId' })
+    // KAN-375: an inactive organisation takes no new tournaments; its existing ones carry on.
+    if (orgRow?.active === false) throw conflict('organization_inactive')
     const doc = body.forCreate(rest)
     // PRD v1 §6 field rules (lengths, dates in order, a real time zone).
     const problems = tournamentProblems(doc)

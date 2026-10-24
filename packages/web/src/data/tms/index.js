@@ -196,6 +196,7 @@ export const ERROR_TEXT = {
   team_required: 'Register your team first.',
   tournament_incomplete: 'Fill in the required tournament details first (Settings).',
   tournament_not_found: 'Tournament not found.',
+  organization_inactive: 'This organisation is inactive. A super admin must make it active before it can have new tournaments.',
   weighin_closed: 'Weigh-in is closed. An override needs the privilege and a reason in Notes.',
   invalid_api_key: 'That API key is not valid.',
   invalid_tournament: 'Some tournament details are not valid.',
