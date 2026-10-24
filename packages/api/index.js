@@ -9,7 +9,7 @@ import { withChangeEvents } from './lib/changes.js'
 import { security } from './middleware/security.js'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { authRoutes } from './routes/auth.js'
-import { userRoutes } from './routes/users.js'
+import { userRoutes, impersonationEndRoute } from './routes/users.js'
 import { officialRoutes } from './routes/officials.js'
 import { tournamentRoutes } from './routes/tournaments.js'
 import { categoryRoutes } from './routes/categories.js'
@@ -111,6 +111,9 @@ export function createApp() {
   // System-level events (no tournament) go to the same audit log.
   const systemAudit = (actor, { meta, ...entry }) => tms.record(actor ? { ...actor, meta } : { uid: null, role: null, meta }, { tournamentId: null, ...entry })
   app.use(`${API_BASE}/auth`, authRoutes({ audit: systemAudit }))
+  // Mounted ahead of userRoutes: ending a lens needs no admin-shaped token
+  // (see impersonationEndRoute), so it must answer before that gate runs.
+  app.use(`${API_BASE}/users`, impersonationEndRoute({ audit: systemAudit }))
   app.use(`${API_BASE}/users`, userRoutes({ audit: systemAudit, stores }))
   app.use(`${API_BASE}/organizations`, organizationRoutes(stores, { audit: systemAudit }))
   app.use(`${API_BASE}/rulesets`, rulesetRoutes(tms))

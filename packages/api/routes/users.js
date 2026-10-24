@@ -1,9 +1,12 @@
 import { Router } from 'express'
-import { listUsers, createUser, updateUser, deleteUser, findUserRecord, findUser } from '../auth/users.js'
+import { listUsers, createUser, updateUser, deleteUser, findUserRecord, findUser, verifyCredentials } from '../auth/users.js'
 import { requireAuth, requireRole, tournamentFor } from '../auth/middleware.js'
 import { badRequest, forbidden, notFound, conflict } from '../lib/errors.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
-import { revokeOtherSessions } from '../auth/sessions.js'
+import { revokeOtherSessions, createSession, revokeSession } from '../auth/sessions.js'
+import { signToken, IMPERSONATION_TTL } from '../auth/jwt.js'
+import { clientIp, userAgent } from '../lib/requestMeta.js'
+import { rateLimit } from '../lib/rateLimit.js'
 
 /**
  * Account administration. There is no self-service signup anywhere in the
@@ -117,5 +120,48 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
     res.status(204).end()
   })
 
+  // KAN-impersonation: an admin's lens into another account, for support or
+  // for seeing exactly what someone else sees. One per admin at a time (no
+  // chaining), never into another admin, never into the admin's own account,
+  // and never without re-proving it is really them first — a sitting admin
+  // session is not enough on its own to reach every other account in reach.
+  const impersonateLimit = rateLimit({ windowMs: 60_000, max: 10, code: 'too_many_requests', keyOf: (req) => `impersonate:${req.user.uid}` })
+
+  router.post('/:uid/impersonate', impersonateLimit, async (req, res) => {
+    if (req.user.impersonatedBy) throw forbidden('already_impersonating')
+    if (req.params.uid === req.user.uid) throw badRequest('cannot_impersonate_self')
+    await verifyCredentials(req.user.email, req.body?.password, req.body?.code)
+
+    await assertInScope(req.params.uid, await scopeOf(req))
+    const target = await findUser(req.params.uid)
+    if (!target) throw notFound()
+    if (['admin', 'super_admin'].includes(target.role)) throw forbidden('cannot_impersonate_admin')
+
+    const sid = await createSession({ uid: target.uid, ip: clientIp(req), userAgent: userAgent(req), impersonatedBy: req.user.uid, ttlMs: 30 * 60_000 })
+    const token = signToken(target, sid, { impersonatedBy: req.user.uid, impersonatorSid: req.user.sid, ttl: IMPERSONATION_TTL })
+    await audit(req.user, { action: 'user.impersonation_started', entity: 'user', entityId: target.uid })
+    res.json({ token, user: target })
+  })
+
+  return router
+}
+
+/**
+ * Ending a lens (KAN-impersonation) needs no admin role on the calling
+ * token — while impersonating, the token carries the *target's* role, which
+ * may be anything. It is mounted ahead of userRoutes' admin-only router at
+ * the same prefix, so this one path answers before that gate ever runs; its
+ * own check (the caller must be authenticated as the session it is ending)
+ * is the whole of its authorization, same as any account ending its own
+ * session.
+ */
+export function impersonationEndRoute({ audit = async () => {} } = {}) {
+  const router = Router()
+  router.post('/:uid/impersonate/end', requireAuth, async (req, res) => {
+    if (req.params.uid !== req.user.uid || !req.user.impersonatedBy) throw forbidden()
+    await revokeSession(req.user.sid, req.user.uid)
+    await audit(req.user, { action: 'user.impersonation_stopped', entity: 'user', entityId: req.user.uid })
+    res.json({ ok: true })
+  })
   return router
 }

@@ -23,8 +23,18 @@ async function collection() {
   return c
 }
 
-export async function createSession({ uid, ip = null, userAgent = null }, now = Date.now()) {
-  const row = { sid: randomUUID(), uid, ip, userAgent: userAgent ? String(userAgent).slice(0, 200) : null, createdAt: new Date(now), lastSeenAt: new Date(now), expiresAt: new Date(now + TTL_MS), revokedAt: null }
+/**
+ * `impersonatedBy` and a shorter `ttlMs` (KAN-impersonation) mark this row as
+ * an admin's lens into the account, not the account's own sign-in: it still
+ * goes through the same revoke paths (the target's "sign out everywhere",
+ * this session's own end), so nothing about ending it is special-cased.
+ */
+export async function createSession({ uid, ip = null, userAgent = null, impersonatedBy = null, ttlMs = TTL_MS }, now = Date.now()) {
+  const row = {
+    sid: randomUUID(), uid, ip, userAgent: userAgent ? String(userAgent).slice(0, 200) : null,
+    createdAt: new Date(now), lastSeenAt: new Date(now), expiresAt: new Date(now + ttlMs), revokedAt: null,
+    impersonatedBy,
+  }
   if (isMongoConfigured()) await (await collection()).insertOne({ ...row })
   else memory.set(row.sid, row)
   return row.sid

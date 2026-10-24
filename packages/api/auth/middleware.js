@@ -19,12 +19,24 @@ export function callerKey(req) {
   return claims ? `session:${claims.sid || claims.uid}` : `address:${req.ip || 'unknown'}`
 }
 
+/**
+ * Whether a token's session(s) are still open. An impersonation token
+ * (KAN-impersonation) carries two: the lens session on the target's account,
+ * and the admin's own `impersonatorSid`. Either one ending — the target
+ * signing out everywhere, or the admin's own session being revoked — ends
+ * the lens too, so an admin who loses access cannot keep acting as someone
+ * else for the rest of the token's life.
+ */
+const claimsActive = (claims) =>
+  Promise.all([sessionActive(claims.sid), claims.impersonatedBy ? sessionActive(claims.impersonatorSid) : true])
+    .then(([target, admin]) => target && admin)
+
 /** HTTP: rejects anything without a valid token, and attaches req.user. */
 export function requireAuth(req, _res, next) {
   const claims = verifyToken(bearer(req.headers.authorization))
   if (!claims) return next(unauthorized())
   // A session ended elsewhere ends this token too (PRD v1 §26 sessions).
-  sessionActive(claims.sid).then((active) => {
+  claimsActive(claims).then((active) => {
     if (!active) return next(unauthorized('session_revoked'))
     req.user = claims
     return next()
@@ -141,7 +153,7 @@ export function socketAuth(socket, next) {
     || bearer(socket.handshake?.headers?.authorization)
   const claims = verifyToken(token)
   if (!claims) return next(Object.assign(new Error('unauthorized'), { data: { code: 'unauthorized' } }))
-  sessionActive(claims.sid).then((active) => {
+  claimsActive(claims).then((active) => {
     if (!active) return next(Object.assign(new Error('unauthorized'), { data: { code: 'session_revoked' } }))
     socket.user = claims
     return next()
