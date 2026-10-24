@@ -63,7 +63,6 @@ describe('organisations (PRD point 33)', () => {
     const orgs = (await call('GET', '/organizations', undefined, root)).body.organizations
     expect(orgs.find((o) => o.id === a.id)).toMatchObject({ tournaments: 1, accounts: 2 })
     expect((await call('DELETE', `/organizations/${a.id}`, undefined, root)).status).toBe(409)
-    expect((await call('GET', '/organizations/mine', undefined, adminA)).body.organization.name).toBe('Maharashtra KA')
   })
 
   it('keeps the backup and the system audit trail inside the organisation', async () => {

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth/middleware.js'
-import { findUserRecord, listUsers } from '../auth/users.js'
+import { listUsers } from '../auth/users.js'
 import { validate } from '../lib/validate.js'
 import { forbidden, notFound, conflict } from '../lib/errors.js'
 
@@ -30,13 +30,6 @@ export function organizationRoutes(stores, { audit = async () => {} } = {}) {
     const accounts = (await listUsers({ organizationId: org.id, limit: 1000 })).total
     return { ...org, tournaments, accounts }
   }
-
-  // The caller's own organisation, for the header of an organisation's admin.
-  router.get('/mine', async (req, res) => {
-    const account = await findUserRecord(req.user.uid)
-    const org = account?.organizationId ? await orgs.get(account.organizationId) : null
-    res.json({ organization: org })
-  })
 
   router.get('/', superAdminOnly, async (_req, res) => {
     const rows = (await orgs.list({})).sort((a, b) => String(a.name).localeCompare(String(b.name)))
