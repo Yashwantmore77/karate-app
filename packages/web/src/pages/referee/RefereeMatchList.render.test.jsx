@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import RefereeMatchList from './RefereeMatchList'
 import * as fake from '../../test/fakeDomain'
 
@@ -28,11 +30,13 @@ const seed = () => {
 // Opened as an admin, the one role that may also delete a bout.
 const renderPage = () =>
   render(
-    <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
-      <Routes>
-        <Route path="/referee/category/:categoryId" element={<RefereeMatchList uid="ref-uid" profile={{ role: 'admin' }} />} />
-      </Routes>
-    </MemoryRouter>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
+        <Routes>
+          <Route path="/referee/category/:categoryId" element={<RefereeMatchList uid="ref-uid" profile={{ role: 'admin' }} />} />
+        </Routes>
+      </MemoryRouter>
+    </LocalizationProvider>
   )
 
 describe('RefereeMatchList - rendered UI', () => {

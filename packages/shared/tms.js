@@ -29,7 +29,7 @@ import {
   bracketMedals, poolMedals, medalTally, boutOutcome, nextPow2, seedOrder, needsWinner,
 } from './results.js'
 import {
-  formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, withoutReadOnly,
+  formFields, normalizeForm, validatePlayer, validateBulkRows, parseCsv, withoutReadOnly, coachPlayerFields,
   withDefaults, withTeamDefaults, possibleDuplicates, normalizeName,
   publicPlayer, publicTeam,
 } from './registration.js'
@@ -1151,8 +1151,9 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (team.active === false) throw rule('team_inactive')
 
     const fields = formFields(tournament)
-    const filled = withTeamDefaults(withDefaults(isCoach(actor) ? withoutReadOnly(input, fields) : input, fields), team, tournament.country)
-    const { player, errors } = validatePlayer(filled, fields, { weightPrecision: cfg.settings.weightPrecision })
+    const playerFields = isCoach(actor) ? coachPlayerFields(fields) : fields
+    const filled = withTeamDefaults(withDefaults(isCoach(actor) ? withoutReadOnly(input, fields) : input, playerFields), team, tournament.country)
+    const { player, errors } = validatePlayer(filled, playerFields, { weightPrecision: cfg.settings.weightPrecision })
     if (errors.length) throw invalid('invalid_player', { errors })
     assertEventsOffered(player, tournament)
     // One entry at a time per tournament: the duplicate check and the player
@@ -1233,9 +1234,10 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     if (before.registrationStatus === R.WITHDRAWN) throw rule('player_withdrawn')
 
     const fields = formFields(cfg.tournament)
+    const playerFields = isCoach(actor) ? coachPlayerFields(fields) : fields
     const sent = isCoach(actor) ? withoutReadOnly(input, fields, before) : input
     const merged = { ...before, ...sent, extra: { ...(before.extra || {}), ...(sent.extra || {}) } }
-    const { player, errors } = validatePlayer(merged, fields, { weightPrecision: cfg.settings.weightPrecision })
+    const { player, errors } = validatePlayer(merged, playerFields, { weightPrecision: cfg.settings.weightPrecision })
     if (errors.length) throw invalid('invalid_player', { errors })
     if ('events' in input) assertEventsOffered(player, cfg.tournament)
     const patch = { ...player }
@@ -1292,7 +1294,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const teamRows = await stores.teams.list({ tournamentId })
     const existing = await stores.players.list({ tournamentId })
     const preview = validateBulkRows(parseCsv(csv), {
-      fields: formFields(tournament),
+      fields: isCoach(actor) ? coachPlayerFields(formFields(tournament)) : formFields(tournament),
       teams: isCoach(actor) ? teamRows.filter((t) => t.id === actor.teamId) : teamRows,
       existing,
       defaultTeamId: isCoach(actor) ? actor.teamId : teamId,

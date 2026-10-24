@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 
 // What the API refuses, and how the page shows it: the data module is stubbed
 // with writes that can fail.
@@ -26,14 +28,16 @@ const A_MATCH = { id: 'match-1', categoryId, redId: 'comp-1', blueId: 'comp-2', 
 
 const renderPage = (role) =>
   render(
-    <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
-      <Routes>
-        <Route
-          path="/referee/category/:categoryId"
-          element={<RefereeMatchList uid="uid-1" profile={{ role }} />}
-        />
-      </Routes>
-    </MemoryRouter>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
+        <Routes>
+          <Route
+            path="/referee/category/:categoryId"
+            element={<RefereeMatchList uid="uid-1" profile={{ role }} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </LocalizationProvider>
   )
 
 const openCreateDialog = async (user) => {

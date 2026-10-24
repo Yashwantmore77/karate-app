@@ -21,6 +21,7 @@ import * as users from '../../data/users'
 import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { errorMessage } from '../../data/tms'
+import DateTimeField from '../../components/tms/DateTimeField'
 
 // Used until a tournament says otherwise; matches the server's own default.
 const DEFAULT_JUDGE_COUNT = 4
@@ -564,20 +565,17 @@ export default function RefereeMatchList({ profile }) {
                 is, and a bout with no time yet blocks nobody. Giving it one is
                 what brings it into the clash check. */}
             <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
-              <TextField
+              <DateTimeField
                 fullWidth
                 margin="normal"
-                type="datetime-local"
-                name="scheduledAt"
                 label="Scheduled time (optional)"
                 value={formik.values.scheduledAt}
-                onChange={formik.handleChange}
+                onChange={(value) => formik.setFieldValue('scheduledAt', value)}
                 error={!!formik.errors.scheduledAt}
                 helperText={
                   formik.errors.scheduledAt
                   || `Holds everyone on this bout for ${slotMinutes} minutes.`
                 }
-                InputLabelProps={{ shrink: true }}
               />
               {/* Which mat the bout is fought on. Two bouts can share a time
                   on different mats, but not on the same one. */}

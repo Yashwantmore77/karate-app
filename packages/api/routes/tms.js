@@ -71,8 +71,10 @@ export const TEAM = {
   email: { type: 'string', max: 200, nullable: true },
   address: { type: 'string', max: 300, nullable: true },
   district: { type: 'string', max: 80, nullable: true },
+  division: { type: 'string', max: 120, nullable: true },
   state: { type: 'string', max: 80, nullable: true },
   country: { type: 'string', max: 80, nullable: true },
+  federationId: { type: 'string', max: 120, nullable: true },
   // PRD v1 §21: only an active team takes entries (organisers only).
   active: { type: 'boolean' },
 }

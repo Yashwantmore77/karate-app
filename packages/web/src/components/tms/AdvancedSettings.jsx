@@ -2,6 +2,7 @@ import { Grid, TextField, MenuItem, Switch, FormControlLabel, Typography, Divide
 import { SETTING_CHOICES } from '@kumite/shared/tms.js'
 import { OVERTIME_MODES, KATA_TIE_BREAKS } from '@kumite/shared/rulesets.js'
 import { KATA_TIE_BREAK_LABEL } from '@kumite/shared/kata.js'
+import DateTimeField from './DateTimeField'
 
 // PRD v1 §6 tournament settings, grouped the way an organiser thinks about
 // them. Everything here is saved with the rest of the competition rules.
@@ -107,8 +108,10 @@ export default function AdvancedSettings({ settings, setSettings }) {
 
       <Section>Entries and weigh-in</Section>
       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-        <TextField fullWidth type="datetime-local" label="Coach entries lock at" slotProps={{ inputLabel: { shrink: true } }}
-          helperText="Soft lock: coaches stop editing; organisers still can" value={settings.entryLockAt || ''} onChange={(e) => set('entryLockAt', e.target.value || null)} />
+        <DateTimeField fullWidth label="Coach entries lock at"
+          helperText="Soft lock: coaches stop editing; organisers still can"
+          value={settings.entryLockAt ? (settings.entryLockAt.length === 10 ? `${settings.entryLockAt}T23:59` : settings.entryLockAt) : ''}
+          onChange={(v) => set('entryLockAt', v || null)} />
       </Grid>
       {number('weightPrecision', 'Weight decimal places', '0 to 3')}
       {toggle('requireWeighInForDraw', 'Only verified weigh-ins enter the draw')}

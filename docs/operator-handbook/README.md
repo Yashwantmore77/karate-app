@@ -191,6 +191,7 @@ Coaches cannot register until the details are complete, and Needs attention list
    - **Master Age Calculation Date** (2): the date every player's age is counted on. Ask the organiser; it is often the first day of the tournament.
    - **Registration opens** (3) and **Registration closes** (4): the date and time between which coaches can register.
    - **Tournament start** and **Tournament end**, **Organizer**, **Contact mobile** and **Contact email**.
+   - Use the date and time picker controls to choose each date and time.
 
 ![Settings: 1 the tab, 2 Master Age Calculation Date, 3 and 4 the registration window](images/p1-settings.webp)
 
@@ -322,7 +323,7 @@ During registration the coaches enter their players. You open it, send the link 
 
 6. Send the link and its password to the coaches, for example on WhatsApp or by email.
 
-A coach who opens the link types their own email (1) and its password (2), then clicks **Continue** (3). They then register their team, add their players one by one, and can watch whether each player is approved. Right after registering the team, they're offered a login of their own (email and password) so they can come back without the link next time; if they skip it and later lose their place (closed the tab, for example), typing the same email at step 1 returns them to their own team rather than starting a new one.
+A coach who opens the link types their own email (1) and its password (2), then clicks **Continue** (3). They register the team's club, coach, district, division, state, country and Federation ID once, then add players one by one — the team details fill in automatically for each player where applicable — and can watch whether each player is approved. Right after registering the team, they're offered a login of their own (email and password) so they can come back without the link next time; if they skip it and later lose their place (closed the tab, for example), typing the same email at step 1 returns them to their own team rather than starting a new one.
 
 ![What a coach sees first: 1 their own email, 2 the link password, 3 Continue](images/p2-coach.webp)
 

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import RefereeMatchList from './RefereeMatchList'
 import { HttpError } from '../../data/http'
 
@@ -47,14 +49,16 @@ vi.mock('../../data/users', () => ({
 
 const renderPage = () =>
   render(
-    <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
-      <Routes>
-        <Route
-          path="/referee/category/:categoryId"
-          element={<RefereeMatchList uid="ref-uid-001" profile={{ role: 'referee' }} />}
-        />
-      </Routes>
-    </MemoryRouter>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
+        <Routes>
+          <Route
+            path="/referee/category/:categoryId"
+            element={<RefereeMatchList uid="ref-uid-001" profile={{ role: 'referee' }} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </LocalizationProvider>
   )
 
 const openDialog = async (user) => {
@@ -96,8 +100,11 @@ describe('scheduling a bout', () => {
     const dialog = await openDialog(user)
     await pickCompetitors(user, dialog)
 
-    const field = within(dialog).getByLabelText(/scheduled time/i)
-    await user.type(field, '2099-05-15T13:00')
+    const picker = within(dialog).getByRole('group', { name: /scheduled time/i })
+    for (const [section, value] of [['Month', '05'], ['Day', '15'], ['Year', '2099'], ['Hours', '01'], ['Minutes', '00'], ['Meridiem', 'PM']]) {
+      await user.click(within(picker).getByRole('spinbutton', { name: section }))
+      await user.keyboard(value)
+    }
     await user.click(within(dialog).getByRole('button', { name: /create match/i }))
 
     const sent = store.matches.create.mock.calls[0][1]

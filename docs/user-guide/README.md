@@ -258,9 +258,9 @@ Players come in three ways: coaches enter them through the registration link, th
 ### What a coach does
 
 1. Open the link, type its password and the coach's own email, and press **Continue**. More than 10 tries in a minute are refused. That email is what tells the link apart from one coach to the next: typing it again later, even after closing the tab, returns to the same team instead of starting a second one. An email that already has its own login (below) is sent to the sign-in page instead of opening the link.
-2. **Register the team**: team name, club or dojo, club code, head coach, contact person, mobile, email, district, state, country and address. Read the rules and terms, tick "I have read and accept", and press **Register team**.
+2. **Register the team**: team name, club or dojo, club code, head coach, contact person, mobile, email, district, division, state, country, Federation ID and address. Read the rules and terms, tick "I have read and accept", and press **Register team**.
 3. Right after, a dialog offers **Create my own login** — an email and password that opens this same team on the main sign-in page, with no link or password needed afterwards. It can be skipped, but a coach who does and later closes the tab without it has only the email check in step 1 to get back in.
-4. **Add players**, one by one: name, date of birth, gender, club, country, events (Kata, Kumite or both), weight for Kumite, and any extra fields the organiser added.
+4. **Add players**, one by one: name, date of birth, gender, events (Kata, Kumite or both), weight for Kumite, Belt and any extra fields the organiser added. Club, coach, district, division, state and country come from the team registration.
 5. Add **team members**: team manager, coach, judge or referee (one person can hold several roles).
 6. Watch each player's status. A rejected or returned player shows the reason; fix it and send it again.
 
@@ -284,21 +284,23 @@ Players come in three ways: coaches enter them through the registration link, th
 | Player ID | — | Given by the system (P-0001, P-0002 …), read-only |
 | DOB | Yes | A real date, not in the future |
 | Gender | Yes | M or F |
-| Club / School / Dojo | Yes | Up to 200 characters |
-| Country | Yes | Must be a recognised country |
+| Club / School / Dojo | Yes | Coach: set once at team registration and used for its players |
+| Country | Yes | Must be a recognised country; coach sets it once at team registration |
 | Event | Yes | Kata, Kumite or both; only events the tournament holds |
 | Weight (kg) | For Kumite | A positive number, with at most the allowed decimal places (default 1) |
 | Father Name, Mother Name | No | 2 to 100 characters when given |
 | Mobile, Emergency Contact | No | Digits, spaces or dashes, optional leading +, 7 to 17 characters |
 | Email | No | A valid email address |
 | Player Photo, ID Proof | No | PNG, JPEG or PDF, up to 2 MB |
-| State, District | No | State must belong to the chosen country |
-| Coach Name, Division, Federation ID | No | Division separates players (for example Novice and Advanced) |
+| State, District | No | Coach: set once at team registration; state must belong to the chosen country |
+| Coach Name, Division | No | Coach: set once at team registration; division separates players (for example Novice and Advanced) |
+| Federation ID | No | Coach: stored on the team; organisers can still enter a player's own ID |
 | Belt | No | White to Black |
 | Blood Group | No | A+ to O- |
 | Age, Category | — | Worked out by the app |
 
 - Organisers can add, remove, reorder and rename fields, make them required or optional, show or hide them, or make them read-only (coaches see them; the office fills them in).
+- Required team profile fields are collected once at team registration, not on every player; club and country can use the team name and tournament country as defaults.
 - Field types: text, long text, number, date, dropdown, radio, checkbox, multi-select, file, phone, email, country, state, district and calculated.
 - Name, DOB, gender, events and weight drive categorisation: they can be renamed but not removed.
 

@@ -55,6 +55,13 @@ export const DEFAULT_FIELDS = [
 
 export const BUILT_IN_KEYS = new Set(DEFAULT_FIELDS.map((f) => f.key))
 
+export const TEAM_PROFILE_KEYS = ['club', 'coachName', 'district', 'division', 'state', 'country', 'federationId']
+// Federation ID identifies a player, so a team's ID must not be copied to every player.
+export const TEAM_PLAYER_DEFAULT_KEYS = ['club', 'coachName', 'district', 'division', 'state', 'country']
+export const coachPlayerFields = (fields) => fields.map((field) => (
+  TEAM_PROFILE_KEYS.includes(field.key) ? { ...field, required: false } : field
+))
+
 /** The form a tournament uses: its own if configured, the defaults otherwise. */
 export function formFields(tournament) {
   const fields = tournament?.registrationForm?.length ? tournament.registrationForm : DEFAULT_FIELDS
@@ -479,9 +486,16 @@ export function validateBulkRows(rows, { fields = DEFAULT_FIELDS, teams = [], ex
   return { rows: out, valid: out.filter((r) => !r.errors.length).map((r) => r.player), errors, warnings }
 }
 
-/** Club and country come from the team when a row or form leaves them out. */
+/** Shared player details come from the team; its Federation ID remains team-only. */
 export function withTeamDefaults(input, team, defaultCountry = null) {
   const out = { ...input }
+  for (const key of TEAM_PLAYER_DEFAULT_KEYS) {
+    if (key === 'state' && team?.state && (!out.state || out.state === team.state)) {
+      const state = findState(team.country || defaultCountry, team.state)
+      if (state) out.state = state
+      else delete out.state
+    } else if ((out[key] == null || out[key] === '') && team?.[key]) out[key] = team[key]
+  }
   if ((out.club == null || out.club === '') && team) out.club = team.club || team.name
   if ((out.country == null || out.country === '') && (team?.country || defaultCountry)) out.country = team?.country || defaultCountry
   return out

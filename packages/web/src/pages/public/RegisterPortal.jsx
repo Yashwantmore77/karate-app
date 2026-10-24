@@ -17,14 +17,14 @@ import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { teamProblems } from '@kumite/shared/tms.js'
 import { passwordProblem } from '@kumite/shared/accounts.js'
-import { OTHER_TEAMS_PLAYER } from '@kumite/shared/registration.js'
+import { OTHER_TEAMS_PLAYER, TEAM_PROFILE_KEYS, withTeamDefaults } from '@kumite/shared/registration.js'
 import TeamMembers from '../../components/tms/TeamMembers'
 import { paymentsEnabled } from '@kumite/shared/features.js'
 
 const TEAM_FIELDS = [
   ['name', 'Team name', 6, true], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Head coach (first team member)', 4],
   ['contactPerson', 'Contact person', 4], ['mobile', 'Mobile', 4], ['email', 'Email', 4], ['district', 'District', 4],
-  ['state', 'State', 4], ['country', 'Country', 4], ['address', 'Address', 12],
+  ['division', 'Division', 4], ['state', 'State', 4], ['country', 'Country', 4], ['federationId', 'Federation ID', 4], ['address', 'Address', 8],
 ]
 const sessionKey = (token) => `kt:coach:${token}`
 
@@ -71,7 +71,6 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   const [hasAccount, setHasAccount] = useState(false)
   const [me, setMe] = useState(null)
   const [team, setTeam] = useState({})
-  const teamErrors = teamProblems(team, { partial: true })
   const [accepted, setAccepted] = useState(false)
   const [view, setView] = useState('players')
   const [edit, setEdit] = useState(null)
@@ -93,6 +92,13 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   const info = accountToken ? (me && { ...me, requiresPassword: false }) : linkInfo
 
   const fields = useMemo(() => me?.form || info?.form || [], [me, info])
+  const requiredTeamFields = fields.filter((field) => TEAM_PROFILE_KEYS.includes(field.key) && field.required
+    && !field.readOnly && field.key !== 'club' && (field.key !== 'country' || !info?.tournament?.country))
+  const teamErrors = {
+    ...teamProblems(team, { partial: true }),
+    ...Object.fromEntries(requiredTeamFields.filter((field) => !String(team[field.key] || '').trim())
+      .map((field) => [field.key, `${field.label} is required`])),
+  }
 
   if (infoError) {
     return <Container maxWidth="sm" sx={{ py: 6 }}><Alert severity="error">{describeError(infoError)}</Alert></Container>
@@ -169,7 +175,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
           <Grid container spacing={2}>
             {TEAM_FIELDS.map(([k, label, w, required]) => (
               <Grid key={k} size={{ xs: 12, sm: w }}>
-                <TextField fullWidth required={required} label={label} value={team[k] || ''} onChange={(e) => setTeam({ ...team, [k]: e.target.value })}
+                <TextField fullWidth required={required || requiredTeamFields.some((field) => field.key === k)} label={label} value={team[k] || ''} onChange={(e) => setTeam({ ...team, [k]: e.target.value })}
                   error={!!(team[k] && teamErrors[k])} helperText={team[k] ? teamErrors[k] : undefined} />
               </Grid>
             ))}
@@ -228,14 +234,8 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
     }
   }
 
-  // A new player starts filled in with what the team already gave at
-  // registration — club, coach, district, state, country — rather than
-  // asking for the same thing again for every player on the team. Division,
-  // Federation ID and belt aren't team-level data, so they stay blank.
-  const newPlayer = () => ({
-    events: [],
-    ...Object.fromEntries(['club', 'coachName', 'district', 'state', 'country'].map((k) => [k, me.team[k] || '']).filter(([, v]) => v)),
-  })
+  // Player-shared details come from the team; its Federation ID stays team-only.
+  const newPlayer = () => withTeamDefaults({ events: [] }, me.team, info.tournament.country)
 
   const players = me.players
 
@@ -295,7 +295,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
       )}
 
       {view === 'bulk' && (
-        <BulkUpload fields={fields} withTeamColumn={false} action={action}
+        <BulkUpload fields={fields.filter((field) => !TEAM_PROFILE_KEYS.includes(field.key))} withTeamColumn={false} action={action}
           onPreview={(csv) => tms.coach.bulkPreview(session, csv)} onImport={(csv, opts) => tms.coach.bulkImport(session, csv, opts)}
           onDone={() => { setView('players'); load() }} />
       )}

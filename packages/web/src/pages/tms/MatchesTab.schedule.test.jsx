@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import MatchesTab from './MatchesTab'
 
 // The tests run on Indian time (vitest.config.js), five and a half hours
@@ -20,7 +22,11 @@ const BOUT = {
 }
 
 const openSchedule = async (user) => {
-  render(<MemoryRouter><MatchesTab tournament={tournament} version={0} action={{ run: vi.fn(), notify: vi.fn() }} /></MemoryRouter>)
+  render(
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <MemoryRouter><MatchesTab tournament={tournament} version={0} action={{ run: vi.fn(), notify: vi.fn() }} /></MemoryRouter>
+    </LocalizationProvider>
+  )
   await user.click(await screen.findByRole('button', { name: 'Schedule' }))
   return screen.findByRole('dialog')
 }
@@ -34,7 +40,9 @@ describe('scheduling a bout', () => {
   it('shows the time as the clock in the hall reads it, and saving leaves it alone', async () => {
     const user = userEvent.setup()
     const dialog = await openSchedule(user)
-    expect(within(dialog).getByLabelText('Time')).toHaveValue('2027-01-15T10:00')
+    const picker = within(dialog).getByRole('group', { name: 'Time' })
+    expect(within(picker).getByRole('spinbutton', { name: 'Hours' })).toHaveAttribute('aria-valuenow', '10')
+    expect(within(picker).getByRole('spinbutton', { name: 'Minutes' })).toHaveAttribute('aria-valuenow', '0')
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     expect(data.update).toHaveBeenCalledWith('m1', expect.objectContaining({ mat: 1, scheduledAt: '2027-01-15T04:30:00.000Z' }))
   })
@@ -42,9 +50,11 @@ describe('scheduling a bout', () => {
   it('saves a time typed in as that time in the hall', async () => {
     const user = userEvent.setup()
     const dialog = await openSchedule(user)
-    const time = within(dialog).getByLabelText('Time')
-    await user.clear(time)
-    await user.type(time, '2027-01-15T11:15')
+    const picker = within(dialog).getByRole('group', { name: 'Time' })
+    await user.click(within(picker).getByRole('spinbutton', { name: 'Hours' }))
+    await user.keyboard('11')
+    await user.click(within(picker).getByRole('spinbutton', { name: 'Minutes' }))
+    await user.keyboard('15')
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     expect(data.update).toHaveBeenCalledWith('m1', expect.objectContaining({ scheduledAt: '2027-01-15T05:45:00.000Z' }))
   })

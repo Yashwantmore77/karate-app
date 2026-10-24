@@ -4,6 +4,7 @@ import { createStores } from './lib/store.js'
 import { createBackup, restoreBackup, BACKUP_FORMAT } from './lib/backup.js'
 import { emailNotifier } from './lib/emailNotifier.js'
 import { io as connect } from 'socket.io-client'
+import { DEFAULT_FIELDS } from '@kumite/shared/registration.js'
 
 // PRD v1 platform pieces over HTTP: partner import, coach accounts, sessions,
 // rulesets, system audit and backup, the scoreboard operator, idempotency,
@@ -108,6 +109,40 @@ describe('partner API import (PRD v1 §7)', () => {
 })
 
 describe('coach accounts (PRD v1 §7)', () => {
+  it('stores team profile fields and applies the player defaults', async () => {
+    const t = await tournament('coach-team-profile')
+    await call('PUT', `/tournaments/${t}/registration-form`, {
+      fields: DEFAULT_FIELDS.map((field) => field.key === 'federationId' ? { ...field, required: true } : field),
+    }, tokens.admin)
+    const { body: { link } } = await call('PUT', `/tournaments/${t}/registration-link`, { password: 'dojo-pass' }, tokens.admin)
+    const session = (await call('POST', `/public/register/${link.token}/session`, { password: 'dojo-pass' })).body.token
+    expect(await call('POST', '/coach/team', {
+      name: 'Missing Federation ID', club: 'Missing Federation ID',
+    }, session)).toMatchObject({ status: 400, body: { error: 'federationId_required' } })
+    const coach = (await call('POST', '/coach/team', {
+      name: 'ABC Karate', club: 'ABC Karate', coachName: 'Sensei Rao', district: 'Pune',
+      division: 'Advanced', state: 'Maharashtra', country: 'India', federationId: 'TEAM-123',
+    }, session)).body.token
+    const team = (await call('GET', '/coach/me', undefined, coach)).body.team
+    expect(team).toMatchObject({ division: 'Advanced', federationId: 'TEAM-123' })
+
+    const created = await call('POST', '/coach/players', {
+      name: 'Asha Rao', dob: '2014-06-15', gender: 'M', events: ['kumite'], weight: 33,
+    }, coach)
+    expect(created).toMatchObject({ status: 201, body: { player: expect.any(Object) } })
+    const player = created.body.player
+    expect(player).toMatchObject({
+      club: 'ABC Karate', coachName: 'Sensei Rao', district: 'Pune',
+      division: 'Advanced', state: 'Maharashtra', country: 'India',
+    })
+    expect(player.federationId).toBeUndefined()
+
+    const preview = await call('POST', '/coach/players/bulk/preview', {
+      csv: 'Player Name,DOB,Gender,Event,Weight (kg)\nRavi Rao,2014-06-15,M,kumite,33',
+    }, coach)
+    expect(preview).toMatchObject({ status: 200, body: { errors: [] } })
+  })
+
   it('lets a team manager create a login that reopens their team panel', async () => {
     const t = await tournament('coach-open')
     const { body: { link } } = await call('PUT', `/tournaments/${t}/registration-link`, { password: 'dojo-pass' }, tokens.admin)
