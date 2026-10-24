@@ -4,6 +4,7 @@ import express from 'express'
 import { Server } from 'socket.io'
 import { MatchRoom, serverNow } from './matchRoom.js'
 import { socketAuth, setTournamentLookup, callerKey } from './auth/middleware.js'
+import { sessionActive } from './auth/sessions.js'
 import { createStores } from './lib/store.js'
 import { withChangeEvents } from './lib/changes.js'
 import { security } from './middleware/security.js'
@@ -205,6 +206,7 @@ export function createApp() {
     if (!match) return false
     return (await matchAuthority(socket.user, match, stores)).ok
   }
+  const disconnectAfterAck = (socket) => setImmediate(() => socket.disconnect(true))
 
   io.on('connection', (socket) => {
     socket.on('time:ping', ({ t0 } = {}, ack) => {
@@ -215,6 +217,10 @@ export function createApp() {
     })
 
     socket.on('match:join', async ({ matchId, control } = {}, ack) => {
+      if (!(await sessionActive(socket.user.sid))) {
+        ack?.({ error: 'session_revoked' })
+        return disconnectAfterAck(socket)
+      }
       if (!matchId || typeof matchId !== 'string') return ack?.({ error: 'unknown_match' })
       // Only real bouts get a room: a made-up id must not create state, or
       // live-state rows, on the server.
@@ -252,6 +258,10 @@ export function createApp() {
     socket.on('match:takeover', async ({ matchId } = {}, ack) => {
       const room = rooms.get(matchId)
       if (!room) return ack?.({ error: 'unknown_match' })
+      if (!(await sessionActive(socket.user.sid))) {
+        ack?.({ error: 'session_revoked' })
+        return disconnectAfterAck(socket)
+      }
       if (!(await mayControl(socket, matchId))) return ack?.({ error: 'forbidden' })
 
       const previousId = room.controllerId
@@ -270,10 +280,25 @@ export function createApp() {
     socket.on('match:cmd', ({ matchId, cmd, payload, clientEventId, offlineAt } = {}, ack) => {
       const room = rooms.get(matchId)
       if (!room) return ack?.({ error: 'unknown_match' })
-      // Holding the mat is the authority: it was granted only after the
-      // checks in mayControl.
-      if (!room.controls(socket.id)) return ack?.({ error: room.controllerId ? 'not_controller' : 'forbidden' })
       room.queue = room.queue.then(async () => {
+        if (!(await sessionActive(socket.user.sid))) {
+          if (room.controls(socket.id)) {
+            room.release(socket.id)
+            io.to(matchId).emit('match:control', { matchId, controllerId: null })
+          }
+          ack?.({ error: 'session_revoked' })
+          return disconnectAfterAck(socket)
+        }
+        // Access can be revoked while a socket remains connected, so verify
+        // both its session and current tournament role for every command.
+        if (!(await mayControl(socket, matchId))) {
+          if (room.controls(socket.id)) {
+            room.release(socket.id)
+            io.to(matchId).emit('match:control', { matchId, controllerId: null })
+          }
+          return ack?.({ error: 'forbidden' })
+        }
+        if (!room.controls(socket.id)) return ack?.({ error: room.controllerId ? 'not_controller' : 'forbidden' })
         // PRD v1 §15 idempotency: a network retry is applied once.
         const already = room.duplicateOf(clientEventId)
         if (already !== undefined) return ack?.({ ok: true, seq: already, duplicate: true })

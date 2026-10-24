@@ -3,6 +3,8 @@ import { io as connect } from 'socket.io-client'
 import { createApp } from './index.js'
 import { remainingNow } from '@kumite/shared/clock.js'
 import { formatClock } from '@kumite/shared/format.js'
+import { verifyToken } from './auth/jwt.js'
+import { revokeSession } from './auth/sessions.js'
 
 let http, port, clients, refereeToken, judgeToken
 
@@ -129,6 +131,19 @@ describe('BE-1 match server', () => {
 
     const accepted = await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })
     expect(accepted.ok).toBe(true)
+  })
+
+  it('stops a connected referee from scoring after their session is revoked', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    await revokeSession(verifyToken(refereeToken).sid, 'ref-uid-001')
+
+    const rejected = await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })
+
+    expect(rejected.error).toBe('session_revoked')
+    const admin = client(await tokenFor('admin@kata.local'))
+    expect((await emit(admin, 'match:join', { matchId: 'm1', control: true })).controllerId).toBe(admin.id)
+    expect((await emit(admin, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START' })).ok).toBe(true)
   })
 
   it('stamps the clock anchor with SERVER time, not the client\'s', async () => {
