@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
-// KAN-429: the Impersonate button, its re-auth dialog, and what it refuses
-// before ever calling the server.
+// KAN-429: the Impersonate button opens a lens in a new tab, with no
+// password or 2FA step — see what it refuses before ever calling the server.
 
 const users = vi.hoisted(() => ({
   ROLES: ['admin', 'super_admin', 'referee', 'judge'],
@@ -12,8 +12,8 @@ const users = vi.hoisted(() => ({
 }))
 vi.mock('../../data/users', () => users)
 
-const session = vi.hoisted(() => ({ impersonate: vi.fn() }))
-vi.mock('../../state/SessionContext', () => ({ useSession: () => session }))
+const link = vi.hoisted(() => ({ openImpersonationTab: vi.fn() }))
+vi.mock('../../data/impersonationLink', () => link)
 
 const AdminUserList = (await import('./AdminUserList')).default
 
@@ -40,33 +40,22 @@ describe('impersonating an account from Accounts', () => {
     expect(screen.queryByRole('button', { name: /Impersonate root@kata.local/ })).not.toBeInTheDocument()
   })
 
-  it('opens a lens after asking for the password again, and goes to that role\'s own screen', async () => {
-    session.impersonate.mockResolvedValue(undefined)
+  it('opens a lens in a new tab on one click, with no password or code', async () => {
+    link.openImpersonationTab.mockResolvedValue(undefined)
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole('button', { name: 'Impersonate referee@kata.local' }))
 
-    const dialog = screen.getByRole('dialog')
-    expect(within(dialog).getByText(/Sign in as referee@kata.local/)).toBeInTheDocument()
-    // The password is required before the button does anything.
-    expect(within(dialog).getByRole('button', { name: 'Sign in as them' })).toBeDisabled()
-    await user.type(within(dialog).getByLabelText('Your password'), 'adminpass1')
-    expect(within(dialog).getByRole('button', { name: 'Sign in as them' })).toBeEnabled()
-    await user.click(within(dialog).getByRole('button', { name: 'Sign in as them' }))
-
-    expect(session.impersonate).toHaveBeenCalledWith('ref-1', 'adminpass1', undefined)
+    expect(link.openImpersonationTab).toHaveBeenCalledWith(ROSTER[2])
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('shows what the server refused, and tries again rather than closing', async () => {
-    session.impersonate.mockRejectedValue(Object.assign(new Error('invalid_credentials'), { code: 'invalid_credentials' }))
+  it('shows what the server refused', async () => {
+    link.openImpersonationTab.mockRejectedValue(Object.assign(new Error('cannot_impersonate_admin'), { code: 'cannot_impersonate_admin' }))
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole('button', { name: 'Impersonate referee@kata.local' }))
-    const dialog = screen.getByRole('dialog')
-    await user.type(within(dialog).getByLabelText('Your password'), 'wrong')
-    await user.click(within(dialog).getByRole('button', { name: 'Sign in as them' }))
 
-    expect(await within(dialog).findByText('Wrong password.')).toBeInTheDocument()
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(await screen.findByText('An administrator account cannot be impersonated.')).toBeInTheDocument()
   })
 })

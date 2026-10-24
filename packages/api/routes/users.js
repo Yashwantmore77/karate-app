@@ -1,12 +1,13 @@
 import { Router } from 'express'
-import { listUsers, createUser, updateUser, deleteUser, findUserRecord, findUser, verifyCredentials } from '../auth/users.js'
+import { listUsers, createUser, updateUser, deleteUser, findUserRecord, findUser } from '../auth/users.js'
 import { requireAuth, requireRole, tournamentFor } from '../auth/middleware.js'
-import { badRequest, forbidden, notFound, conflict } from '../lib/errors.js'
+import { badRequest, forbidden, notFound, conflict, unauthorized } from '../lib/errors.js'
 import { readPageQuery, pageMeta } from '../lib/pagination.js'
 import { revokeOtherSessions, createSession, revokeSession } from '../auth/sessions.js'
 import { signToken, IMPERSONATION_TTL } from '../auth/jwt.js'
 import { clientIp, userAgent } from '../lib/requestMeta.js'
 import { rateLimit } from '../lib/rateLimit.js'
+import { issueImpersonationTicket, redeemImpersonationTicket } from '../auth/impersonationTickets.js'
 
 /**
  * Account administration. There is no self-service signup anywhere in the
@@ -120,17 +121,19 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
     res.status(204).end()
   })
 
-  // KAN-impersonation: an admin's lens into another account, for support or
-  // for seeing exactly what someone else sees. One per admin at a time (no
-  // chaining), never into another admin, never into the admin's own account,
-  // and never without re-proving it is really them first — a sitting admin
-  // session is not enough on its own to reach every other account in reach.
+  // KAN-429: an admin's lens into another account, for support or for seeing
+  // exactly what someone else sees — one click, opened in a tab of its own,
+  // no password or 2FA step. That is a deliberate product choice, leaning
+  // entirely on the limits below (never another admin, never the admin's
+  // own account, no chaining, never outside the organisation, 30 minutes,
+  // a rate limit of its own) plus the session being revocable and every
+  // write it makes being audited under both identities, rather than on
+  // asking anything of the admin first.
   const impersonateLimit = rateLimit({ windowMs: 60_000, max: 10, code: 'too_many_requests', keyOf: (req) => `impersonate:${req.user.uid}` })
 
   router.post('/:uid/impersonate', impersonateLimit, async (req, res) => {
     if (req.user.impersonatedBy) throw forbidden('already_impersonating')
     if (req.params.uid === req.user.uid) throw badRequest('cannot_impersonate_self')
-    await verifyCredentials(req.user.email, req.body?.password, req.body?.code)
 
     await assertInScope(req.params.uid, await scopeOf(req))
     const target = await findUser(req.params.uid)
@@ -140,28 +143,44 @@ export function userRoutes({ audit = async () => {}, stores = null } = {}) {
     const sid = await createSession({ uid: target.uid, ip: clientIp(req), userAgent: userAgent(req), impersonatedBy: req.user.uid, ttlMs: 30 * 60_000 })
     const token = signToken(target, sid, { impersonatedBy: req.user.uid, impersonatorSid: req.user.sid, ttl: IMPERSONATION_TTL })
     await audit(req.user, { action: 'user.impersonation_started', entity: 'user', entityId: target.uid })
-    res.json({ token, user: target })
+    // The token itself never reaches this response: only a one-time ticket
+    // does, redeemed by the new tab that is about to open it
+    // (impersonationPublicRoutes below) — so this bearer token never sits
+    // in a URL, in browser history or in anything that logs one.
+    res.json({ ticket: issueImpersonationTicket({ token, user: target }) })
   })
 
   return router
 }
 
 /**
- * Ending a lens (KAN-impersonation) needs no admin role on the calling
- * token — while impersonating, the token carries the *target's* role, which
- * may be anything. It is mounted ahead of userRoutes' admin-only router at
- * the same prefix, so this one path answers before that gate ever runs; its
- * own check (the caller must be authenticated as the session it is ending)
- * is the whole of its authorization, same as any account ending its own
- * session.
+ * The two impersonation (KAN-429) routes that take no admin-shaped token:
+ *
+ * - Ending a lens needs no admin role on the calling token — while
+ *   impersonating, the token carries the *target's* role, which may be
+ *   anything. Its own check (the caller must be authenticated as the
+ *   session it is ending) is the whole of its authorization, same as any
+ *   account ending its own session.
+ * - Redeeming a ticket needs no token at all: it is what hands the new tab
+ *   its first one. A ticket is good for one redemption, within a minute of
+ *   being issued (impersonationTickets.js); anything else is refused the
+ *   same as a token that never verified.
+ *
+ * Both are mounted ahead of userRoutes' admin-only router at the same
+ * prefix, so these two paths answer before that gate ever runs.
  */
-export function impersonationEndRoute({ audit = async () => {} } = {}) {
+export function impersonationPublicRoutes({ audit = async () => {} } = {}) {
   const router = Router()
   router.post('/:uid/impersonate/end', requireAuth, async (req, res) => {
     if (req.params.uid !== req.user.uid || !req.user.impersonatedBy) throw forbidden()
     await revokeSession(req.user.sid, req.user.uid)
     await audit(req.user, { action: 'user.impersonation_stopped', entity: 'user', entityId: req.user.uid })
     res.json({ ok: true })
+  })
+  router.post('/impersonate/exchange', (req, res) => {
+    const row = redeemImpersonationTicket(String(req.body?.ticket || ''))
+    if (!row) throw unauthorized('ticket_expired')
+    res.json(row)
   })
   return router
 }

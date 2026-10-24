@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createApp } from './index.js'
-import { totp } from './auth/totp.js'
 import { createUser } from './auth/users.js'
 
-// KAN-impersonation: an admin opening a lens into another account — for
-// support, or to see exactly what someone else sees — without that being an
-// unconditional, unlogged way to reach every account in reach.
+// KAN-429: an admin opening a lens into another account — for support, or to
+// see exactly what someone else sees — in one click, in a tab of its own,
+// without that being an unconditional, unlogged way to reach every account
+// in reach. No password or 2FA step by design (a deliberate product
+// decision); what stands in for it is: never another admin, never the
+// admin's own account, no chaining, never outside the organisation, a real
+// revocable 30-minute session, a rate limit, and every write attributed to
+// both identities.
 
 let http, port
 
@@ -18,7 +22,14 @@ const call = async (method, path, body, token) => {
   return { status: res.status, body: res.status === 204 ? null : await res.json().catch(() => null) }
 }
 const login = async (email, password = 'test123', code) => call('POST', '/auth/login', { email, password, ...(code ? { code } : {}) })
-const impersonate = (uid, admin, password = 'test123', code) => call('POST', `/users/${uid}/impersonate`, { password, ...(code ? { code } : {}) }, admin)
+const impersonate = (uid, admin) => call('POST', `/users/${uid}/impersonate`, {}, admin)
+const redeem = (ticket) => call('POST', '/users/impersonate/exchange', { ticket })
+/** The whole flow: click Impersonate, open the new tab, it redeems the ticket. Returns the lens token, or the refusal body. */
+const openLens = async (uid, admin) => {
+  const started = await impersonate(uid, admin)
+  if (started.status !== 200) return started
+  return redeem(started.body.ticket)
+}
 
 beforeEach(async () => {
   const app = createApp()
@@ -27,16 +38,12 @@ beforeEach(async () => {
 })
 afterEach(() => new Promise((resolve) => http.close(resolve)))
 
-describe('admin impersonation (KAN-impersonation)', () => {
+describe('admin impersonation (KAN-429)', () => {
   it('opens a lens with exactly the target\'s own reach, logged as both of them, and ends it from inside the lens', async () => {
     const admin = (await login('admin@kata.local')).body.token
     const ref = (await call('POST', '/users', { email: 'ref1@kata.local', password: 'password1', role: 'referee' }, admin)).body.user
 
-    // Refused without proving it is really the admin at the keyboard.
-    expect((await call('POST', `/users/${ref.uid}/impersonate`, {}, admin)).body.error).toBe('invalid_credentials')
-    expect((await impersonate(ref.uid, admin, 'wrong-password')).body.error).toBe('invalid_credentials')
-
-    const { status, body } = await impersonate(ref.uid, admin)
+    const { status, body } = await openLens(ref.uid, admin)
     expect(status).toBe(200)
     expect(body.user).toMatchObject({ uid: ref.uid, role: 'referee' })
     expect(JSON.stringify(body)).not.toMatch(/passwordHash|twoFactorSecret/)
@@ -47,8 +54,8 @@ describe('admin impersonation (KAN-impersonation)', () => {
     expect((await call('GET', '/users', undefined, lens)).status).toBe(403)
     expect((await call('GET', '/auth/me', undefined, lens)).body.user).toMatchObject({ uid: ref.uid, role: 'referee' })
 
-    // Ending it from outside the lens (the admin's own, un-impersonated
-    // token) is refused: only the session itself may end itself.
+    // Ending it from outside the lens (the admin's own token) is refused:
+    // only the session itself may end itself.
     expect((await call('POST', `/users/${ref.uid}/impersonate/end`, {}, admin)).status).toBe(403)
     expect((await call('POST', `/users/${ref.uid}/impersonate/end`, {}, lens)).body).toEqual({ ok: true })
     // And it is really gone: the same token no longer works.
@@ -63,6 +70,16 @@ describe('admin impersonation (KAN-impersonation)', () => {
     // Stopped: made with the lens, so the actor is the referee — but every
     // write made with it still names the admin on the other end.
     expect(stopped).toMatchObject({ actorId: ref.uid, actorRole: 'referee', actorImpersonatedBy: adminUid })
+  })
+
+  it('redeems a ticket once: a second redemption, or a ticket that never existed, is refused', async () => {
+    const admin = (await login('admin@kata.local')).body.token
+    const ref = (await call('POST', '/users', { email: `ref-tk-${Date.now()}@kata.local`, password: 'password1', role: 'referee' }, admin)).body.user
+    const { ticket } = (await impersonate(ref.uid, admin)).body
+
+    expect((await redeem(ticket)).status).toBe(200)
+    expect((await redeem(ticket)).body.error).toBe('ticket_expired')
+    expect((await redeem('not-a-real-ticket')).body.error).toBe('ticket_expired')
   })
 
   it('never opens a lens into an admin or into itself', async () => {
@@ -85,7 +102,7 @@ describe('admin impersonation (KAN-impersonation)', () => {
     const tokenA = (await login(adminA.email, 'password1')).body.token
 
     // An org-scoped admin cannot reach an account outside their organisation.
-    expect((await impersonate(refB.uid, tokenA, 'password1')).body.error).toBe('organization_forbidden')
+    expect((await impersonate(refB.uid, tokenA)).body.error).toBe('organization_forbidden')
 
     // No chaining: a lens cannot open a second lens, on a different target.
     // (A referee-shaped lens already fails the ordinary admin-role gate on
@@ -93,30 +110,14 @@ describe('admin impersonation (KAN-impersonation)', () => {
     // still hold if that stopped being true for some future target role.)
     const refA = (await call('POST', '/users', { email: `ref-a-${stamp}@kata.local`, password: 'password1', role: 'referee', organizationId: orgA.id }, root)).body.user
     const refA2 = (await call('POST', '/users', { email: `ref-a2-${stamp}@kata.local`, password: 'password1', role: 'referee', organizationId: orgA.id }, root)).body.user
-    const lens = (await impersonate(refA.uid, tokenA, 'password1')).body.token
-    expect((await call('POST', `/users/${refA2.uid}/impersonate`, { password: 'password1' }, lens)).status).toBe(403)
-  })
-
-  it('asks for a second factor when the admin has one, same as signing in', async () => {
-    // Its own admin, not the shared seeded one: 2FA enabled here must not
-    // outlive this test and break admin@kata.local for the tests after it.
-    const stamp = Date.now()
-    const seedAdmin = (await login('admin@kata.local')).body.token
-    await call('POST', '/users', { email: `admin4-${stamp}@kata.local`, password: 'password1', role: 'admin' }, seedAdmin)
-    const admin = (await login(`admin4-${stamp}@kata.local`, 'password1')).body.token
-    const ref = (await call('POST', '/users', { email: `ref4-${stamp}@kata.local`, password: 'password1', role: 'referee' }, admin)).body.user
-    const { body: setup } = await call('POST', '/auth/2fa/setup', {}, admin)
-    await call('POST', '/auth/2fa/enable', { code: totp(setup.secret) }, admin)
-
-    expect((await impersonate(ref.uid, admin, 'password1')).body.error).toBe('two_factor_required')
-    expect((await impersonate(ref.uid, admin, 'password1', '000000')).body.error).toBe('invalid_two_factor')
-    expect((await impersonate(ref.uid, admin, 'password1', totp(setup.secret))).status).toBe(200)
+    const lens = (await openLens(refA.uid, tokenA)).body.token
+    expect((await impersonate(refA2.uid, lens)).status).toBe(403)
   })
 
   it('ends when the admin\'s own session ends, not only when the lens is told to end', async () => {
     const admin = (await login('admin@kata.local')).body.token
     const ref = (await call('POST', '/users', { email: `ref5-${Date.now()}@kata.local`, password: 'password1', role: 'referee' }, admin)).body.user
-    const lens = (await impersonate(ref.uid, admin)).body.token
+    const lens = (await openLens(ref.uid, admin)).body.token
     expect((await call('GET', '/auth/me', undefined, lens)).status).toBe(200)
 
     // The admin's own session ends (signed out elsewhere, access pulled) —
@@ -129,7 +130,7 @@ describe('admin impersonation (KAN-impersonation)', () => {
   it('limits how often one admin may open a lens', async () => {
     const admin = (await login('admin@kata.local')).body.token
     const ref = (await call('POST', '/users', { email: `ref6-${Date.now()}@kata.local`, password: 'password1', role: 'referee' }, admin)).body.user
-    const attempts = await Promise.all(Array.from({ length: 15 }, () => impersonate(ref.uid, admin, 'wrong-password')))
+    const attempts = await Promise.all(Array.from({ length: 15 }, () => impersonate(ref.uid, admin)))
     expect(attempts.some((a) => a.status === 429)).toBe(true)
   })
 })
