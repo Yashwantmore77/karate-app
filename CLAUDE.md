@@ -1,5 +1,16 @@
 # Notes for working on this repo
 
+## Always work in ponytail mode
+
+Every coding task in this repo (writing, fixing, refactoring, reviewing,
+choosing a dependency) follows the `ponytail` skill at its default level,
+full: the smallest change that fully solves the task, with the check its
+logic needs. Use `ponytail-review` to review a change, `ponytail-audit` for
+the whole repo and `ponytail-debt` to list `shortcut:` comments. The skills
+live in `.claude/skills/`, copied from
+https://github.com/DietrichGebert/ponytail (v5.3.2, MIT, see
+`.claude/skills/ponytail/LICENSE`); the plugin's hooks are not used.
+
 ## Ship every change as its own small PR
 
 Each fix or change goes on its own branch, cut from the latest `main` and named
