@@ -9,8 +9,9 @@ import './index.css'
 // first render, so SessionContext's own mount effect — which already asks
 // the server whose token this is — finds it already sitting in this tab's
 // storage, exactly as if the tab had simply been reloaded.
-// Not a top-level await: the build target (older browsers this app still
-// supports) can't transpile that.
+// Not a top-level await: `vite build` refuses it for this app's configured
+// target browsers ("Top-level await is not available in the configured
+// target environment") — a .then() here does the same job and still builds.
 adoptImpersonationTicket().then(() => {
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode><App /></React.StrictMode>
