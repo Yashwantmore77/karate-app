@@ -17,6 +17,7 @@ import StatusBadge from '../../components/tms/StatusBadge'
 import { useLoading } from '../../components/Loader'
 import InfoTip from '../../components/help/InfoTip'
 import { isoToLocalInput, localInputToIso } from '../../utils/scheduleTime'
+import DateTimeField from '../../components/tms/DateTimeField'
 
 const AKA = '#FF5B5B'
 const AO = '#5B7BFF'
@@ -223,7 +224,7 @@ export default function MatchesTab({ tournament, version, action, basePath = '/a
               onChange={(e) => setSchedule({ ...schedule, judgeIds: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value })}>
               {officials.filter((o) => o.role === 'judge').map((o) => <MenuItem key={o.uid} value={o.uid}>{o.label}</MenuItem>)}
             </TextField>
-            <TextField type="datetime-local" label="Time" slotProps={{ inputLabel: { shrink: true } }} value={schedule?.scheduledAt || ''} onChange={(e) => setSchedule({ ...schedule, scheduledAt: e.target.value })} />
+            <DateTimeField label="Time" value={schedule?.scheduledAt || ''} onChange={(v) => setSchedule({ ...schedule, scheduledAt: v })} />
           </Stack>
         </DialogContent>
         <DialogActions>

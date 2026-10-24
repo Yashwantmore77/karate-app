@@ -19,6 +19,7 @@ import { HelpTitle } from '../../components/help/InfoTip'
 import { paymentsEnabled } from '@kumite/shared/features.js'
 import { PageLoader } from '../../components/Loader'
 import DateField from '../../components/tms/DateField'
+import DateTimeField from '../../components/tms/DateTimeField'
 
 const DETAIL_FIELDS = [
   ['name', 'Tournament name', 12], ['description', 'Description', 12],
@@ -156,9 +157,9 @@ export default function SetupTab({ tournament, reload, action }) {
           </Grid>
           {WINDOW_FIELDS.map(([k, label, suffix]) => (
             <Grid key={k} size={{ xs: 12, sm: 6, md: 3 }}>
-              <TextField fullWidth type="datetime-local" label={label} slotProps={{ inputLabel: { shrink: true } }}
+              <DateTimeField fullWidth label={label}
                 value={details[k] ? (details[k].length === 10 ? `${details[k]}${suffix}` : details[k]) : ''}
-                onChange={(e) => setDetails({ ...details, [k]: e.target.value })} />
+                onChange={(v) => setDetails({ ...details, [k]: v })} />
             </Grid>
           ))}
           <Grid size={{ xs: 12, md: 6 }}>
