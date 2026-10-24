@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import AdminTournamentList from './AdminTournamentList'
 import * as fake from '../../test/fakeDomain'
 
@@ -9,9 +11,11 @@ vi.mock('../../data/domain', () => import('../../test/fakeDomain'))
 
 const renderPage = () =>
   render(
-    <MemoryRouter>
-      <AdminTournamentList uid="admin-uid" />
-    </MemoryRouter>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <MemoryRouter>
+        <AdminTournamentList uid="admin-uid" />
+      </MemoryRouter>
+    </LocalizationProvider>
   )
 
 const SPRING_CUP = {

@@ -97,9 +97,13 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   }
 
   const header = (
-    <Box sx={{ mb: 3 }}>
-      <Typography variant="h1">{info.tournament.name}</Typography>
-      <Typography color="text.secondary">Team registration · {[info.tournament.venue || info.tournament.location, info.tournament.startDate || info.tournament.date].filter(Boolean).join(' · ')}</Typography>
+    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1 }}>
+      <Box>
+        <Typography variant="h1">{info.tournament.name}</Typography>
+        <Typography color="text.secondary">Team registration · {[info.tournament.venue || info.tournament.location, info.tournament.startDate || info.tournament.date].filter(Boolean).join(' · ')}</Typography>
+      </Box>
+      {/* The deadline a coach is working against, shown wherever the header is, not only in the closed-registration warning below. */}
+      {info.closesAt && <Typography variant="body2" color="text.secondary">Registration closes {when(info.closesAt)}</Typography>}
     </Box>
   )
 
@@ -197,6 +201,15 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
     }
   }
 
+  // A new player starts filled in with what the team already gave at
+  // registration — club, coach, district, state, country — rather than
+  // asking for the same thing again for every player on the team. Division,
+  // Federation ID and belt aren't team-level data, so they stay blank.
+  const newPlayer = () => ({
+    events: [],
+    ...Object.fromEntries(['club', 'coachName', 'district', 'state', 'country'].map((k) => [k, me.team[k] || '']).filter(([, v]) => v)),
+  })
+
   const players = me.players
 
   return (
@@ -233,7 +246,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
 
       {view === 'players' && (
         <DataTable rows={players} empty="No players yet. Add them one by one or with a bulk upload."
-          toolbar={<Button variant="contained" startIcon={<Add />} disabled={!canWrite} onClick={() => { setErrors([]); setEdit({ events: [] }) }}>Add player</Button>}
+          toolbar={<Button variant="contained" startIcon={<Add />} disabled={!canWrite} onClick={() => { setErrors([]); setEdit(newPlayer()) }}>Add player</Button>}
           columns={[
             { key: 'playerNumber', label: 'ID' },
             { key: 'name', label: 'Name' },

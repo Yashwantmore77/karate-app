@@ -19,6 +19,7 @@ import { openStoredFile } from '../../components/tms/download'
 import { useLoading } from '../../components/Loader'
 import InfoTip from '../../components/help/InfoTip'
 import TeamMembers from '../../components/tms/TeamMembers'
+import DateField from '../../components/tms/DateField'
 import { paymentsEnabled } from '@kumite/shared/features.js'
 
 const TEAM_FIELDS = [
@@ -429,7 +430,7 @@ export default function RegistrationsTab({ tournament, version, action, role, go
             </Grid>
             <Grid size={{ xs: 6 }}><TextField fullWidth label="Method" value={payment?.method || ''} onChange={(e) => setPayment({ ...payment, method: e.target.value })} placeholder="Cash / UPI / Bank" /></Grid>
             <Grid size={{ xs: 6 }}><TextField fullWidth label="Transaction ID" value={payment?.transactionId || ''} onChange={(e) => setPayment({ ...payment, transactionId: e.target.value })} /></Grid>
-            <Grid size={{ xs: 6 }}><TextField fullWidth type="date" label="Payment date" slotProps={{ inputLabel: { shrink: true } }} value={payment?.date || ''} onChange={(e) => setPayment({ ...payment, date: e.target.value })} /></Grid>
+            <Grid size={{ xs: 6 }}><DateField fullWidth label="Payment date" value={payment?.date || ''} onChange={(v) => setPayment({ ...payment, date: v })} /></Grid>
             <Grid size={{ xs: 6 }}><TextField fullWidth label="Receipt no." value={payment?.receipt || ''} onChange={(e) => setPayment({ ...payment, receipt: e.target.value })} /></Grid>
           </Grid>
         </DialogContent>
