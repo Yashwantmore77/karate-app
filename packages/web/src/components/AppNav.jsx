@@ -121,7 +121,8 @@ export const activeItem = (items, pathname) => {
 export default function AppNav({ user, profile }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { logout } = useSession()
+  const { logout, returnToSelf } = useSession()
+  const [returning, setReturning] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const { canInstall, install } = useInstallPrompt()
@@ -149,6 +150,23 @@ export default function AppNav({ user, profile }) {
 
   return (
     <>
+      {/* KAN-429: shown for as long as the signed-in token is a lens into
+          someone else's account, on every screen — not only Accounts, where
+          it was opened — since every action taken under it is recorded
+          under their name. */}
+      {user.impersonatedBy && (
+        <Box className="no-print" sx={{ bgcolor: 'warning.main', color: 'warning.contrastText', px: 2, py: 0.75, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: (theme) => theme.zIndex.drawer + 2 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>Signed in as {user.email}</Typography>
+          <Button
+            size="small" variant="contained" color="inherit" disabled={returning}
+            data-tip="Ends this and signs you back in as yourself."
+            onClick={async () => { setReturning(true); try { await returnToSelf() } finally { setReturning(false) } }}
+            sx={{ bgcolor: 'background.paper', color: 'text.primary', '&:hover': { bgcolor: 'background.paper' } }}
+          >
+            Return to my account
+          </Button>
+        </Box>
+      )}
       <AppBar position="sticky" className="no-print" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar sx={{ gap: 1 }}>
           <Box
