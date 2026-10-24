@@ -24,3 +24,11 @@ export const officials = async (role, tournamentId) => {
 export const create = async (fields) => (await httpPost('/users', fields)).user
 export const update = async (uid, patch) => (await httpPatch(`/users/${uid}`, patch)).user
 export const remove = (uid) => httpDelete(`/users/${uid}`)
+
+/**
+ * KAN-429: an admin's lens into another account, re-authenticated with the
+ * admin's own password (and 2FA code, if they have one). Returns the whole
+ * `{ token, user }` the server gives — the session layer re-derives the full
+ * shape (including who opened it) from that token itself, same as any other.
+ */
+export const impersonate = (uid, password, code) => httpPost(`/users/${uid}/impersonate`, { password, ...(code ? { code } : {}) })
