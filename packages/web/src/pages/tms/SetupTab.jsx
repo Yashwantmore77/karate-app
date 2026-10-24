@@ -213,6 +213,17 @@ export default function SetupTab({ tournament, reload, action }) {
         <HelpTitle id="setup.rules" variant="h3" gutterBottom>Competition rules</HelpTitle>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Configured per tournament, never hard-coded (sections 22, 29, 34, 35).</Typography>
         <Grid container spacing={2}>
+          <Grid size={{ xs: 12, md: 6 }}>
+            {/* PRD v1 §6: a versioned ruleset fills in scoring, overtime, penalties and kata; the settings below may still adjust it. */}
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+              <TextField select fullWidth label="Ruleset" value={rulesetId} onChange={(e) => setRulesetId(e.target.value)}
+                helperText={tournament.rulesetId ? `Applied: ${tournament.rulesetName || tournament.rulesetId}${tournament.rulesetVersion ? ` v${tournament.rulesetVersion}` : ''}` : 'Pick one, then apply'}>
+                {rulesets.map((r) => <MenuItem key={r.id} value={r.id}>{r.name}{r.version ? ` (v${r.version})` : ''}</MenuItem>)}
+              </TextField>
+              <Button variant="outlined" sx={{ mt: 1 }} disabled={!rulesetId || action.busy}
+                onClick={() => action.run(() => tms.applyRuleset(tid, rulesetId), 'Ruleset applied').then((t) => { if (t) setSettings(settingsOf(t)); reload() })}>Apply</Button>
+            </Stack>
+          </Grid>
           {NUMBER_SETTINGS.map(([k, label, help]) => (
             <Grid key={k} size={{ xs: 12, sm: 6, md: 3 }}>
               <TextField fullWidth type="number" label={label} helperText={help} value={settings[k]} onChange={(e) => setSettings({ ...settings, [k]: e.target.value })} />
@@ -229,17 +240,6 @@ export default function SetupTab({ tournament, reload, action }) {
                 onChange={(e) => setSettings({ ...settings, points: { ...settings.points, [k]: e.target.value } })} />
             </Grid>
           ))}
-          <Grid size={{ xs: 12, md: 6 }}>
-            {/* PRD v1 §6: a versioned ruleset fills in scoring, overtime, penalties and kata; the settings below may still adjust it. */}
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-              <TextField select fullWidth label="Ruleset" value={rulesetId} onChange={(e) => setRulesetId(e.target.value)}
-                helperText={tournament.rulesetId ? `Applied: ${tournament.rulesetName || tournament.rulesetId}${tournament.rulesetVersion ? ` v${tournament.rulesetVersion}` : ''}` : 'Pick one, then apply'}>
-                {rulesets.map((r) => <MenuItem key={r.id} value={r.id}>{r.name}{r.version ? ` (v${r.version})` : ''}</MenuItem>)}
-              </TextField>
-              <Button variant="outlined" sx={{ mt: 1 }} disabled={!rulesetId || action.busy}
-                onClick={() => action.run(() => tms.applyRuleset(tid, rulesetId), 'Ruleset applied').then((t) => { if (t) setSettings(settingsOf(t)); reload() })}>Apply</Button>
-            </Stack>
-          </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 4 }}>
             <TextField select fullWidth label="Splitting entries into pools" value={settings.poolMode} onChange={(e) => setSettings({ ...settings, poolMode: e.target.value })}>
               {POOL_MODES.map((m) => <MenuItem key={m} value={m}>{POOL_MODE_LABEL[m] || m}</MenuItem>)}
