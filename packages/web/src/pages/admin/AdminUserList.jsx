@@ -30,15 +30,18 @@ const password = Yup.string().test('password', function (value) {
   const problem = passwordProblem(value)
   return problem ? this.createError({ message: problem }) : true
 })
-const schemaFor = (editing) => Yup.object({
+// KAN-431: a coach's own login (PRD v1 §7) is permanently bound to one
+// tournament and team, set only through the registration link - editing
+// one here is just its email and password, none of the staff-account fields.
+const schemaFor = (editing, isCoach) => Yup.object({
   email: Yup.string().email('Enter a valid email address').required('Email required'),
   // Editing keeps the existing password unless a new one is typed.
   password: editing ? Yup.string().notRequired().test('password', function (value) {
     const problem = value ? passwordProblem(value) : null
     return problem ? this.createError({ message: problem }) : true
   }) : password.required('Password required'),
-  role: Yup.string().oneOf(users.ROLES).required('Role required'),
-  seat: Yup.number().integer('Seat must be a whole number').min(1, 'Seat must be 1 or more').nullable(),
+  role: isCoach ? Yup.string().notRequired() : Yup.string().oneOf(users.ROLES).required('Role required'),
+  seat: isCoach ? Yup.number().notRequired() : Yup.number().integer('Seat must be a whole number').min(1, 'Seat must be 1 or more').nullable(),
 })
 
 // The server answers with a code; these are the ones a person can act on.
@@ -79,6 +82,7 @@ export default function AdminUserList({ uid }) {
   )
 
   const editing = editingId ? accounts.find((a) => a.uid === editingId) : null
+  const isEditingCoach = editing?.role === 'coach'
   // A failed read and a failed write are both worth showing, and only one
   // can be on screen at a time.
   const error = writeError || (loadError ? messageFor(loadError) : null)
@@ -105,10 +109,25 @@ export default function AdminUserList({ uid }) {
       tournamentRoles: Object.entries(editing?.tournamentRoles || {}).map(([tournamentId, role]) => ({ tournamentId, role })),
     },
     enableReinitialize: true,
-    validationSchema: schemaFor(!!editingId),
+    validationSchema: schemaFor(!!editingId, isEditingCoach),
     validateOnChange: false,
     validateOnBlur: false,
     onSubmit: async (values) => {
+      // KAN-431: a coach account's email and password are the whole of what
+      // this form may change - its tournament and team are set once, at
+      // registration, and never through here.
+      if (isEditingCoach) {
+        const fields = { email: values.email.trim() }
+        if (values.password) fields.password = values.password
+        try {
+          await users.update(editingId, fields)
+          await refresh()
+          closeModal()
+        } catch (err) {
+          setError(messageFor(err))
+        }
+        return
+      }
       // An empty seat box means "no seat", which the API expresses as null so it
       // can tell clearing one from leaving it alone.
       const seat = values.seat === '' ? null : Number(values.seat)
@@ -231,9 +250,11 @@ export default function AdminUserList({ uid }) {
                       </TableCell>
                       <TableCell>{account.seat ?? '—'}</TableCell>
                       <TableCell>
-                        {account.tournamentIds?.length
-                          ? account.tournamentIds.map(tournamentName).join(', ')
-                          : account.role === 'tournament_owner' ? 'None yet' : 'All'}
+                        {/* KAN-431: a coach's own login names exactly one
+                            tournament, set at registration, never "All". */}
+                        {account.role === 'coach' ? tournamentName(account.tournamentId)
+                          : account.tournamentIds?.length ? account.tournamentIds.map(tournamentName).join(', ')
+                            : account.role === 'tournament_owner' ? 'None yet' : 'All'}
                       </TableCell>
                       {orgs.length > 0 && <TableCell>{account.organizationId ? orgName(account.organizationId) : 'None (all)'}</TableCell>}
                       <TableCell>{account.twoFactorEnabled ? '✓ On' : 'Off'}</TableCell>
@@ -282,8 +303,17 @@ export default function AdminUserList({ uid }) {
 
       <Dialog open={openModal} onClose={closeModal} fullWidth maxWidth="sm">
         <form onSubmit={formik.handleSubmit} noValidate>
-          <DialogTitle>{editingId ? 'Edit account' : 'Create account'}</DialogTitle>
+          <DialogTitle>{isEditingCoach ? 'Edit coach login' : editingId ? 'Edit account' : 'Create account'}</DialogTitle>
           <DialogContent>
+            {/* KAN-431: everything below belongs to a staff account - a
+                coach's own login (PRD v1 §7) is permanently bound to the
+                tournament and team it registered, so there is nothing here
+                for an admin to reassign beyond its email and password. */}
+            {isEditingCoach && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                {ROLE_LABEL.coach} for <b>{tournamentName(editing.tournamentId)}</b>. Its team is unaffected by anything in this dialog.
+              </Alert>
+            )}
             <TextField
               fullWidth margin="normal" label="Email" name="email" type="email"
               value={formik.values.email}
@@ -299,60 +329,64 @@ export default function AdminUserList({ uid }) {
               error={!!formik.errors.password}
               helperText={formik.errors.password || ' '}
             />
-            <FormControl fullWidth margin="normal" error={!!formik.errors.role}>
-              <InputLabel id="role-label">Role</InputLabel>
-              <Select
-                labelId="role-label" label="Role" name="role"
-                value={formik.values.role}
-                onChange={formik.handleChange}
-              >
-                {users.ROLES.map((role) => (
-                  <MenuItem key={role} value={role}>{ROLE_LABEL[role] || role}</MenuItem>
-                ))}
-              </Select>
-              {formik.errors.role && <FormHelperText>{formik.errors.role}</FormHelperText>}
-            </FormControl>
-            <TextField
-              fullWidth margin="normal" label="Seat (judges only)" name="seat"
-              value={formik.values.seat}
-              onChange={formik.handleChange}
-              error={!!formik.errors.seat}
-              helperText={formik.errors.seat || 'Leave blank if this account has no seat'}
-            />
-            <TextField
-              select fullWidth margin="normal" label="Tournaments this account may work"
-              value={formik.values.tournamentIds}
-              onChange={(e) => formik.setFieldValue('tournamentIds', typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
-              slotProps={{ select: { multiple: true, renderValue: (ids) => (ids.length ? ids.map(tournamentName).join(', ') : isOwner ? 'None yet' : 'All tournaments') }, inputLabel: { shrink: true } }}
-              helperText={isOwner
-                ? 'A Tournament Admin reaches exactly these tournaments. Empty means none at all.'
-                : 'Leave empty for all tournaments. A super admin always sees all.'}
-            >
-              {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
-            </TextField>
-            <Typography variant="subtitle2" sx={{ mt: 2 }}>Role in particular tournaments</Typography>
-            <Typography variant="body2" color="text.secondary">e.g. a referee who is the weigh-in officer at one event. Elsewhere the account keeps the role above.</Typography>
-            {formik.values.tournamentRoles.map((row, i) => (
-              <Box key={i} sx={{ display: 'flex', gap: 1, mt: 1, alignItems: 'center' }}>
-                <TextField select size="small" label="Tournament" sx={{ flex: 2 }} value={row.tournamentId}
-                  onChange={(e) => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.map((r, j) => (j === i ? { ...r, tournamentId: e.target.value } : r)))}>
+            {!isEditingCoach && (
+              <>
+                <FormControl fullWidth margin="normal" error={!!formik.errors.role}>
+                  <InputLabel id="role-label">Role</InputLabel>
+                  <Select
+                    labelId="role-label" label="Role" name="role"
+                    value={formik.values.role}
+                    onChange={formik.handleChange}
+                  >
+                    {users.ROLES.map((role) => (
+                      <MenuItem key={role} value={role}>{ROLE_LABEL[role] || role}</MenuItem>
+                    ))}
+                  </Select>
+                  {formik.errors.role && <FormHelperText>{formik.errors.role}</FormHelperText>}
+                </FormControl>
+                <TextField
+                  fullWidth margin="normal" label="Seat (judges only)" name="seat"
+                  value={formik.values.seat}
+                  onChange={formik.handleChange}
+                  error={!!formik.errors.seat}
+                  helperText={formik.errors.seat || 'Leave blank if this account has no seat'}
+                />
+                <TextField
+                  select fullWidth margin="normal" label="Tournaments this account may work"
+                  value={formik.values.tournamentIds}
+                  onChange={(e) => formik.setFieldValue('tournamentIds', typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                  slotProps={{ select: { multiple: true, renderValue: (ids) => (ids.length ? ids.map(tournamentName).join(', ') : isOwner ? 'None yet' : 'All tournaments') }, inputLabel: { shrink: true } }}
+                  helperText={isOwner
+                    ? 'A Tournament Admin reaches exactly these tournaments. Empty means none at all.'
+                    : 'Leave empty for all tournaments. A super admin always sees all.'}
+                >
                   {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
                 </TextField>
-                <TextField select size="small" label="Role there" sx={{ flex: 1.5 }} value={row.role}
-                  onChange={(e) => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.map((r, j) => (j === i ? { ...r, role: e.target.value } : r)))}>
-                  {users.TOURNAMENT_ROLES.map((r) => <MenuItem key={r} value={r}>{ROLE_LABEL[r] || r}</MenuItem>)}
-                </TextField>
-                <Button size="small" onClick={() => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.filter((_, j) => j !== i))}>Remove</Button>
-              </Box>
-            ))}
-            <Button size="small" sx={{ mt: 1 }} onClick={() => formik.setFieldValue('tournamentRoles', [...formik.values.tournamentRoles, { tournamentId: '', role: 'viewer' }])}>Add tournament role</Button>
-            {orgs.length > 0 && (
-              <TextField select fullWidth margin="normal" label="Organisation" value={formik.values.organizationId}
-                onChange={(e) => formik.setFieldValue('organizationId', e.target.value)}
-                helperText="An account in an organisation sees only that organisation's tournaments.">
-                <MenuItem value="">None — sees every tournament</MenuItem>
-                {orgs.map((o) => <MenuItem key={o.id} value={o.id}>{o.name}</MenuItem>)}
-              </TextField>
+                <Typography variant="subtitle2" sx={{ mt: 2 }}>Role in particular tournaments</Typography>
+                <Typography variant="body2" color="text.secondary">e.g. a referee who is the weigh-in officer at one event. Elsewhere the account keeps the role above.</Typography>
+                {formik.values.tournamentRoles.map((row, i) => (
+                  <Box key={i} sx={{ display: 'flex', gap: 1, mt: 1, alignItems: 'center' }}>
+                    <TextField select size="small" label="Tournament" sx={{ flex: 2 }} value={row.tournamentId}
+                      onChange={(e) => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.map((r, j) => (j === i ? { ...r, tournamentId: e.target.value } : r)))}>
+                      {allTournaments.map((t) => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
+                    </TextField>
+                    <TextField select size="small" label="Role there" sx={{ flex: 1.5 }} value={row.role}
+                      onChange={(e) => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.map((r, j) => (j === i ? { ...r, role: e.target.value } : r)))}>
+                      {users.TOURNAMENT_ROLES.map((r) => <MenuItem key={r} value={r}>{ROLE_LABEL[r] || r}</MenuItem>)}
+                    </TextField>
+                    <Button size="small" onClick={() => formik.setFieldValue('tournamentRoles', formik.values.tournamentRoles.filter((_, j) => j !== i))}>Remove</Button>
+                  </Box>
+                ))}
+                <Button size="small" sx={{ mt: 1 }} onClick={() => formik.setFieldValue('tournamentRoles', [...formik.values.tournamentRoles, { tournamentId: '', role: 'viewer' }])}>Add tournament role</Button>
+                {orgs.length > 0 && (
+                  <TextField select fullWidth margin="normal" label="Organisation" value={formik.values.organizationId}
+                    onChange={(e) => formik.setFieldValue('organizationId', e.target.value)}
+                    helperText="An account in an organisation sees only that organisation's tournaments.">
+                    <MenuItem value="">None — sees every tournament</MenuItem>
+                    {orgs.map((o) => <MenuItem key={o.id} value={o.id}>{o.name}</MenuItem>)}
+                  </TextField>
+                )}
+              </>
             )}
           </DialogContent>
           <DialogActions>

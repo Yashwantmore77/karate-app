@@ -347,9 +347,14 @@ export async function findUser(uid) {
  * Paged in memory for both backends: the account list is small by nature —
  * the officials at one venue — and a Mongo-side skip/limit would buy nothing
  * while splitting the search rules across two implementations.
+ *
+ * Coach logins (PRD v1 §7) are excluded by default: most callers (the
+ * first-run check, an organisation's account count) mean "staff", and a
+ * coach account carries no organizationId to join against. The Accounts
+ * screen asks for them explicitly with includeCoaches.
  */
-export async function listUsers({ q = '', page = 1, limit = 25, organizationId = null } = {}) {
-  const all = (await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())).filter((u) => u.role !== 'coach')
+export async function listUsers({ q = '', page = 1, limit = 25, organizationId = null, includeCoaches = false } = {}) {
+  const all = (await (isMongoConfigured() ? listMongoUsers() : listMemoryUsers())).filter((u) => includeCoaches || u.role !== 'coach')
   const users = organizationId ? all.filter((u) => u.organizationId === organizationId) : all
   const needle = q.trim().toLowerCase()
 
