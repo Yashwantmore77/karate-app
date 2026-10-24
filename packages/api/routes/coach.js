@@ -8,6 +8,7 @@ import { badRequest } from '../lib/errors.js'
 import { playerBody, withMeta, TEAM_MEMBER, TEAM as TEAM_FIELDS } from './tms.js'
 import { FILE_SCHEMA, sendFile } from './files.js'
 import { certificatesPdf } from '../lib/pdf.js'
+import { TEAM_PROFILE_KEYS } from '@kumite/shared/registration.js'
 
 // The organisers' team fields, less `active`, which only organisers set.
 const { active: _organisersOnly, ...TEAM } = TEAM_FIELDS
@@ -31,7 +32,14 @@ export function coachRoutes(tms) {
 
   // Registering the team re-issues the session with the team in it.
   router.post('/team', async (req, res) => {
-    const team = await tms.teams.create(withMeta(req), t(req), validate(req.body, { ...TEAM, termsAccepted: { type: 'boolean' } }))
+    const overview = await tms.coachOverview(req.user)
+    const requiredProfileFields = overview.form
+      .filter((field) => TEAM_PROFILE_KEYS.includes(field.key) && field.required && !field.readOnly
+        && field.key !== 'club' && (field.key !== 'country' || !overview.tournament.country))
+      .map((field) => [field.key, { ...TEAM[field.key], required: true }])
+    const team = await tms.teams.create(withMeta(req), t(req), validate(req.body, {
+      ...TEAM, ...Object.fromEntries(requiredProfileFields), termsAccepted: { type: 'boolean' },
+    }))
     res.status(201).json({ team, token: signCoachToken({ linkId: req.user.linkId, tournamentId: t(req), teamId: team.id }) })
   })
   router.patch('/team', async (req, res) => {

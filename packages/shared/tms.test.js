@@ -3,7 +3,7 @@ import { createTms, TMS_COLLECTIONS, divisionKey } from './tms.js'
 import { memoryStores } from './test/memoryStore.js'
 import { poolSizes, drawPools, roundRobin, poolName, seededRandom } from './pools.js'
 import { poolStandings, buildBracket, seedOrder, bracketMedals, medalTally, qualifierSeeds } from './results.js'
-import { validatePlayer, parseCsv, validateBulkRows, publicPlayer, normalizeForm, DEFAULT_FIELDS } from './registration.js'
+import { validatePlayer, parseCsv, validateBulkRows, publicPlayer, normalizeForm, DEFAULT_FIELDS, withTeamDefaults } from './registration.js'
 import { hashSecret, verifySecret } from './secret.js'
 import { can, PERMISSION } from './permissions.js'
 
@@ -122,6 +122,18 @@ describe('results', () => {
 })
 
 describe('registration form and bulk upload', () => {
+  it('uses team profile details as player defaults without copying the team federation ID', () => {
+    expect(withTeamDefaults({}, {
+      name: 'ABC Dojo', club: 'ABC Karate', coachName: 'Sensei Rao', district: 'Pune',
+      division: 'Advanced', state: 'Maharashtra', country: 'India', federationId: 'TEAM-123',
+    })).toMatchObject({
+      club: 'ABC Karate', coachName: 'Sensei Rao', district: 'Pune', division: 'Advanced',
+      state: 'Maharashtra', country: 'India',
+    })
+    expect(withTeamDefaults({}, { name: 'ABC Dojo', federationId: 'TEAM-123' }).federationId).toBeUndefined()
+    expect(withTeamDefaults({}, { name: 'Legacy Dojo', state: 'MH' }, 'India').state).toBeUndefined()
+  })
+
   it('normalises a player and reports what is wrong', () => {
     const ok = validatePlayer({ name: 'Rahul', dob: '15/06/2014', gender: 'Boy', events: 'Kata + Kumite', weight: '34.5', club: 'ABC', country: 'india' })
     expect(ok.errors).toEqual([])

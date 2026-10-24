@@ -25,7 +25,7 @@ import { paymentsEnabled } from '@kumite/shared/features.js'
 const TEAM_FIELDS = [
   ['name', 'Team name', 6], ['club', 'Club / Dojo name', 6], ['code', 'Club code', 4], ['coachName', 'Head coach (first team member)', 4],
   ['contactPerson', 'Contact person', 4], ['mobile', 'Mobile', 4], ['email', 'Email', 4], ['district', 'District', 4],
-  ['state', 'State', 4], ['country', 'Country', 4], ['address', 'Address', 12],
+  ['division', 'Division', 4], ['state', 'State', 4], ['country', 'Country', 4], ['federationId', 'Federation ID', 4], ['address', 'Address', 8],
 ]
 
 const blank = (fields) => ({ events: [], gender: '', ...Object.fromEntries(fields.filter((f) => f.type !== 'checkbox').map((f) => [f.key, ''])) })
