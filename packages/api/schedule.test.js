@@ -276,6 +276,26 @@ describe('rescheduling an existing match', () => {
 })
 
 describe('a mat holds one bout at a time', () => {
+  it('serializes simultaneous creates that claim the same slot', async () => {
+    const results = await Promise.all([
+      matchIn(ids.catA, { scheduledAt: AT_ONE, mat: 1 }),
+      matchIn(ids.catB, { scheduledAt: AT_ONE, mat: 1 }),
+    ])
+
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409])
+  })
+
+  it('serializes simultaneous schedule updates that claim the same slot', async () => {
+    const first = (await matchIn(ids.catA, {})).payload.match
+    const second = (await matchIn(ids.catB, {})).payload.match
+    const results = await Promise.all([
+      call('PATCH', `/matches/${first.id}`, { token: tokens.referee, body: { scheduledAt: AT_ONE, mat: 1 } }),
+      call('PATCH', `/matches/${second.id}`, { token: tokens.referee, body: { scheduledAt: AT_ONE, mat: 1 } }),
+    ])
+
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409])
+  })
+
   it('refuses a second bout on the same mat in an overlapping slot', async () => {
     await matchIn(ids.catA, { scheduledAt: AT_ONE, mat: 2, redId: ids.a1, blueId: ids.a2 })
     // Entirely different people, so only the mat can be what clashes.
