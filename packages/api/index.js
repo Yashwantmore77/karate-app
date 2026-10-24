@@ -287,21 +287,37 @@ export function createApp() {
         }
         try {
           const before = room.state
+          const historyBefore = room.history
+          const seqBefore = room.seq
+          const lastAtBefore = room.lastAt
           // An action scored offline keeps the time it happened (clamped in the room).
           const event = room.apply(cmd, payload, socket.id, { at: Number.isFinite(offlineAt) ? offlineAt : null })
           if (event) {
             room.remember(clientEventId, event.seq)
-            broadcast(matchId, { ...event, matchId, clientEventId })
             // PRD point 33: every live change is logged, corrections audited.
-            // Written one after another per bout, and never awaited here so
-            // scoring never waits on the database: after a restart the saved
-            // bout is the latest, and Live/Paused follow the clock in order.
             const logged = { seq: event.seq, cmd, payload, before, after: event.state, at: event.at }
-            const saved = { seq: room.seq, state: room.state, history: room.history, handoffs: room.handoffs, controllerUid: room.controllerUid, lastAt: room.lastAt }
-            room.saving = room.saving.then(() => Promise.all([
-              tms.recordLiveEvent(socket.user, matchId, logged).catch(() => {}),
-              tms.saveLiveState(matchId, saved).catch(() => {}),
-            ]))
+            const saved = {
+              seq: room.seq, state: room.state, history: room.history, handoffs: room.handoffs,
+              controllerUid: room.controllerUid, lastAt: room.lastAt, seen: [...room.seen],
+            }
+            try {
+              await tms.saveLiveState(matchId, saved)
+            } catch (err) {
+              room.state = before
+              room.history = historyBefore
+              room.seq = seqBefore
+              room.lastAt = lastAtBefore
+              if (clientEventId) room.seen.delete(clientEventId)
+              console.error(`[api] could not save live state for ${matchId}`, err)
+              return ack?.({ error: 'persistence_failed' })
+            }
+            broadcast(matchId, { ...event, matchId, clientEventId })
+            try {
+              await tms.recordLiveEvent(socket.user, matchId, logged)
+            } catch (err) {
+              console.error(`[api] could not record live event ${matchId}:${event.seq}`, err)
+              return ack?.({ error: 'event_log_failed', committed: true, seq: event.seq })
+            }
           }
           ack?.({ ok: true, seq: room.seq })
         } catch (err) {

@@ -4,14 +4,14 @@ import { createApp } from './index.js'
 import { remainingNow } from '@kumite/shared/clock.js'
 import { formatClock } from '@kumite/shared/format.js'
 
-let http, port, clients, refereeToken, judgeToken
+let app, http, port, clients, refereeToken, judgeToken
 
 // The bout every socket test scores. A room is only opened for a bout that
 // exists (a made-up id is refused), so it is stored first; unassigned, so
 // any referee may hold its mat (AC-14).
 const listen = () =>
   new Promise((resolve) => {
-    const app = createApp()
+    app = createApp()
     http = app.http
     app.stores.matches.insert({ id: 'm1', status: 'open', refereeId: null, judgeIds: [] }).then(() => {
       http.listen(0, () => resolve(http.address().port))
@@ -108,6 +108,33 @@ describe('BE-1 match server', () => {
     await emit(admin, 'match:takeover', { matchId: 'm1' })
     const after = await emit(client(), 'match:join', { matchId: 'm1' })
     expect(after.handoffs).toBe(1)
+  })
+
+  it('persists duplicate ids so a retried score is not applied after a room restart', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    expect((await emit(referee, 'match:cmd', {
+      matchId: 'm1', cmd: 'SCORE', payload: { side: 'aka', type: 'yuko' }, clientEventId: 'restart-retry',
+    })).ok).toBe(true)
+    app.rooms.delete('m1')
+    const snapshot = await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    expect(snapshot.seq).toBe(1)
+    expect((await emit(referee, 'match:cmd', {
+      matchId: 'm1', cmd: 'SCORE', payload: { side: 'aka', type: 'yuko' }, clientEventId: 'restart-retry',
+    })).duplicate).toBe(true)
+    expect((await emit(referee, 'match:join', { matchId: 'm1' })).seq).toBe(1)
+  })
+
+  it('reports a live-state save failure and restores the in-memory bout', async () => {
+    const referee = client()
+    await emit(referee, 'match:join', { matchId: 'm1', control: true })
+    app.tms.saveLiveState = async () => { throw new Error('storage unavailable') }
+
+    const reply = await emit(referee, 'match:cmd', { matchId: 'm1', cmd: 'CLOCK_START', clientEventId: 'save-failure' })
+
+    expect(reply.error).toBe('persistence_failed')
+    expect(app.rooms.get('m1').seq).toBe(0)
+    expect(app.rooms.get('m1').state.clock.running).toBe(false)
   })
 
   it('hands a joining device the current snapshot', async () => {

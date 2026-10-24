@@ -2329,6 +2329,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const doc = {
       seq: snapshot.seq, state: snapshot.state, history: snapshot.history || [], savedAt: iso(),
       handoffs: snapshot.handoffs || 0, controllerUid: snapshot.controllerUid || null, lastAt: snapshot.lastAt || 0,
+      seen: snapshot.seen || [],
     }
     return stores.liveStates.get(matchId).then((row) => (row ? stores.liveStates.update(matchId, doc) : stores.liveStates.insert({ id: matchId, ...doc })))
   }

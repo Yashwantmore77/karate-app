@@ -22,8 +22,6 @@ export class MatchRoom {
     this.seen = new Map()
     // Commands run one after another, in arrival order, even with async checks.
     this.queue = Promise.resolve()
-    // Saves of this bout run one after another, so the saved copy is the latest.
-    this.saving = Promise.resolve()
     // When anyone last joined, took or scored the mat: an idle room leaves memory.
     this.usedAt = serverNow()
     this.restored = false
@@ -37,11 +35,12 @@ export class MatchRoom {
   }
 
   /** PRD v1 §28 "Interrupted match: preserve state and resume". */
-  restore({ seq = 0, state = null, history = [], handoffs = 0, controllerUid = null, lastAt = 0 } = {}) {
+  restore({ seq = 0, state = null, history = [], handoffs = 0, controllerUid = null, lastAt = 0, seen = [] } = {}) {
     if (!state) return
     this.seq = seq
     this.state = state
     this.history = Array.isArray(history) ? history : []
+    this.seen = new Map(Array.isArray(seen) ? seen : [])
     this.handoffs = Number(handoffs) || 0
     this.controllerUid = controllerUid || null
     this.lastAt = Number(lastAt) || 0
