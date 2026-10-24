@@ -3,6 +3,10 @@ import jwt from 'jsonwebtoken'
 
 const ALGORITHM = 'HS256'
 export const TOKEN_TTL = '12h' // a tournament day
+// KAN-impersonation: short on purpose — this is a lens into someone else's
+// account, not a sign-in of its own, so a forgotten open tab stops mattering
+// well before a shift ends.
+export const IMPERSONATION_TTL = '30m'
 
 // A secret must come from the environment in anything but local development.
 // Falling back to a random one per boot is deliberate: it keeps tokens
@@ -24,11 +28,21 @@ if (!process.env.JWT_SECRET) {
   console.warn('[auth] JWT_SECRET is not set — using a per-boot random secret')
 }
 
-export const signToken = (user, sid = null) =>
+/**
+ * `impersonatedBy`/`impersonatorSid` (KAN-impersonation) mark a token as an
+ * admin's lens into this account rather than the account's own sign-in: both
+ * requireAuth and socketAuth then require the admin's own session to still be
+ * active too, so ending the admin's session ends every lens they opened with
+ * it, not just their own.
+ */
+export const signToken = (user, sid = null, { impersonatedBy = null, impersonatorSid = null, ttl = TOKEN_TTL } = {}) =>
   jwt.sign(
-    { uid: user.uid, email: user.email, role: user.role, seat: user.seat, ...(sid ? { sid } : {}) },
+    {
+      uid: user.uid, email: user.email, role: user.role, seat: user.seat, ...(sid ? { sid } : {}),
+      ...(impersonatedBy ? { impersonatedBy, impersonatorSid } : {}),
+    },
     secret,
-    { algorithm: ALGORITHM, expiresIn: TOKEN_TTL, subject: user.uid }
+    { algorithm: ALGORITHM, expiresIn: ttl, subject: user.uid }
   )
 
 /**

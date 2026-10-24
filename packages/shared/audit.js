@@ -75,6 +75,10 @@ export const AUDIT_ACTIONS = {
   QUALIFIERS_SET: 'pool.qualifiers_set',
   SINGLE_ENTRY_DECIDED: 'division.single_entry',
   USER_CHANGED: 'user.changed',
+  // An admin's lens into another account (KAN-impersonation): start and stop
+  // mark the window; every write made inside it also carries actorImpersonatedBy.
+  IMPERSONATION_STARTED: 'user.impersonation_started',
+  IMPERSONATION_STOPPED: 'user.impersonation_stopped',
   ORGANIZATION_CHANGED: 'organization.changed',
   LOGOUT: 'auth.logout',
   SESSION_REVOKED: 'auth.session_revoked',
@@ -111,6 +115,11 @@ export function createAuditLog(collection) {
         tournamentId: tournamentId ?? null,
         actorId: actor?.uid ?? null,
         actorRole: actor?.role ?? null,
+        // KAN-impersonation: the actor is whoever the request was signed in
+        // as, which while impersonating is the account being looked through —
+        // this names the admin on the other end of the lens, on every entry,
+        // with no change needed anywhere a write is already recorded.
+        actorImpersonatedBy: actor?.impersonatedBy ?? null,
         action,
         entity,
         entityId: entityId ?? null,
