@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material'
 import { useMatchClock } from '../../hooks/useMatchClock'
 import { useServerNow } from '../../hooks/useServerNow'
@@ -36,6 +37,14 @@ function NowOnMat({ bout, board }) {
   const serverNow = useServerNow()
   const beat = typeof board?.heartbeatAt === 'number' ? board.heartbeatAt : Date.parse(board?.heartbeatAt)
   const fresh = !!board && (!Number.isFinite(beat) || serverNow() - beat < STALE_MS)
+  // A scoreboard that falls silent with its clock stopped changes nothing on
+  // the page, so look again when its last heartbeat goes stale.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!fresh || !Number.isFinite(beat)) return
+    const id = setTimeout(() => setTick((t) => t + 1), beat + STALE_MS - serverNow() + 50)
+    return () => clearTimeout(id)
+  }, [fresh, beat, serverNow])
   return (
     <Box sx={{ mb: 1 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
