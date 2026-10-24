@@ -4,6 +4,7 @@ import { BUILT_IN_KEYS, fieldShown, CALCULATED_FORMULAS, SYSTEM_SOURCES } from '
 import { COUNTRIES, statesOf } from '@kumite/shared/geography.js'
 import { checkFile } from '@kumite/shared/files.js'
 import { readFileBase64 } from './download'
+import DateField from './DateField'
 
 const ACCEPT = 'image/png,image/jpeg,application/pdf'
 const MAX_FILE = 2 * 1024 * 1024
@@ -165,11 +166,13 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
               {fileErr && <FormHelperText>{fileErr}</FormHelperText>}
             </FormControl>
           )
+        } else if (field.type === 'date') {
+          input = <DateField {...common} value={v ?? ''} onChange={(nv) => set(field.key, nv)} />
         } else {
-          const type = field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'
+          const type = field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'
           input = (
             <TextField {...common} type={type} value={v ?? ''}
-              slotProps={{ inputLabel: type === 'date' ? { shrink: true } : undefined, htmlInput: type === 'number' ? { step: '0.1', min: field.min ?? 0, max: field.max } : type === 'date' ? undefined : { maxLength: field.max } }}
+              slotProps={{ htmlInput: type === 'number' ? { step: '0.1', min: field.min ?? 0, max: field.max } : { maxLength: field.max } }}
               onChange={(e) => set(field.key, type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} />
           )
         }

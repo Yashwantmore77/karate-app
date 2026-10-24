@@ -12,6 +12,7 @@ import { PageLoader } from '../../components/Loader'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { describeError } from '../../data/tms'
 import StatusBadge from '../../components/tms/StatusBadge'
+import DateField from '../../components/tms/DateField'
 
 // What the tournament holds: decides which screens it needs (a Kumite-only
 // event has no kata panel, a Kata-only one no weigh-in). Panel size and slot
@@ -268,15 +269,12 @@ export default function AdminTournamentList({ profile = null, basePath = '/admin
               placeholder="E.g., New York"
             />
 
-            <TextField
+            <DateField
               fullWidth
-              type="date"
-              name="date"
               label="Tournament Date"
-              slotProps={{ inputLabel: { shrink: true } }}
               value={formik.values.date}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
+              onChange={(v) => formik.setFieldValue('date', v)}
+              onBlur={() => formik.setFieldTouched('date', true)}
               error={!!formik.errors.date}
               helperText={formik.errors.date || ' '}
               margin="normal"

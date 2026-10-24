@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { SpeedInsights } from '@vercel/speed-insights/react'
 import { Analytics } from '@vercel/analytics/react'
 import { SessionProvider, useSession } from './state/SessionContext'
@@ -180,6 +182,7 @@ function AppShell() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
       <ConnectionProvider>
       {loading ? (
         <PageLoader label="Signing you in…" minHeight="100vh" />
@@ -344,6 +347,7 @@ function AppShell() {
         </BrowserRouter>
       )}
       </ConnectionProvider>
+      </LocalizationProvider>
       <SpeedInsights />
       <Analytics />
     </ThemeProvider>

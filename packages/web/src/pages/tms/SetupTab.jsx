@@ -18,6 +18,7 @@ import { checkFile } from '@kumite/shared/files.js'
 import { HelpTitle } from '../../components/help/InfoTip'
 import { paymentsEnabled } from '@kumite/shared/features.js'
 import { PageLoader } from '../../components/Loader'
+import DateField from '../../components/tms/DateField'
 
 const DETAIL_FIELDS = [
   ['name', 'Tournament name', 12], ['description', 'Description', 12],
@@ -145,13 +146,13 @@ export default function SetupTab({ tournament, reload, action }) {
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, sm: 4 }}>
-            <TextField fullWidth required type="date" label="Master Age Calculation Date" slotProps={{ inputLabel: { shrink: true } }}
-              value={details.masterAgeDate || ''} onChange={(e) => setDetails({ ...details, masterAgeDate: e.target.value })}
+            <DateField fullWidth required label="Master Age Calculation Date"
+              value={details.masterAgeDate || ''} onChange={(v) => setDetails({ ...details, masterAgeDate: v })}
               helperText="Every age is calculated against this date (Rule 1)" disabled={tournament.entriesLocked} />
           </Grid>
           <Grid size={{ xs: 12, sm: 4 }}>
-            <TextField fullWidth type="date" label="Listing date" slotProps={{ inputLabel: { shrink: true } }} value={details.date || ''}
-              onChange={(e) => setDetails({ ...details, date: e.target.value })} />
+            <DateField fullWidth label="Listing date" value={details.date || ''}
+              onChange={(v) => setDetails({ ...details, date: v })} />
           </Grid>
           {WINDOW_FIELDS.map(([k, label, suffix]) => (
             <Grid key={k} size={{ xs: 12, sm: 6, md: 3 }}>
@@ -166,8 +167,7 @@ export default function SetupTab({ tournament, reload, action }) {
           </Grid>
           {DATE_FIELDS.map(([k, label]) => (
             <Grid key={k} size={{ xs: 12, sm: 4 }}>
-              <TextField fullWidth type="date" label={label} slotProps={{ inputLabel: { shrink: true } }} value={details[k] || ''}
-                onChange={(e) => setDetails({ ...details, [k]: e.target.value })} />
+              <DateField fullWidth label={label} value={details[k] || ''} onChange={(v) => setDetails({ ...details, [k]: v })} />
             </Grid>
           ))}
           {DETAIL_FIELDS.map(([k, label, w]) => (
@@ -327,7 +327,7 @@ export default function SetupTab({ tournament, reload, action }) {
               {link.hasPassword && <Button variant="outlined" color="warning" onClick={() => saveLink({ password: '' })}>Remove password</Button>}
             </Stack>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ alignItems: { sm: 'center' } }}>
-              <TextField type="date" label="Expires on" slotProps={{ inputLabel: { shrink: true } }} value={linkExpiry} onChange={(e) => setLinkExpiry(e.target.value)} />
+              <DateField label="Expires on" value={linkExpiry} onChange={setLinkExpiry} />
               <Button variant="outlined" onClick={() => saveLink({ expiresAt: linkExpiry ? `${linkExpiry}T23:59:59.000Z` : null })}>Save expiry</Button>
               <FormControlLabel control={<Switch checked={!!link.active} onChange={(e) => saveLink({ active: e.target.checked })} />} label={link.active ? 'Enabled' : 'Disabled'} />
               <Button color="warning" onClick={() => saveLink({ regenerate: true })}>Regenerate link</Button>
