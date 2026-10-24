@@ -3683,6 +3683,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     const medals = t.resultsPublished ? (await listMedals(tournamentId)).filter((m) => released.has(m.divisionKey)) : []
     const stripPrivate = ({ id, name, team, club, state, country, rank, medal, category, event, played, wins, losses, draws, points, scoreFor, scoreAgainst, qualified, tieBreak, reason }) =>
       ({ id, name, team, club, state, country, rank, medal, category, event, played, wins, losses, draws, points, scoreFor, scoreAgainst, qualified, tieBreak, reason })
+    const scoreboards = await scoreboardsOf(matchRows)
     return {
       tournament: publicTournament(t),
       categories: divisionRows.map(({ key, label, event, count, gender }) => ({ key, label, event, count, gender })),
@@ -3696,6 +3697,7 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
         id: m.id, matchNumber: m.matchNumber, mat: m.mat, scheduledAt: m.scheduledAt || null, category: m.categoryName, divisionKey: m.divisionKey, event: eventOfCategory(m),
         pool: m.poolName, round: m.round, stage: m.stage, roundName: m.roundName || null, status: m.status, resultType: m.resultType,
         aka: m.akaName, ao: m.aoName, winner: m.winner || null, akaScore: m.avgRed ?? null, aoScore: m.avgBlue ?? null, calledAt: m.calledAt || null,
+        scoreboard: scoreboards.get(m.id) || null,
       })),
       results: res.map((d) => ({
         key: d.key, label: d.label, event: d.event, resultStatus: d.resultStatus,
@@ -3707,6 +3709,21 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
       medals: medals.map(stripPrivate),
       tally: t.resultsPublished ? { club: medalTally(medals, 'club'), state: medalTally(medals, 'state'), district: medalTally(medals, 'district'), country: medalTally(medals, 'country') } : null,
     }
+  }
+
+  /**
+   * KAN-428: the live score of each bout on a mat now, from the mat
+   * scoreboard (the row the console publishes) that shows this very bout:
+   * the rows are per mat for the whole server, not per tournament. One read,
+   * whichever mat the bout ended up on. Only what the hall screen shows
+   * anyway: scores, senshu, clock and outcome.
+   */
+  async function scoreboardsOf(bouts) {
+    const onMat = new Set(bouts.filter((m) => ['live', 'open', 'paused'].includes(m.status)).map((m) => m.id))
+    if (!stores.display || !onMat.size) return new Map()
+    const rows = (await stores.display.list({})).filter((r) => /^mat-\d+$/.test(r.id) && r.status === 'open' && onMat.has(r.matchId))
+    return new Map(rows.map(({ matchId, akaScore = 0, aoScore = 0, senshu = null, clock = null, outcome = null, heartbeatAt = null }) =>
+      [matchId, { akaScore, aoScore, senshu, clock, outcome, heartbeatAt }]))
   }
 
   /** PRD v1 §22: exports are audit events. */

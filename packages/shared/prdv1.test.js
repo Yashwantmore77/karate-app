@@ -1028,3 +1028,37 @@ describe('registration actions offered only where they work', () => {
     await expect(tms.setRegistrationStatus(admin, t.id, p.id, 'reject', 'Too late')).rejects.toMatchObject({ code: 'invalid_transition', details: { from: 'WEIGH_IN_VERIFIED', to: 'REJECTED' } })
   })
 })
+
+describe('live scores on the public page (KAN-428)', () => {
+  it("gives a bout on a mat the score its mat's scoreboard shows for it, and no other bout's", async () => {
+    const { tms, t, add, stores } = await world({ settings: { requireWeighInForDraw: false } })
+    stores.display = memoryStores(['display']).display
+    await add(4)
+    await tms.categorize(admin, t.id)
+    await tms.setEntriesLock(admin, t.id, true)
+    await tms.generatePools(admin, t.id, { seed: 1 })
+    await tms.setDrawLock(admin, t.id, true)
+    await tms.generateMatches(admin, t.id)
+    await stores.tournaments.update(t.id, { lifecycleStatus: 'LIVE' })
+    const [onMat, waiting, ended] = await tms.listMatches(t.id)
+    await stores.matches.update(onMat.id, { status: 'live' })
+    await stores.matches.update(ended.id, { status: 'live' })
+    const clock = { running: true, remainingMs: 61_000, startedAt: 1000 }
+    // Mat 1 shows the bout on it; mat 2's scoreboard closed with its bout; the hall row is not a mat's.
+    await stores.display.insert({ id: 'mat-1', status: 'open', matchId: onMat.id, akaScore: 3, aoScore: 1, senshu: 'aka', clock, heartbeatAt: 5000, akaName: 'x', message: 'Lunch at 1' })
+    await stores.display.insert({ id: 'mat-2', status: 'closed', matchId: ended.id, akaScore: 2, aoScore: 2 })
+    await stores.display.insert({ id: 'live', status: 'open', matchId: ended.id, akaScore: 9, aoScore: 9 })
+    // Another tournament's bout on mat 3 changes nothing here.
+    await stores.display.insert({ id: 'mat-3', status: 'open', matchId: 'elsewhere', akaScore: 7, aoScore: 0 })
+
+    const bouts = Object.fromEntries((await tms.publicView(t.id)).matches.map((m) => [m.id, m]))
+    // Only what the hall screen shows: no names, announcement or anything else from the row.
+    expect(bouts[onMat.id].scoreboard).toEqual({ akaScore: 3, aoScore: 1, senshu: 'aka', clock, outcome: null, heartbeatAt: 5000 })
+    expect(bouts[ended.id].scoreboard).toBeNull()
+    expect(bouts[waiting.id].scoreboard).toBeNull()
+
+    // A bout that is not on a mat any more has no live score, whatever a scoreboard still shows.
+    await stores.matches.update(onMat.id, { status: 'completed' })
+    expect((await tms.publicView(t.id)).matches.find((m) => m.id === onMat.id).scoreboard).toBeNull()
+  })
+})
