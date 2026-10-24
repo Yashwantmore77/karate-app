@@ -547,7 +547,7 @@ The TV screens need no sign-in. Each one opens the app's address followed by **/
 The Scoreboard Operator's page lists these screens, so they open with one click:
 
 1. **Mat 1** (1), **Mat 2** and so on: one mat's bout and score, for the TV beside that mat.
-2. **Live board (every mat)** (2): every mat and the next bouts, for a big screen in the hall or spectators' phones.
+2. **Live board (every mat)** (2): every mat with the live score of the bout on it, and the next bouts, for a big screen in the hall or spectators' phones.
 3. To put a message on the screens, type it in **Message for the hall** (3) and click **Show** (4), for example "Lunch break until 1:30 pm". **Clear** removes it.
 
 ![Scoreboard control: 1 a mat's screen, 2 Live board, 3 and 4 a message for the hall](images/p4-screens.webp)
