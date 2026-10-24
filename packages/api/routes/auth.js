@@ -39,7 +39,7 @@ export function authRoutes({ audit = async () => {} } = {}) {
     windowMs: LOGIN_WINDOW_MS,
     max: LOGIN_MAX_PER_ACCOUNT,
     code: 'too_many_attempts',
-    keyOf: (req) => `${req.ip || 'unknown'}|${attemptedEmail(req)}`,
+    keyOf: attemptedEmail,
   })
 
   const perAddress = rateLimit({
