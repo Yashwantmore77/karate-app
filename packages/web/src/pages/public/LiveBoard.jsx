@@ -1,23 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Box, Typography, Paper, Grid, Stack, Chip, Card, CardActionArea, CardContent, Container } from '@mui/material'
+import { Box, Typography, Paper, Grid, Stack, Card, CardActionArea, CardContent, Container } from '@mui/material'
 import { tms } from '../../data/tms'
 import { watchPublicChanges } from '../../data/live'
-import { displayRepo } from '../../data/display'
 import Bracket from '../../components/tms/Bracket'
 import KataRoundTable from '../../components/tms/KataRoundTable'
 import { PageLoader } from '../../components/Loader'
+import MatCard from '../../components/tms/MatCard'
+import { matQueues } from '../../components/tms/matQueues'
+import { useMatScoreboards } from '../../hooks/useMatScoreboards'
 
-const AKA = '#FF5B5B'
-const AO = '#5B7BFF'
-const NEXT_PER_MAT = 3
 const EVENT_NAME = { kata: 'Kata', kumite: 'Kumite' }
 const ROTATE_MS = 12_000
-const number = (m) => Number(String(m.matchNumber).replace(/\D/g, '')) || 0
 
 /**
  * PRD point 22: the hall screen at /live. For every mat, the bout on it (with
- * the live score when the scoreboard is open), the bouts called and coming
+ * its live score while that mat's scoreboard shows it), the bouts called and coming
  * next, and a rotating view of the brackets and kata results. Public data
  * only (Rule 8); it updates itself as the server announces changes.
  *
@@ -54,8 +52,8 @@ export default function LiveBoard() {
 
 function Board({ slug }) {
   const [data, setData] = useState(null)
-  const [live, setLive] = useState(null)
   const [slide, setSlide] = useState(0)
+  const scoreOf = useMatScoreboards()
 
   useEffect(() => {
     let alive = true
@@ -64,7 +62,6 @@ function Board({ slug }) {
     const stop = watchPublicChanges(load)
     return () => { alive = false; stop() }
   }, [slug])
-  useEffect(() => displayRepo.subscribe(setLive), [])
 
   // The brackets and kata results with something to show, one at a time.
   const slides = useMemo(() => (data?.results || []).flatMap((d) => [
@@ -81,12 +78,9 @@ function Board({ slug }) {
 
   // Only the event on the mats now (Kata and Kumite take turns): the other's bouts are not next.
   const running = data.tournament.runningEvent
-  const waiting = data.matches.filter((m) => !['completed', 'cancelled'].includes(m.status) && m.aka && m.ao)
-  const pending = waiting.filter((m) => !running || !m.event || m.event === running).sort((a, b) => number(a) - number(b))
-  const later = waiting.find((m) => running && m.event && m.event !== running)
-  const mats = [...new Set(pending.map((m) => m.mat || 1))].sort((a, b) => a - b)
+  const queues = matQueues(data.matches, running, (m) => !!scoreOf(m))
+  const later = running && data.matches.find((m) => !['completed', 'cancelled'].includes(m.status) && m.aka && m.ao && m.event && m.event !== running)
   const recent = data.matches.filter((m) => m.status === 'completed').slice(-6).reverse()
-  const scoreboardOpen = live && live.status === 'open'
   const current = slides[slide % Math.max(1, slides.length)]
 
   return (
@@ -99,38 +93,13 @@ function Board({ slug }) {
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 7 }}>
           <Grid container spacing={2}>
-            {!mats.length && <Grid size={{ xs: 12 }}><Paper sx={{ p: 3 }}><Typography color="text.secondary">{later ? `${EVENT_NAME[running]} is on the mats now. The ${EVENT_NAME[later.event]} bouts come after it.` : 'No bouts waiting.'}</Typography></Paper></Grid>}
-            {mats.map((mat) => {
-              const queue = pending.filter((m) => (m.mat || 1) === mat)
-              const now = queue.find((m) => ['live', 'open', 'paused'].includes(m.status)) || null
-              const next = queue.filter((m) => m !== now).slice(0, NEXT_PER_MAT)
-              const showScore = now && scoreboardOpen && String(live.fieldNumber || '') === String(mat)
-              return (
-                <Grid key={mat} size={{ xs: 12, md: 6 }}>
-                  <Paper sx={{ p: 2, height: '100%' }}>
-                    <Typography variant="h2" sx={{ mb: 1 }}>Mat {mat}</Typography>
-                    {now ? (
-                      <Box sx={{ mb: 2 }}>
-                        <Chip size="small" color="error" label="NOW" sx={{ mb: 0.5 }} />
-                        <Typography variant="body2" color="text.secondary">{now.matchNumber} · {now.category} · {now.stage === 'knockout' ? now.roundName : `Pool ${now.pool}`}</Typography>
-                        <Side color={AKA} name={now.aka} score={showScore ? live.akaScore : null} />
-                        <Side color={AO} name={now.ao} score={showScore ? live.aoScore : null} />
-                      </Box>
-                    ) : <Typography color="text.secondary" sx={{ mb: 2 }}>Mat free</Typography>}
-                    {next.map((m, i) => (
-                      <Box key={m.id} sx={{ py: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
-                        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{i === 0 ? 'Next' : `Then`} · {m.matchNumber}</Typography>
-                          {m.calledAt && <Chip size="small" color="warning" label="Called" />}
-                          <Typography variant="body2" color="text.secondary" noWrap sx={{ flex: 1 }}>{m.category}</Typography>
-                        </Stack>
-                        <Typography variant="body2"><Box component="span" sx={{ color: AKA }}>■</Box> {m.aka}  <Box component="span" sx={{ color: AO, ml: 1 }}>■</Box> {m.ao}</Typography>
-                      </Box>
-                    ))}
-                  </Paper>
-                </Grid>
-              )
-            })}
+            {!queues.length && <Grid size={{ xs: 12 }}><Paper sx={{ p: 3 }}><Typography color="text.secondary">{later ? `${EVENT_NAME[running]} is on the mats now. The ${EVENT_NAME[later.event]} bouts come after it.` : 'No bouts waiting.'}</Typography></Paper></Grid>}
+            {/* KAN-428: every mat with its own scoreboard's live score, as on the public page. */}
+            {queues.map((mq) => (
+              <Grid key={mq.mat} size={{ xs: 12, md: 6 }}>
+                <MatCard mat={mq.mat} now={mq.now} next={mq.next} board={mq.now ? scoreOf(mq.now) : null} />
+              </Grid>
+            ))}
           </Grid>
         </Grid>
 
@@ -158,15 +127,5 @@ function Board({ slug }) {
         </Grid>
       </Grid>
     </Box>
-  )
-}
-
-function Side({ color, name, score }) {
-  return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mt: 0.5 }}>
-      <Box sx={{ width: 6, height: 28, bgcolor: color, borderRadius: 1 }} />
-      <Typography variant="h3" sx={{ flex: 1 }} noWrap>{name || 'TBD'}</Typography>
-      {score != null && <Typography variant="h2">{score}</Typography>}
-    </Stack>
   )
 }

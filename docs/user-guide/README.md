@@ -622,7 +622,7 @@ Safety rules on the console:
 | --- | --- | --- |
 | Mat scoreboard | `/display?mat=N` | That mat's bout: names, clubs, scores, senshu, clock, category, round and the next bout |
 | Hall scoreboard | `/display` | The latest bout opened on any mat |
-| Live board | `/live?t=<short name>` | Every mat: the bout on now and the next ones, latest results, brackets and kata results in turn |
+| Live board | `/live?t=<short name>` | Every mat: the bout on now with its live score and the next ones, latest results, brackets and kata results in turn |
 | Public page | `/tournament/<short name>` | Information, categories, teams, players, draw, live matches (every mat's bout with its live score), results and medal tally; athletes and clubs you follow |
 | Scoreboard control | `/scoreboard_operator` | What the hall shows now, announcements to the hall or one mat, links to every screen |
 
@@ -630,9 +630,9 @@ Safety rules on the console:
 
 *A mat scoreboard on the hall TV.*
 
-![The live board: each mat's bout and the next ones, beside the latest kata final.](images/live-board.webp)
+![The live board: each mat's bout with its live score and the next ones, beside the latest kata final.](images/live-board.webp)
 
-*The live board: each mat's bout and the next ones, beside the latest kata final.*
+*The live board: each mat's bout with its live score and the next ones, beside the latest kata final.*
 
 ![Scoreboard control: the current bout, an announcement for the hall, and the screen links.](images/scoreboard-operator.webp)
 
@@ -641,7 +641,7 @@ Safety rules on the console:
 - Screens need no sign-in and update by themselves. A mat screen receives each score as it happens.
 - A scoreboard shows **NOT LIVE** when the console has sent nothing for 5 seconds (a dropped connection).
 - During the Kata session the live board says "Kata is on the mats now" instead of listing Kumite bouts.
-- The public page's **Live matches** tab has a card for each mat: the bout on it now with its score, senshu and clock as the mat's scoreboard shows them, then the next bouts (**Called** once called). The card reads **● LIVE** while the scoreboard is sending and **NOW** when it is not open or has sent nothing for 15 seconds; **Mat free** when no bout is on. Below the cards are the up-next and completed lists.
+- The public page's **Live matches** tab has a card for each mat: the bout on it now with its score, senshu and clock as the mat's scoreboard shows them, then the next bouts (**Called** once called). The card reads **● LIVE** while the scoreboard is sending and **NOW** when it is not open or has sent nothing for 15 seconds; **Mat free** when no bout is on. Below the cards are the up-next and completed lists. The live board's mat cards work the same way.
 - On the public page, tap **☆** beside an athlete (Players tab) or a club (Teams tab) to follow them. A **Following** card at the top of the page then shows each one: **● On Mat N now** with the score, **Called**, or their next bout with its mat and how many bouts come before it on that mat (a bout of the other event says it waits for that event), and their last result. A club lists its athletes with a bout to come, the soonest first. Follows are kept on that phone for that tournament; no sign-in is needed. Tap **×** on the card, or the star again, to stop following.
 - The public page shows only published results. A private tournament has no public page; an unlisted one is reached only by its link.
 

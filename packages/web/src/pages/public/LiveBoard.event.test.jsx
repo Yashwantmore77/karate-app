@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import LiveBoard from './LiveBoard'
 import { hallInfo } from '../referee/RefereeMatchControl'
@@ -30,6 +30,24 @@ describe('the live board (/live)', () => {
     expect(screen.getByText(/Next · M-004/)).toBeInTheDocument()
     expect(screen.getByText(/Then · M-006/)).toBeInTheDocument()
     for (const kata of ['M-001', 'M-002', 'M-005']) expect(screen.queryByText(new RegExp(kata))).not.toBeInTheDocument()
+  })
+})
+
+describe('the live board with every mat scoring (KAN-428)', () => {
+  it("shows each mat's own live score, not only the mat the hall screen last opened", async () => {
+    const board = (akaScore, aoScore) => ({ akaScore, aoScore, senshu: null, clock: null, outcome: null, heartbeatAt: Date.now() })
+    data.view.mockResolvedValue({
+      tournament: { name: 'Pune Open', venue: 'Pune', runningEvent: 'kumite' },
+      matches: [bout(1, 'kumite', { status: 'live', scoreboard: board(3, 1) }), bout(2, 'kumite', { mat: 2, status: 'live', scoreboard: board(0, 5) })],
+      results: [],
+    })
+    render(<MemoryRouter initialEntries={['/live?t=pune-open']}><LiveBoard /></MemoryRouter>)
+    const mat1 = within(await screen.findByTestId('mat-1'))
+    const mat2 = within(screen.getByTestId('mat-2'))
+    expect(mat1.getByText('3')).toBeInTheDocument()
+    expect(mat1.getByText('1')).toBeInTheDocument()
+    expect(mat2.getByText('0')).toBeInTheDocument()
+    expect(mat2.getByText('5')).toBeInTheDocument()
   })
 })
 
