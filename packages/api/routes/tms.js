@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth, requirePermission, tournamentAccess } from '../auth/middleware.js'
-import { findUserRecord, listAssignableOfficials } from '../auth/users.js'
+import { findUserRecord, listAssignableOfficials, listCoachAccounts, deleteUser } from '../auth/users.js'
 import { mayAccessTournament } from '../auth/middleware.js'
 import { staffOnly } from '../auth/categoryAccess.js'
 import { validate } from '../lib/validate.js'
@@ -802,6 +802,24 @@ export function tmsRoutes(tms, stores) {
       expiresAt: { type: 'string', max: 30, nullable: true },
     })
     res.json({ link: await tms.saveLink(withMeta(req), tid(req), body) })
+  })
+
+  // KAN-430: which teams have their own login yet (most of registering a
+  // team never needs the organiser - this is only for a coach who is
+  // genuinely stuck, e.g. locked out of the email it was made with).
+  router.get('/:tid/coach-accounts', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
+    const teamName = new Map((await tms.teams.list(tid(req))).map((t) => [t.id, t.name]))
+    const accounts = (await listCoachAccounts()).filter((a) => a.tournamentId === tid(req))
+      .map((a) => ({ uid: a.uid, email: a.email, teamId: a.teamId, teamName: teamName.get(a.teamId) || null }))
+    res.json({ accounts })
+  })
+  router.delete('/:tid/coach-accounts/:uid', requirePermission(P.TOURNAMENT_MANAGE), async (req, res) => {
+    const accounts = await listCoachAccounts()
+    const account = accounts.find((a) => a.uid === req.params.uid && a.tournamentId === tid(req))
+    if (!account) throw notFound()
+    await deleteUser(account.uid)
+    await tms.record(withMeta(req), { tournamentId: tid(req), action: 'user.changed', entity: 'user', entityId: account.uid, before: { email: account.email, role: 'coach', teamId: account.teamId }, reason: 'coach login revoked' })
+    res.status(204).end()
   })
 
   router.post('/:tid/weigh-in/reminders', requirePermission(P.WEIGHIN_RECORD), async (req, res) => {

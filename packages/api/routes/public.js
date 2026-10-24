@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { validate } from '../lib/validate.js'
 import { rateLimit } from '../lib/rateLimit.js'
 import { signCoachToken } from '../auth/jwt.js'
+import { findUserRecordByEmail } from '../auth/users.js'
 import { sendFile } from './files.js'
 import { certificatesPdf } from '../lib/pdf.js'
 
@@ -95,8 +96,18 @@ export function publicRoutes(tms, { views = publicViewCache(tms) } = {}) {
   router.get('/register/:token', async (req, res) => res.json(await tms.linkInfo(req.params.token)))
 
   router.post('/register/:token/session', linkAttempts, async (req, res) => {
-    const { password } = validate(req.body || {}, { password: { type: 'string', min: 0, max: 100, trim: false, nullable: true } })
-    const session = await tms.openLink(req.params.token, password || '')
+    const { password, email } = validate(req.body || {}, {
+      password: { type: 'string', min: 0, max: 100, trim: false, nullable: true },
+      // KAN-430: the coach's own email, so reopening the link finds their
+      // own team again instead of starting a second one.
+      email: { type: 'string', min: 0, max: 200, nullable: true, lowercase: true },
+    })
+    if (email) {
+      const { tournament } = await tms.linkInfo(req.params.token)
+      const account = await findUserRecordByEmail(email)
+      if (account?.role === 'coach' && account.tournamentId === tournament.id) return res.json({ hasAccount: true })
+    }
+    const session = await tms.openLink(req.params.token, password || '', email || '')
     res.json({ token: signCoachToken(session), tournamentId: session.tournamentId })
   })
 

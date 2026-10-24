@@ -294,6 +294,11 @@ export const HELP = {
     tips: ['"Regenerate" makes the old link stop working.'],
     before: 'Tournament moved to "Registration open".',
   },
+  'setup.coachAccounts': {
+    title: 'Team logins',
+    text: 'Which teams have made their own login, so they can sign in instead of using the link each time.',
+    tips: ['Revoke one only if a coach is genuinely locked out: they can make a new login next time they open the link.'],
+  },
   'setup.form': {
     title: 'Registration form',
     text: 'The fields coaches fill in for each player. Add your own fields, mark them required, or hide them.',

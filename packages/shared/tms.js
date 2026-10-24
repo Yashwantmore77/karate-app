@@ -3603,10 +3603,23 @@ export function createTms(stores, { now = () => new Date(), onNotify = null } = 
     }
   }
 
-  async function openLink(token, password = '') {
+  /**
+   * A coach's email, given when opening the link, is treated as their
+   * identity on it (the link itself is shared by every coach in the
+   * tournament, so it names none of them on its own). Opening the link again
+   * with the same email resumes the team already registered under it instead
+   * of starting a second one (KAN-430) — the coach account check that comes
+   * first, at the route layer, instead sends them to sign in when they
+   * already have a login.
+   */
+  async function openLink(token, password = '', email = '') {
     const { link, tournament } = await resolveLink(token)
     if (link.passwordHash && !(await verifySecret(password, link.passwordHash))) throw denied('invalid_password')
-    return { tournamentId: tournament.id, linkId: link.id }
+    const normalizedEmail = String(email || '').trim().toLowerCase()
+    const existingTeam = normalizedEmail
+      ? (await stores.teams.list({ tournamentId: tournament.id })).find((t) => String(t.email || '').trim().toLowerCase() === normalizedEmail)
+      : null
+    return { tournamentId: tournament.id, linkId: link.id, teamId: existingTeam?.id || null, email: normalizedEmail || null }
   }
 
   // --- coach view -------------------------------------------------------------

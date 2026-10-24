@@ -301,6 +301,7 @@ export const ACTION_PATTERNS = [
   [/^Mat (\d+)$/, (m) => `Shows mat ${m[1]} on the hall scoreboard.`],
   [/^Need at least 2 competitors/, () => 'A category needs at least two competitors before bouts can be created.'],
   [named('Delete'), (m) => ({ tip: `Deletes ${m[1]}. You are asked to confirm first.` })],
+  [named('Revoke'), (m) => ({ tip: `Revokes the login made for ${m[1]}. You are asked to confirm first. They can make a new one next time they open the registration link.` })],
   [named('Edit'), (m) => `Opens ${m[1]} to change it.`],
   [named('Remove'), (m) => `Removes ${m[1]}.`],
   [named('Copy'), (m) => `Makes a copy of ${m[1]} to edit.`],

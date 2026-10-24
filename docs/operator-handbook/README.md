@@ -322,14 +322,15 @@ During registration the coaches enter their players. You open it, send the link 
 
 6. Send the link and its password to the coaches, for example on WhatsApp or by email.
 
-A coach who opens the link types its password (1) and clicks **Continue** (2). They then register their team, add their players one by one, and can watch whether each player is approved.
+A coach who opens the link types their own email (1) and its password (2), then clicks **Continue** (3). They then register their team, add their players one by one, and can watch whether each player is approved. Right after registering the team, they're offered a login of their own (email and password) so they can come back without the link next time; if they skip it and later lose their place (closed the tab, for example), typing the same email at step 1 returns them to their own team rather than starting a new one.
 
-![What a coach sees first: 1 the link password, 2 Continue](images/p2-coach.webp)
+![What a coach sees first: 1 their own email, 2 the link password, 3 Continue](images/p2-coach.webp)
 
-*What a coach sees first: 1 the link password, 2 Continue*
+*What a coach sees first: 1 their own email, 2 the link password, 3 Continue*
 
 - Coaches can register only between the opening and closing times you set in Job 2.
 - If the link reaches people it should not, click **Regenerate link**. The old link stops working, even for coaches already part-way through registering; send the new one to the coaches.
+- Scroll down to **Team logins** to see which teams have made their own login. Only touch **Revoke** if a coach is genuinely locked out (lost access to that email) — they can make a new one next time they open the link.
 
 ### Job 7: Check and approve the entries
 

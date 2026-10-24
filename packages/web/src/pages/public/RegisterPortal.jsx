@@ -53,14 +53,22 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   const [linkInfo, setInfo] = useState(null)
   const [infoError, setInfoError] = useState(null)
   // PRD v1 §7: a coach signed in with their own account needs no link.
+  // KAN-430: kept in localStorage, not sessionStorage - closing the tab
+  // without creating a login (the "Create my own login" dialog, below)
+  // must not lose the session, or the only way back in is reopening the
+  // link, which the email check already guards against duplicating.
   const [session, setSession] = useState(() => {
     if (accountToken) return { token: accountToken }
-    try { return JSON.parse(sessionStorage.getItem(sessionKey(token)) || 'null') } catch { return null }
+    try { return JSON.parse(localStorage.getItem(sessionKey(token)) || 'null') } catch { return null }
   })
   const [duplicates, setDuplicates] = useState(null)
   const [account, setAccount] = useState(null)
   const [certificates, setCertificates] = useState(null)
   const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('')
+  // KAN-430: set when the server finds a coach login already made under
+  // that email - nudges to sign in instead of opening a second session.
+  const [hasAccount, setHasAccount] = useState(false)
   const [me, setMe] = useState(null)
   const [team, setTeam] = useState({})
   const teamErrors = teamProblems(team, { partial: true })
@@ -75,7 +83,7 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   const keep = (s) => {
     if (accountToken) { if (!s) onSignOut?.(); setSession(s); return }
     setSession(s)
-    try { sessionStorage.setItem(sessionKey(token), JSON.stringify(s)) } catch { /* this tab only */ }
+    try { localStorage.setItem(sessionKey(token), JSON.stringify(s)) } catch { /* this tab only */ }
   }
 
   const load = () => session && tms.coach.me(session).then(setMe).catch((err) => {
@@ -92,8 +100,12 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
   if (!info) return <PageLoader label="Opening registration…" />
 
   const open = async () => {
-    const s = await action.run(() => tms.public.openLink(token, password))
-    if (s) keep(s)
+    const s = await action.run(() => tms.public.openLink(token, password, email))
+    if (!s) return
+    // KAN-430: a login already exists under this email - there is no
+    // session to keep, just a nudge to use it instead.
+    if (s.hasAccount) { setHasAccount(true); return }
+    keep(s)
   }
 
   const header = (
@@ -113,13 +125,24 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
         {header}
         <Paper sx={{ p: 3 }}>
           {!info.registrationOpen && <Alert severity="warning" sx={{ mb: 2 }}>{closedMessage(info)} You can still sign in to see your team's status.</Alert>}
-          {info.requiresPassword ? (
-            <Stack spacing={2}>
-              <TextField type="password" label="Registration password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && open()} autoFocus />
-              <Button size="large" variant="contained" onClick={open} disabled={action.busy}>Continue</Button>
-            </Stack>
+          {hasAccount ? (
+            // KAN-430: this email already has its own login - that is the
+            // way back in now, not another trip through the link.
+            <Alert severity="info">
+              You've already registered and created a login for this email. <RouterLink to="/login">Sign in</RouterLink> instead of using this link.
+            </Alert>
           ) : (
-            <Button size="large" variant="contained" onClick={open} disabled={action.busy}>Start registration</Button>
+            <Stack spacing={2}>
+              {/* KAN-430: identifies the coach on a link every coach in the
+                  tournament shares, so reopening it finds their own team
+                  again instead of starting a second one. */}
+              <TextField type="email" label="Your email" value={email} onChange={(e) => setEmail(e.target.value)}
+                helperText="Already registered? Use the same email and you'll land back in your team." autoFocus={!info.requiresPassword} />
+              {info.requiresPassword && (
+                <TextField type="password" label="Registration password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && open()} />
+              )}
+              <Button size="large" variant="contained" onClick={open} disabled={action.busy || !email.trim()}>{info.requiresPassword ? 'Continue' : 'Start registration'}</Button>
+            </Stack>
           )}
         </Paper>
         {action.feedback}
@@ -172,7 +195,11 @@ export default function RegisterPortal({ accountToken = null, onSignOut = null }
           <Button size="large" variant="contained" sx={{ mt: 2 }} disabled={!canWrite || !team.name?.trim() || action.busy || Object.keys(teamErrors).length > 0 || (!!info.tournament.terms && !accepted)} onClick={async () => {
             const doc = { ...Object.fromEntries(Object.entries(team).filter(([, v]) => v)), ...(info.tournament.terms ? { termsAccepted: accepted } : {}) }
             const out = await action.run(() => tms.coach.createTeam(session, doc), 'Team registered')
-            if (out) keep(out.session)
+            if (!out) return
+            keep(out.session)
+            // KAN-430: offered right away, not left for a button to notice -
+            // this is what gets a coach back in without the link at all.
+            setAccount({ email: out.team.email || '', password: '' })
           }}>Register team</Button>
           {blocker && <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{blocker}</Typography>}
         </Paper>
