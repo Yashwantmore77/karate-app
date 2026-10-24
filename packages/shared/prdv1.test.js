@@ -1066,3 +1066,18 @@ describe('live scores on the public page (KAN-428)', () => {
     expect((await tms.publicView(t.id)).matches.find((m) => m.id === onMat.id).scoreboard).toBeNull()
   })
 })
+
+describe('organisations on the public list (KAN-375)', () => {
+  it("drops an inactive organisation's tournaments, and says when a short name matches no organisation", async () => {
+    const { tms, t, stores } = await world()
+    stores.organizations = memoryStores(['organizations']).organizations
+    const goa = await stores.organizations.insert({ name: 'Goa KA', slug: 'goa-ka', active: true })
+    await stores.tournaments.update(t.id, { organizationId: goa.id, lifecycleStatus: 'LIVE', settings: { ...t.settings, publicVisibility: 'public' } })
+    expect((await tms.publicList({ org: 'goa-ka' })).map((r) => [r.id, r.organization])).toEqual([[t.id, { name: 'Goa KA', slug: 'goa-ka' }]])
+
+    await stores.organizations.update(goa.id, { active: false })
+    expect(await tms.publicList()).toEqual([])
+    expect(await tms.publicList({ org: 'goa-ka' })).toEqual([])
+    await expect(tms.publicList({ org: 'goa-kaa' })).rejects.toMatchObject({ code: 'organization_not_found' })
+  })
+})
