@@ -100,8 +100,11 @@ describe('scheduling a bout', () => {
     const dialog = await openDialog(user)
     await pickCompetitors(user, dialog)
 
-    const field = within(dialog).getByLabelText(/scheduled time/i)
-    await user.type(field, '2099-05-15T13:00')
+    const picker = within(dialog).getByRole('group', { name: /scheduled time/i })
+    for (const [section, value] of [['Month', '05'], ['Day', '15'], ['Year', '2099'], ['Hours', '01'], ['Minutes', '00'], ['Meridiem', 'PM']]) {
+      await user.click(within(picker).getByRole('spinbutton', { name: section }))
+      await user.keyboard(value)
+    }
     await user.click(within(dialog).getByRole('button', { name: /create match/i }))
 
     const sent = store.matches.create.mock.calls[0][1]
