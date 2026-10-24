@@ -26,9 +26,9 @@ export const update = async (uid, patch) => (await httpPatch(`/users/${uid}`, pa
 export const remove = (uid) => httpDelete(`/users/${uid}`)
 
 /**
- * KAN-429: an admin's lens into another account, re-authenticated with the
- * admin's own password (and 2FA code, if they have one). Returns the whole
- * `{ token, user }` the server gives — the session layer re-derives the full
- * shape (including who opened it) from that token itself, same as any other.
+ * KAN-429: opens an admin's lens into another account. Returns a one-time
+ * `{ ticket }`, not the session itself — the ticket is only good for being
+ * opened in a new tab (see data/impersonationLink.js), which is where the
+ * real token is issued.
  */
-export const impersonate = (uid, password, code) => httpPost(`/users/${uid}/impersonate`, { password, ...(code ? { code } : {}) })
+export const impersonate = (uid) => httpPost(`/users/${uid}/impersonate`, {})

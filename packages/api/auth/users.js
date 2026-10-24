@@ -3,8 +3,7 @@ import { promisify } from 'node:util'
 import { isMongoConfigured, getDb } from '../db/mongo.js'
 import { validate } from '../lib/validate.js'
 import { PASSWORD_FIELD } from '@kumite/shared/accounts.js'
-import { conflict, notFound, badRequest, unauthorized } from '../lib/errors.js'
-import { verifyTotp } from './totp.js'
+import { conflict, notFound, badRequest } from '../lib/errors.js'
 
 const scryptAsync = promisify(scrypt)
 const KEY_LEN = 64
@@ -335,23 +334,6 @@ export async function authenticate(email, password) {
   const ok = await verifyPassword(String(password || ''), user.passwordHash)
   if (!ok) return null
   return { ...strip(user), twoFactorSecret: user.twoFactorSecret || null }
-}
-
-/**
- * Proves it is really this account typing, the same way /auth/login does
- * (password, then a second factor if one is set) — used before an admin may
- * open a lens into someone else's account (KAN-impersonation), so a sitting
- * session alone is never enough to reach every other account in reach.
- * Throws the same codes login does; never returns a false result silently.
- */
-export async function verifyCredentials(email, password, code) {
-  const found = await authenticate(email, password)
-  if (!found) throw unauthorized('invalid_credentials')
-  if (found.twoFactorSecret) {
-    if (!code) throw unauthorized('two_factor_required')
-    if (!verifyTotp(found.twoFactorSecret, code)) throw unauthorized('invalid_two_factor')
-  }
-  return found
 }
 
 export async function findUser(uid) {

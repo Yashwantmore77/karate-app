@@ -4,10 +4,11 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import AppNav from './AppNav'
 
-// KAN-429: the "Signed in as X" banner, shown on every screen for as long as
-// the token is a lens into someone else's account, not only on Accounts.
+// KAN-429: the "Signed in as X (impersonated)" banner, shown on every screen
+// for as long as the token is a lens into someone else's account, not only
+// on Accounts. Ending it has nothing to "return" to in this tab — it closes.
 
-const session = vi.hoisted(() => ({ logout: vi.fn(), returnToSelf: vi.fn() }))
+const session = vi.hoisted(() => ({ logout: vi.fn(), endImpersonation: vi.fn() }))
 vi.mock('../state/SessionContext', () => ({ useSession: () => session }))
 
 const renderNav = (user) =>
@@ -24,11 +25,11 @@ describe('the impersonation banner', () => {
     expect(screen.queryByText(/Signed in as/)).not.toBeInTheDocument()
   })
 
-  it('names the account and returns to the admin on click', async () => {
+  it('names the account and ends the lens on click', async () => {
     const user = userEvent.setup()
     renderNav({ uid: 'u1', email: 'ref@kata.local', impersonatedBy: 'admin-uid' })
-    expect(screen.getByText('Signed in as ref@kata.local')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Return to my account' }))
-    expect(session.returnToSelf).toHaveBeenCalled()
+    expect(screen.getByText('Signed in as ref@kata.local (impersonated)')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'End & close this tab' }))
+    expect(session.endImpersonation).toHaveBeenCalled()
   })
 })

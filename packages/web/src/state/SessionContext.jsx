@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { apiUrl, getToken, loginToServer, clearSession, tokenExpiresAt, setToken, getAdminToken, stashAdminToken } from '../data/session'
+import { apiUrl, getToken, loginToServer, clearSession, tokenExpiresAt } from '../data/session'
 import { setUnauthorizedHandler } from '../data/http'
 import { disconnect, onSocketAuthFailure } from '../data/channel/socket'
-import { impersonate as impersonateOnServer } from '../data/users'
 
 const SessionContext = createContext(null)
 
@@ -70,20 +69,20 @@ export function SessionProvider({ children }) {
   // list quietly comes back empty.
   // The socket refusing the token means the same.
   useEffect(() => {
-    const expire = () => { clearSession(); stashAdminToken(null); adopt(null) }
-    setUnauthorizedHandler(() => { stashAdminToken(null); adopt(null) })
+    const expire = () => { clearSession(); adopt(null) }
+    setUnauthorizedHandler(() => adopt(null))
     onSocketAuthFailure(expire)
     return () => { setUnauthorizedHandler(null); onSocketAuthFailure(null) }
   }, [adopt])
 
   // And one that runs out signs out on time rather than at the next failed save.
-  // While impersonating (KAN-429) this is the lens's own, shorter expiry, so
-  // it stops without waiting for the admin's full token to run out too.
+  // While impersonating (KAN-429) this is the lens tab's own, shorter expiry,
+  // so that tab stops on its own without touching the admin's tab at all.
   useEffect(() => {
     if (!user) return undefined
     const at = tokenExpiresAt(getToken())
     if (!at) return undefined
-    const id = setTimeout(() => { clearSession(); stashAdminToken(null); adopt(null) }, Math.max(0, at - Date.now()))
+    const id = setTimeout(() => { clearSession(); adopt(null) }, Math.max(0, at - Date.now()))
     return () => clearTimeout(id)
   }, [user, adopt])
 
@@ -100,61 +99,27 @@ export function SessionProvider({ children }) {
     const url = apiUrl('/auth/logout')
     if (token && url) fetch(url, { method: 'POST', headers: { authorization: `Bearer ${token}` } }).catch(() => {})
     clearSession()
-    stashAdminToken(null)
     adopt(null)
   }, [adopt])
 
   /**
-   * KAN-429: an admin opens a lens into another account. The admin's own
-   * token is set aside (not discarded — "Return to my account" needs it),
-   * and the socket is dropped before the new one is adopted: it caches the
-   * token it first connected with, so without this it would go on acting as
-   * the admin under an identity the screen now shows as someone else.
+   * KAN-429: ends this tab's own lens early, rather than waiting out its
+   * 30-minute token, and closes the tab — it was opened purely to be this
+   * lens, so there is nothing else for it to go back to being. If the tab
+   * was not opened by script (the ticket link was shared or bookmarked
+   * instead), the close is a no-op and it is simply left signed out.
    */
-  const impersonate = useCallback(async (uid, password, code) => {
-    const { token } = await impersonateOnServer(uid, password, code)
-    const mine = getToken()
-    disconnect()
-    setToken(token)
-    try {
-      const res = await fetch(apiUrl('/auth/me'), { headers: { authorization: `Bearer ${token}` } })
-      const { user: apiUser } = await res.json()
-      stashAdminToken(mine)
-      adopt(apiUser)
-    } catch (err) {
-      // The lens token itself didn't take: leave the admin's own session
-      // exactly as it was, rather than half-swapping to a broken one.
-      setToken(mine)
-      throw err
-    }
-  }, [adopt])
-
-  /** Restores the admin's own session, and tells the server the lens is over. */
-  const returnToSelf = useCallback(async () => {
-    const mine = getAdminToken()
-    if (!mine) { logout(); return }
-    const lensToken = getToken()
-    const lensUid = user?.uid
-    disconnect()
-    setToken(mine)
-    stashAdminToken(null)
-    // Best effort, with the token that is about to stop being usable anyway
-    // regardless of whether this reaches the server: never touches the
-    // restored session, even if the lens had already expired.
-    if (lensToken && lensUid) fetch(apiUrl(`/users/${lensUid}/impersonate/end`), { method: 'POST', headers: { authorization: `Bearer ${lensToken}` } }).catch(() => {})
-    try {
-      const res = await fetch(apiUrl('/auth/me'), { headers: { authorization: `Bearer ${mine}` } })
-      if (!res.ok) throw new Error('admin session expired')
-      const { user: apiUser } = await res.json()
-      adopt(apiUser)
-    } catch {
-      clearSession()
-      adopt(null)
-    }
-  }, [adopt, logout, user])
+  const endImpersonation = useCallback(async () => {
+    const token = getToken()
+    const uid = user?.uid
+    if (token && uid) fetch(apiUrl(`/users/${uid}/impersonate/end`), { method: 'POST', headers: { authorization: `Bearer ${token}` } }).catch(() => {})
+    clearSession()
+    adopt(null)
+    window.close()
+  }, [adopt, user])
 
   return (
-    <SessionContext.Provider value={{ user, profile, loading, login, logout, impersonate, returnToSelf }}>
+    <SessionContext.Provider value={{ user, profile, loading, login, logout, endImpersonation }}>
       {children}
     </SessionContext.Provider>
   )

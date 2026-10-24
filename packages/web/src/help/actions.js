@@ -280,8 +280,6 @@ export const ACTIONS = {
   'Save account': 'Saves the account.',
   'Add tournament role': 'Gives this account a different role in one tournament only.',
   'You cannot delete your own account': 'You cannot delete the account you are signed in with.',
-  // KAN-429: impersonation.
-  'Sign in as them': 'Opens the lens: everything you do is recorded under their name, with yours alongside it.',
   'Change password': 'Saves your new password.',
   'Send reset link': 'Emails a link to reset the password.',
   'Set up two-factor sign-in': 'Adds a second step at sign-in: a code from an authenticator app.',

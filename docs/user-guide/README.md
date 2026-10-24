@@ -732,7 +732,7 @@ Admins manage staff accounts and watch sign-ins. The super admin also takes back
 - A new role, a new password or a removed account signs that person out on every device. So does a reset through **Forgot password**.
 - An official still on unfinished bouts cannot be removed until someone else is put on those bouts (Matches tab).
 - A team manager can make their own login from the registration page (**Create my own login**). It opens their team only, in that tournament only.
-- **Impersonate** (on any account but an admin, a super admin, or your own) signs you in as that account to see and act exactly as they do, after you type your password again (and your authenticator code, if you have one on). A banner across the top of every screen then reads **Signed in as** their email, with **Return to my account**. It lasts 30 minutes, or until you return, whichever comes first; everything you do under it is recorded under their name, with yours alongside it. It does not appear in **Sign-ins**, since nobody typed their password.
+- **Impersonate** (on any account but an admin, a super admin, or your own) opens a new tab, already signed in as that account to see and act exactly as they do — no password or authenticator code needed. A banner across the top of every screen in that tab then reads **Signed in as** their email **(impersonated)**, with **End & close this tab**. It lasts 30 minutes, or until that button is used, whichever comes first; everything done under it is recorded under their name, with yours alongside it. It does not appear in **Sign-ins**, since nobody typed their password.
 
 ### Sign-ins
 

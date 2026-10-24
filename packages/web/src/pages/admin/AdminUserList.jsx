@@ -13,7 +13,7 @@ import { TableSearch, TablePager, NoResults } from '../../components/TableToolba
 import { usePagedList } from '../../components/usePagedList'
 import PageBar from '../../components/PageBar'
 import * as organizations from '../../data/organizations'
-import { useSession } from '../../state/SessionContext'
+import { openImpersonationTab } from '../../data/impersonationLink'
 import { ROLE_LABEL } from '@kumite/shared/permissions.js'
 import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem } from '@kumite/shared/accounts.js'
 import * as users from '../../data/users'
@@ -54,28 +54,22 @@ const MESSAGES = {
   not_found: 'That account no longer exists.',
   forbidden: 'Only an administrator can manage accounts.',
   unauthorized: 'Your session has expired. Sign in again.',
-  // KAN-429: the impersonate dialog. two_factor_required, invalid_two_factor,
-  // organization_forbidden and too_many_requests already read right as the
-  // shared ERROR_TEXT falls back to below; only what differs here is listed.
-  invalid_credentials: 'Wrong password.', // this re-asks only the password, not the email
+  // KAN-429: impersonation. organization_forbidden and too_many_requests
+  // already read right as the shared ERROR_TEXT falls back to below.
   cannot_impersonate_admin: 'An administrator account cannot be impersonated.',
   cannot_impersonate_self: 'You cannot impersonate your own account.',
-  already_impersonating: 'You are already signed in as someone else. Return to your own account first.',
+  already_impersonating: 'You are already signed in as someone else in this tab.',
 }
 const messageFor = (err) => errorMessage(err, MESSAGES)
 
 export default function AdminUserList({ uid }) {
   const navigate = useNavigate()
-  const { impersonate } = useSession()
   const [writeError, setWriteError] = useState(null)
   const [openModal, setOpenModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
-  // KAN-429: the account about to be impersonated, and the re-auth form for it.
-  const [impersonateTarget, setImpersonateTarget] = useState(null)
-  const [impersonateForm, setImpersonateForm] = useState({ password: '', code: '' })
-  const [impersonateError, setImpersonateError] = useState(null)
-  const [impersonateBusy, setImpersonateBusy] = useState(false)
+  // KAN-429: which row's lens is opening, so a second click can't double-open.
+  const [impersonating, setImpersonating] = useState(null)
 
   const {
     rows: accounts, total, page, limit, loading, error: loadError,
@@ -158,27 +152,17 @@ export default function AdminUserList({ uid }) {
     setDeleteConfirm(null)
   }
 
-  // KAN-429: opens a lens into impersonateTarget's account. Navigates to that
-  // role's own home: the Accounts page itself is admin-only, and the lens
-  // never carries an admin role, so staying here would just bounce off the
-  // route guard.
-  const handleImpersonate = async (e) => {
-    e.preventDefault()
-    setImpersonateError(null)
-    setImpersonateBusy(true)
+  // KAN-429: opens a lens into this account in a new tab, signed in on its
+  // own — this tab (and the admin's own session in it) is never touched.
+  const handleImpersonate = async (account) => {
+    setImpersonating(account.uid)
     try {
-      await impersonate(impersonateTarget.uid, impersonateForm.password, impersonateForm.code || undefined)
-      navigate(`/${impersonateTarget.role}`)
+      await openImpersonationTab(account)
     } catch (err) {
-      setImpersonateError(messageFor(err))
+      setError(messageFor(err))
     } finally {
-      setImpersonateBusy(false)
+      setImpersonating(null)
     }
-  }
-  const closeImpersonate = () => {
-    setImpersonateTarget(null)
-    setImpersonateForm({ password: '', code: '' })
-    setImpersonateError(null)
   }
 
   const roleColour = (role) =>
@@ -260,16 +244,17 @@ export default function AdminUserList({ uid }) {
                         >
                           <Edit />
                         </IconButton>
-                        {/* KAN-429: see and act as this account. Never for an
-                            admin, a super admin, or your own row — the server
-                            refuses all three anyway; disabling says so first. */}
+                        {/* KAN-429: see and act as this account, in a new
+                            tab. Never for an admin, a super admin, or your
+                            own row — the server refuses all three anyway;
+                            disabling says so first. */}
                         {!['admin', 'super_admin'].includes(account.role) && (
                           <IconButton
                             aria-label={`Impersonate ${account.email}`}
-                            disabled={account.uid === uid}
-                            data-tip={account.uid === uid ? undefined : `Sign in as ${account.email} to see and act as they do. Asks for your password again first.`}
+                            disabled={account.uid === uid || impersonating === account.uid}
+                            data-tip={account.uid === uid ? undefined : `Opens a new tab signed in as ${account.email}, to see and act as they do.`}
                             data-tip-needs={account.uid === uid ? 'You cannot impersonate your own account.' : undefined}
-                            onClick={() => setImpersonateTarget(account)}
+                            onClick={() => handleImpersonate(account)}
                           >
                             <SupervisorAccount />
                           </IconButton>
@@ -374,38 +359,6 @@ export default function AdminUserList({ uid }) {
             <Button onClick={closeModal}>Cancel</Button>
             <Button type="submit" variant="contained">
               {editingId ? 'Save account' : 'Create account'}
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
-
-      {/* KAN-429: re-proves it is really the admin at the keyboard before
-          opening a lens — a sitting session alone is never enough, since this
-          reaches every account in the organisation. */}
-      <Dialog open={!!impersonateTarget} onClose={impersonateBusy ? undefined : closeImpersonate} fullWidth maxWidth="xs">
-        <form onSubmit={handleImpersonate} noValidate>
-          <DialogTitle>Sign in as {impersonateTarget?.email}?</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              You will see and act as this account until you return to your own, or 30 minutes pass.
-              Everything you do is recorded under their name, with yours alongside it.
-            </Typography>
-            {impersonateError && <Alert severity="error" sx={{ mb: 2 }}>{impersonateError}</Alert>}
-            <TextField
-              fullWidth margin="normal" label="Your password" type="password" autoFocus
-              value={impersonateForm.password}
-              onChange={(e) => setImpersonateForm((f) => ({ ...f, password: e.target.value }))}
-            />
-            <TextField
-              fullWidth margin="normal" label="Authenticator code (only if you have 2FA on)"
-              value={impersonateForm.code}
-              onChange={(e) => setImpersonateForm((f) => ({ ...f, code: e.target.value }))}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={closeImpersonate} disabled={impersonateBusy}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={impersonateBusy || !impersonateForm.password}>
-              Sign in as them
             </Button>
           </DialogActions>
         </form>

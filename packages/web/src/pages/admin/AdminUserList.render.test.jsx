@@ -16,9 +16,6 @@ const users = vi.hoisted(() => ({
 }))
 vi.mock('../../data/users', () => users)
 
-// KAN-429: these tests are not about impersonation, which has its own file.
-vi.mock('../../state/SessionContext', () => ({ useSession: () => ({ impersonate: vi.fn() }) }))
-
 const AdminUserList = (await import('./AdminUserList')).default
 
 const ROSTER = [

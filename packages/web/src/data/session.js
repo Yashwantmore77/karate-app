@@ -1,17 +1,14 @@
 // The token the API issued at sign-in, kept for the life of the browser tab.
+// sessionStorage is itself per-tab (unlike localStorage), which is what lets
+// an impersonation lens (KAN-429) be simply a second tab with its own token:
+// the admin's own tab never has anything to stash or swap back.
 
 const KEY = 'kt:v1:token'
-// An admin's own token, stashed here while impersonating (KAN-429) so
-// "Return to my account" needs no new sign-in. Separate key: the two must
-// never collide, and a page reload mid-lens should still be able to return.
-const ADMIN_KEY = 'kt:v1:admin-token'
 
 let token = null
-let adminToken = null
 
 try {
   token = sessionStorage.getItem(KEY)
-  adminToken = sessionStorage.getItem(ADMIN_KEY)
 } catch {
   // Private mode or blocked storage: the session simply lasts this page load.
 }
@@ -39,20 +36,12 @@ const store = (value) => {
     // Keeping it in memory is enough to finish the session.
   }
 }
-/** Swaps in an already-issued token (KAN-429 impersonation) without a login round trip. */
+/**
+ * Adopts an already-issued token straight into this tab's own storage, no
+ * login round trip. Used once, by the impersonation lens's own tab
+ * (KAN-429), before the app's first render: see data/impersonationLink.js.
+ */
 export const setToken = store
-
-export const getAdminToken = () => adminToken
-/** The admin's own token, set aside while a lens (KAN-429) is open. */
-export const stashAdminToken = (value) => {
-  adminToken = value
-  try {
-    if (value) sessionStorage.setItem(ADMIN_KEY, value)
-    else sessionStorage.removeItem(ADMIN_KEY)
-  } catch {
-    // As above: lasts this page load, which is enough to return from.
-  }
-}
 
 export const clearSession = () => store(null)
 
