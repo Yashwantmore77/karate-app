@@ -191,6 +191,7 @@ Coaches cannot register until the details are complete, and Needs attention list
    - **Master Age Calculation Date** (2): the date every player's age is counted on. Ask the organiser; it is often the first day of the tournament.
    - **Registration opens** (3) and **Registration closes** (4): the date and time between which coaches can register.
    - **Tournament start** and **Tournament end**, **Organizer**, **Contact mobile** and **Contact email**.
+   - Use the date and time picker controls to choose each date and time.
 
 ![Settings: 1 the tab, 2 Master Age Calculation Date, 3 and 4 the registration window](images/p1-settings.webp)
 

@@ -1,7 +1,7 @@
 /**
  * Translating between the clock a person reads and the instant the API stores.
  *
- * A `datetime-local` input deals in naive wall-clock text with no timezone, and
+ * The MUI date-time picker deals in naive wall-clock text with no timezone, and
  * the API refuses a time that does not name one — deliberately, so a server
  * running in UTC cannot silently reinterpret an event held somewhere else. The
  * conversion has to happen somewhere, and here is that somewhere.
@@ -21,7 +21,7 @@ export const localInputToIso = (value) => {
   return Number.isNaN(at.getTime()) ? null : at.toISOString()
 }
 
-/** An instant, as the local wall-clock text the input expects. */
+/** An instant, as the local wall-clock text the picker expects. */
 export const isoToLocalInput = (iso) => {
   if (!iso) return ''
   const at = new Date(iso)

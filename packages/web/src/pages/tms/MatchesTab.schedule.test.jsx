@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import MatchesTab from './MatchesTab'
 
 // The tests run on Indian time (vitest.config.js), five and a half hours
@@ -20,7 +22,11 @@ const BOUT = {
 }
 
 const openSchedule = async (user) => {
-  render(<MemoryRouter><MatchesTab tournament={tournament} version={0} action={{ run: vi.fn(), notify: vi.fn() }} /></MemoryRouter>)
+  render(
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <MemoryRouter><MatchesTab tournament={tournament} version={0} action={{ run: vi.fn(), notify: vi.fn() }} /></MemoryRouter>
+    </LocalizationProvider>
+  )
   await user.click(await screen.findByRole('button', { name: 'Schedule' }))
   return screen.findByRole('dialog')
 }

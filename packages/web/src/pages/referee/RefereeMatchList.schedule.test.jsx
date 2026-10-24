@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import RefereeMatchList from './RefereeMatchList'
 import { HttpError } from '../../data/http'
 
@@ -47,14 +49,16 @@ vi.mock('../../data/users', () => ({
 
 const renderPage = () =>
   render(
-    <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
-      <Routes>
-        <Route
-          path="/referee/category/:categoryId"
-          element={<RefereeMatchList uid="ref-uid-001" profile={{ role: 'referee' }} />}
-        />
-      </Routes>
-    </MemoryRouter>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <MemoryRouter initialEntries={[`/referee/category/${categoryId}`]}>
+        <Routes>
+          <Route
+            path="/referee/category/:categoryId"
+            element={<RefereeMatchList uid="ref-uid-001" profile={{ role: 'referee' }} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </LocalizationProvider>
   )
 
 const openDialog = async (user) => {
