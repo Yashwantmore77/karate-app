@@ -773,7 +773,7 @@ Admins manage staff accounts and watch sign-ins. The super admin also takes back
 
 ### Organisations (super admin)
 
-Each organisation runs its own tournaments. Give it an admin on the Accounts page; tournaments that admin creates belong to the organisation, and its public list is at `/tournaments?org=<short name>`. An account never reaches another organisation's tournaments.
+Each organisation runs its own tournaments. Give it an admin on the Accounts page; tournaments that admin creates belong to the organisation, and its public list is at `/tournaments?org=<short name>`, headed with its name; a short name no organisation has says so. Every tournament card on the public list names its organisation. Setting an organisation to **Inactive** takes its tournaments off the public list and stops new tournaments being created in it; its existing tournaments and accounts carry on. An account never reaches another organisation's tournaments.
 
 ![Organisations: one per federation or association using the app.](images/organizations.webp)
 

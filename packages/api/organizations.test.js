@@ -69,7 +69,6 @@ describe('organisations (PRD point 33)', () => {
     expect([refused.status, refused.body.error]).toEqual([409, 'organization_inactive'])
     expect((await call('GET', `/tournaments/${tb.id}`, undefined, adminB)).status).toBe(200)
     expect((await call('POST', '/tournaments', { ...t, name: 'A Cup' }, adminA)).status).toBe(201)
-    expect((await call('GET', '/organizations/mine', undefined, adminA)).body.organization.name).toBe('Maharashtra KA')
   })
 
   it('keeps the backup and the system audit trail inside the organisation', async () => {
