@@ -34,8 +34,10 @@ export async function createBackup(stores, { now = new Date(), accounts = mongoA
 /** Loads a backup into stores. Refuses a non-empty target unless told to replace. */
 export async function restoreBackup(stores, backup, { replace = false } = {}) {
   if (backup?.format !== BACKUP_FORMAT || typeof backup.collections !== 'object') throw Object.assign(new Error('invalid_backup'), { code: 'invalid_backup' })
+  const users = isMongoConfigured() ? (await getDb()).collection('users') : null
   if (!replace) {
     for (const name of COLLECTIONS) if (stores[name] && (await stores[name].count({})) > 0) throw Object.assign(new Error('target_not_empty'), { code: 'target_not_empty' })
+    if (users && await users.countDocuments({}) > 0) throw Object.assign(new Error('target_not_empty'), { code: 'target_not_empty' })
   }
   const counts = {}
   for (const [name, rows] of Object.entries(backup.collections)) {
@@ -44,8 +46,8 @@ export async function restoreBackup(stores, backup, { replace = false } = {}) {
     if (rows.length) await stores[name].insertMany(rows)
     counts[name] = rows.length
   }
-  if (isMongoConfigured() && Array.isArray(backup.users) && backup.users.length) {
-    const users = (await getDb()).collection('users')
+  if (users && Array.isArray(backup.users)) {
+    if (replace) await users.deleteMany({ uid: { $nin: backup.users.map(({ uid }) => uid) } })
     let setUpAgain = 0
     for (const { twoFactorLeftOut, ...u } of backup.users) {
       await users.updateOne({ uid: u.uid }, { $set: u }, { upsert: true })
