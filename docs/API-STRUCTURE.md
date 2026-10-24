@@ -85,7 +85,7 @@ The tables below use the `/api/v1` prefix implicitly. `:tid` is a tournament ID,
 | --- | --- | --- |
 | `GET /users` | Admin account picker/list; supports `page`, `limit`, `q`, and organization scope. | Reads `users`. |
 | `POST /users`, `PATCH /users/:uid`, `DELETE /users/:uid` | Admin creates, edits, or removes accounts/roles. Organization admins are scoped; super admins can manage global assignments. Account changes are audited. | Writes `users`, `auditLog`; checks `matches` before changing/removing assigned officials. |
-| `GET /organizations/mine`, `GET /organizations` | Read caller's organization or super-admin organization directory with account/tournament counts. | Reads `users`, `organizations`, `tournaments`. |
+| `GET /organizations` | Read the super-admin organization directory with account/tournament counts. | Reads `users`, `organizations`, `tournaments`. |
 | `POST /organizations`, `PATCH /organizations/:id`, `DELETE /organizations/:id` | Super admin manages organizations. Delete is refused while accounts or tournaments still reference it. | Writes `organizations`, `auditLog`; reads `users`, `tournaments`. |
 | `GET /rulesets?all=1` | Staff lists active rulesets; `all=1` includes superseded versions. Coaches are excluded. | Reads `rulesets`. |
 | `POST /rulesets`, `PATCH /rulesets/:id`, `POST /rulesets/:id/restore`, `POST /rulesets/:id/active` | Ruleset manager creates a ruleset, versions edits, restores a built-in baseline, or changes active status. | Writes `rulesets`, `auditLog`; update checks `tournaments` using the ruleset. |
