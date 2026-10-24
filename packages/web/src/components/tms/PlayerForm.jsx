@@ -1,6 +1,6 @@
 import { Grid, Stack, TextField, MenuItem, FormControl, FormLabel, RadioGroup, Radio, FormControlLabel, Checkbox, FormGroup, FormHelperText, Button, Typography, Autocomplete } from '@mui/material'
 import { useState } from 'react'
-import { BUILT_IN_KEYS, fieldShown, CALCULATED_FORMULAS, SYSTEM_SOURCES } from '@kumite/shared/registration.js'
+import { BUILT_IN_KEYS, TEAM_PROFILE_KEYS, fieldShown, CALCULATED_FORMULAS, SYSTEM_SOURCES } from '@kumite/shared/registration.js'
 import { COUNTRIES, statesOf } from '@kumite/shared/geography.js'
 import { checkFile } from '@kumite/shared/files.js'
 import { readFileBase64 } from './download'
@@ -21,8 +21,8 @@ function computedValue(field, value, categoryOf) {
 }
 
 /**
- * Renders a tournament's registration form (sections 11-12) from its field
- * list, so the admin's form builder and the coach's screen show the same thing.
+ * Renders the tournament's player form; coach team-profile fields are collected
+ * once on the team form instead.
  */
 export default function PlayerForm({ fields, value, onChange, errors = [], teams = null, disabled = false, onUpload = null, onOpenFile = null, coach = false, categoryOf = null }) {
   const [uploading, setUploading] = useState(null)
@@ -43,7 +43,7 @@ export default function PlayerForm({ fields, value, onChange, errors = [], teams
           </TextField>
         </Grid>
       )}
-      {fields.filter((f) => f.visible !== false && fieldShown(f, (key) => valueOf(value, key))).map((field) => {
+      {fields.filter((f) => !(coach && TEAM_PROFILE_KEYS.includes(f.key)) && f.visible !== false && fieldShown(f, (key) => valueOf(value, key))).map((field) => {
         const v = valueOf(value, field.key)
         const err = errorFor(field.key)
         if (field.type === 'calculated' || field.type === 'system') {

@@ -322,7 +322,7 @@ During registration the coaches enter their players. You open it, send the link 
 
 6. Send the link and its password to the coaches, for example on WhatsApp or by email.
 
-A coach who opens the link types its password (1) and clicks **Continue** (2). They then register their team, add their players one by one, and can watch whether each player is approved.
+A coach who opens the link types its password (1) and clicks **Continue** (2). They register the team's club, coach, district, division, state, country and Federation ID once, then add players one by one; the team details are used for each player where applicable. They can watch whether each player is approved.
 
 ![What a coach sees first: 1 the link password, 2 Continue](images/p2-coach.webp)
 
